@@ -62,7 +62,6 @@ global define boolean Abort() ``{
  */
 global boolean Modified() {
     y2debug("modified=%1",modified);
-    return modified;
 }
 
 // Settings: Define all variables needed for configuration of mail-server
@@ -102,9 +101,16 @@ global map<string,any>  FetchingMail = $[];
 global map<string,any>  MailLocalDomains = $[];
 
 /**
+ * Map of the mail server local domains.
+ */
+global map<string,any>  LDAPDefaults = $[];
+
+/**
  * Some additional parameter needed for the configuration.
  */
-boolean additional_parameter = true;
+global string AdminUser   = "";
+global string AdminDN     = "";
+global string AdminPasswd = "";
 
 /**
  * Read all mail-server settings
@@ -115,15 +121,15 @@ global boolean Read() {
     /* MailServer read dialog caption */
     string caption = _("Reading the Mail Server Settings");
 
-    // TODO FIXME Set the right number of stages
-    integer steps = 8;
+    integer steps = 9;
 
     integer sl = 500;
     sleep(sl);
 
-    // TODO FIXME Names of real stages
     // We do not set help text here, because it was set outside
     Progress::New( caption, "", steps, [
+	    /* Progress stage 0/7 */
+	    _("Mail Server Administrator Authorization."),
 	    /* Progress stage 1/7 */
 	    _("Read Mail Server Global Settings"),
 	    /* Progress stage 2/7 */
@@ -160,33 +166,71 @@ global boolean Read() {
 	""
     );
 
-    // read database
+    // read  global settings
     if(Abort()) return false;
     Progress::NextStage();
-    GlobalSettings = (map<string,any>) YaPI::MailServer::GlobalSettings();
+    LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(AdminUser,AdminPasswd);
     /* Error message */
-    if(false) Report::Error(_("Cannot read the database1."));
+    if(LDAPDefaults == nil) {
+		Report::Error(_("Cannot Authorizate the Mail Server Administrator."));
+		return `back;
+    }
     sleep(sl);
 
-    // read another database
+    // read  global settings
+    if(Abort()) return false;
+    Progress::NextStage();
+    GlobalSettings = (map<string,any>) YaPI::MailServer::ReadGlobalSettings(AdminDN,AdminPasswd);
+    /* Error message */
+    if(GlobalSettings == nil) Report::Error(_("Cannot read the mail server global settings."));
+    sleep(sl);
+
+    // read mail transports
     if(Abort()) return false;
     Progress::NextStep();
+    MailTransports = (map<string,any>) YaPI::MailServer::ReadMailTransports(AdminDN,AdminPasswd);
     /* Error message */
-    if(false) Report::Error(_("Cannot read the database2."));
+    if(MailTransports == nil) Report::Error(_("Cannot read mail server transports."));
     sleep(sl);
 
-    // read current settings
+    // read mail preventions
     if(Abort()) return false;
     Progress::NextStage();
+    MailPrevention = (map<string,any>) YaPI::MailServer::ReadMailPrevention(AdminDN,AdminPasswd);
     /* Error message */
-    if(false) Report::Error(_("Cannot read current settings."));
+    if(MailPrevention == nil) Report::Error(_("Cannot read mail server preventions."));
     sleep(sl);
 
-    // detect devices
+    // read mail realaying
     if(Abort()) return false;
     Progress::NextStage();
+    MailRelaying = (map<string,any>) YaPI::MailServer::ReadMailRelaying(AdminDN,AdminPasswd);
     /* Error message */
-    if(false) Report::Warning(_("Cannot detect devices."));
+    if(MailRelaying == nil) Report::Warning(_("Cannot read the mail server relay settings."));
+    sleep(sl);
+
+    // read mail local delivery
+    if(Abort()) return false;
+    Progress::NextStage();
+    MailLocalDelivery = (map<string,any>) YaPI::MailServer::ReadMailLocalDelivery(AdminDN,AdminPasswd);
+    /* Error message */
+    if(MailLocalDelivery == nil) Report::Warning(_("Cannot read the mail server local delivery settings."));
+    sleep(sl);
+
+    // read mail server fetching jobs
+    if(Abort()) return false;
+    Progress::NextStage();
+    FetchingMail = (map<string,any>) YaPI::MailServer::ReadFetchingMail(AdminDN,AdminPasswd);
+    /* Error message */
+    if(FetchingMail == nil) Report::Warning(_("Cannot read the mail server fetching jobs."));
+    sleep(sl);
+
+    // read mail server local domains
+    if(Abort()) return false;
+    Progress::NextStage();
+    MailLocalDomains = (map<string,any>) YaPI::MailServer::ReadMailLocalDomains(AdminDN,AdminPasswd);
+    /* Error message */
+    if(MailLocalDomains == nil) Report::Warning(_("Cannot read the mail server domains."));
     sleep(sl);
 
     if(Abort()) return false;
@@ -195,7 +239,6 @@ global boolean Read() {
     sleep(sl);
 
     if(Abort()) return false;
-    modified = false;
     return true;
 }
 
@@ -208,13 +251,11 @@ global boolean Write() {
     /* MailServer read dialog caption */
     string caption = _("Saving Mail Server Configuration");
 
-    // TODO FIXME And set the right number of stages
     integer steps = 8;
 
     integer sl = 500;
     sleep(sl);
 
-    // TODO FIXME Names of real stages
     // We do not set help text here, because it was set outside
     Progress::New(caption, " ", steps, [
 	    /* Progress stage 1/7 */
@@ -252,23 +293,74 @@ global boolean Write() {
 	""
     );
 
-    // write settings
+    // write  global settings
     if(Abort()) return false;
     Progress::NextStage();
-    /* Error message */
-    if(false) Report::Error (_("Cannot write settings."));
+    if( GlobalSettings["Changed"]:false ) {
+      if( ! YaPI::MailServer::WriteGlobalSettings(GlobalSettings,AdminDN,AdminPasswd) ) {
+         Report::Error(_("Cannot write the mail server global settings."));
+      }
+    }
     sleep(sl);
 
-    // run SuSEconfig
+    // write mail transports
     if(Abort()) return false;
-    Progress::NextStage ();
-    /* Error message */
-    if(false) Report::Error (_("SuSEconfig script failed."));
+    Progress::NextStep();
+    if( MailTransports["Changed"]:false ) {
+      if( ! YaPI::MailServer::WriteMailTransports(MailTransports,AdminDN,AdminPasswd) ) {
+         Report::Error(_("Cannot write mail server transports."));
+      }
+    }
     sleep(sl);
 
+    // write mail preventions
     if(Abort()) return false;
-    /* Progress finished */
     Progress::NextStage();
+    if( MailPrevention["Changed"]:false ) {
+      if( ! YaPI::MailServer::WriteMailPrevention(MailPrevention,AdminDN,AdminPasswd) ) {
+         Report::Error(_("Cannot write mail server preventions."));
+      }
+    }
+    sleep(sl);
+
+    // write mail realaying
+    if(Abort()) return false;
+    Progress::NextStage();
+    if( MailRelaying["Changed"]:false ) {
+      if( ! YaPI::MailServer::WriteMailRelaying(MailRelaying,AdminDN,AdminPasswd) ) {
+        Report::Warning(_("Cannot write the mail server relay settings."));
+      }
+    }
+    sleep(sl);
+
+    // write mail local delivery
+    if(Abort()) return false;
+    Progress::NextStage();
+    if( MailLocalDelivery["Changed"]:false ) {
+      if( ! YaPI::MailServer::WriteMailLocalDelivery(MailLocalDelivery,AdminDN,AdminPasswd) ) {
+        Report::Warning(_("Cannot write the mail server local delivery settings."));
+      }
+    }
+    sleep(sl);
+
+    // write mail server fetching jobs
+    if(Abort()) return false;
+    Progress::NextStage();
+    if( FetchingMail["Changed"]:false ) {
+      if( ! YaPI::MailServer::WriteFetchingMail(FetchingMail,AdminDN,AdminPasswd) ) {
+        Report::Warning(_("Cannot write the mail server fetching jobs."));
+      }
+    }
+    sleep(sl);
+
+    // write mail server local domains
+    if(Abort()) return false;
+    Progress::NextStage();
+    if( MailLocalDomains["Changed"]:false ) {
+      if( ! YaPI::MailServer::WriteMailLocalDomains(MailLocalDomains,AdminDN,AdminPasswd) ) {
+         Report::Warning(_("Cannot write the mail server domains.")); 
+      }
+    }
     sleep(sl);
 
     if(Abort()) return false;
