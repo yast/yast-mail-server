@@ -23,7 +23,7 @@
 
 `ag_mailconfig (
   `Mailconfig ($[
-    "filename"                : "/etc/postfix/saslpasswd",
+    "filename"                : "/etc/postfix/sasl_passwd",
     "continue_escaped_newline": false,
     "write_empty_value"       : false,
     "is_postmap"              : true,

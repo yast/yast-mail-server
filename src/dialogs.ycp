@@ -12,8 +12,14 @@
 textdomain "MailServer";
 
 import "Label";
+import "Ldap";
 import "Wizard";
+import "Report";
+import "Service";
+import "Users";
+import "Require";
 import "YaPI::MailServer";
+import "YaPI::LdapServer";
 
 include "mail-server/helps.ycp";
 
@@ -23,15 +29,70 @@ include "mail-server/helps.ycp";
  * @return dialog result
  */
 define any AuthorizingDialog () {
-    string caption = _("Mail Server Administrator Authorization.");
+    string check_postfix = "if [ -z \"$(id postfix | grep -E 'groups=.*mail')\" ]; then
+usermod -G mail postfix
+fi";
+
+    string ERROR = "";
+    Ldap::Read();
+    map LDAPSettings = Ldap::Export();
+    if(LDAPSettings["base_config_dn"]:"" == "" ) {
+       ERROR = _("You must configure LDAP to use the mail server.");
+       ERROR = ERROR + "\n";
+    }
+    Ldap::LDAPInit();
+    SCR::Execute (.ldap.bind);
+    map searchmap = $[
+			"base_dn"     :  LDAPSettings["base_config_dn"]:"",
+			"filter"      :   "objectclass=suseUserConfiguration",
+			"attrs"       :    [],
+                        "not_found_ok": false,
+			"scope"       :    2
+		     ];
+    list modulesUser = (list)SCR::Read (.ldap.search, searchmap);
+    searchmap["filter"] = "objectclass=suseGroupConfiguration";
+    list modulesGroups = (list)SCR::Read (.ldap.search, searchmap);
+    if (modulesUser == nil || modulesGroups == nil ||
+        modulesUser == []  || modulesGroups == [] )
+    {
+       ERROR = ERROR + _("You must enable \"Create User Configuration Object\" in\n\"Advanced Configuration\" of the \"YaST2 LDAP-Client\" module.\n") ;
+    }
+
+    searchmap["filter"] = "objectclass=suseDnsConfiguration";
+    searchmap["attrs"] = "suseDefaultBase";
+    list modulesDns = (list)SCR::Read (.ldap.search, searchmap);
+    if (modulesDns == nil || modulesDns == []) {
+       ERROR = ERROR + _("You have to enable \"LDAP Support Active\" in the \"YaST2 DNS-Server\" module.\n");
+    }
+    string dns_base = (string)modulesDns[0,"susedefaultbase",0]:"";
+
+    if ( ERROR != "" ) {
+	ERROR =  _("Missing LDAP features !\n\n") + ERROR;
+	Popup::Error(ERROR);
+	return `abort;
+    }
+    integer size1 = (integer)SCR::Read(.target.size, "/etc/ssl/servercerts/servercert.pem");
+    integer size2 = (integer)SCR::Read(.target.size, "/etc/ssl/servercerts/serverkey.pem");
+    if( size1 <= 0 || size2 <= 0) {
+       Popup::Warning(_("You have not created server certificate and key.
+You will not able to use server side SSL and TSL on the mail server.
+Create the certificate with the YaST2 CA management module.
+"));
+    } else {
+       MailServer::CertExist = true;
+    }
+
+
+    string caption = _("Mail Server Administrator Authorization");
     term contents = `HBox(
-			   `VBox(
-                              `Password(`id(`password),  _("Enter Administrator Password:"), "")
-			        )
+                              `HStretch(),
+                              `Password(`id(`password),  _("&Enter the Password for LDAP Server:"), ""),
+                              `HStretch()
                          );
 
-    Wizard::SetContentsButtons(caption, contents, HELPS["c1"]:"",
+    Wizard::SetContentsButtons(caption, contents, HELPS["AuthorizingDialog"]:"",
 	    Label::BackButton(), Label::NextButton());
+    Wizard::SetDesktopIcon("mailserver");
     UI::WizardCommand(`SetBackButtonLabel( "" ) );
     UI::SetFocus (`id (`password));
 
@@ -50,9 +111,83 @@ define any AuthorizingDialog () {
                 MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(
                                                                 MailServer::AdminPassword);
                 if (MailServer::LDAPDefaults == nil) {
-			Popup::Error(_("Unable to authorize the Administrator User"));
+			Popup::Error(_("Unable to Authorize the Administrator User"));
 			continue;
 		}
+		UI::BusyCursor();
+		// looking if the ldap server is confiugred good
+		list<string> schemas = YaPI::LdapServer::ReadSchemaIncludeList();
+		if( contains(schemas,"/etc/openldap/schema/yast.schema") && ! contains(schemas,"/etc/openldap/schema/suse-mailserver.schema"))
+		{
+		    schemas = add(schemas,"/etc/openldap/schema/suse-mailserver.schema");
+		    YaPI::LdapServer::WriteSchemaIncludeList(schemas);
+
+		    // Creating indexes in ldap
+		    list<map<string, any> > indices = YaPI::LdapServer::ReadIndex (LDAPSettings["ldap_domain"]:"");
+		    if (indices != nil)
+		    {
+			boolean SuSEMailClient = false;
+			boolean SuSEMailDomainMasquerading = false;
+			boolean suseTLSPerSitePeer = false;
+
+			foreach ( map<string,any> index, indices, ``{
+			    if (index["attr"]:"" == "SuSEMailClient,SUSEMailAcceptAddress,zoneName")
+			    {
+				SuSEMailClient = true;
+			    }
+			    if (index["attr"]:"" == "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType")
+			    {
+				SuSEMailDomainMasquerading = true;
+			    }
+			    if (index["attr"]:"" == "suseTLSPerSitePeer,SuSEMailTransportDestination")
+			    {
+				suseTLSPerSitePeer = true;
+			    }
+			});
+
+			if (!SuSEMailClient)
+			{
+			    y2milestone ("SuSEMailClient,SUSEMailAcceptAddress,zoneName index missing, adding");
+			    YaPI::LdapServer::AddIndex (LDAPSettings["ldap_domain"]:"",
+							$[ "attr" : "SuSEMailClient,SUSEMailAcceptAddress,zoneName",
+							   "param" : "eq" ]);
+			}
+			if (!SuSEMailDomainMasquerading)
+			{
+			    y2milestone ("SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType index missing, adding");
+			    YaPI::LdapServer::AddIndex (LDAPSettings["ldap_domain"]:"",
+							$[ "attr" : "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType",
+							   "param" : "eq" ]);
+			}
+			if (!suseTLSPerSitePeer)
+			{
+			    y2milestone ("suseTLSPerSitePeer,SuSEMailTransportDestination index missing, adding");
+			    YaPI::LdapServer::AddIndex (LDAPSettings["ldap_domain"]:"",
+							$[ "attr" : "suseTLSPerSitePeer,SuSEMailTransportDestination",
+							   "param" : "eq" ]);
+			}
+			YaPI::LdapServer::RecreateIndex (LDAPSettings["ldap_domain"]:"");
+		    }
+		    else
+		    {
+			Service::Restart("ldap");
+	                sleep ( 2000 );
+		    }
+		    MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(
+                                                                MailServer::AdminPassword);
+		    if (MailServer::LDAPDefaults == nil) {
+			Popup::Error(_("Unable to Authorize the Administrator User"));
+			continue;
+		    }
+		}
+
+                SCR::Execute(.target.bash,check_postfix);
+                /* Setting cyrus password if installed */
+                if(Require::AreAllPackagesInstalled (["cyrus-imapd"]))
+                {
+                  string crypted  = Users::CryptPassword(MailServer::AdminPassword, "system");
+                  SCR::Write(.target.passwd.cyrus, crypted);
+                }
                 return ret;
 	} else {
             y2error("unexpected retcode: %1", ret);
@@ -67,9 +202,10 @@ define any AuthorizingDialog () {
 list<map> GenerateTree(list<map> Tree, string parent, list<list> input) {
 
     foreach(list i, input, ``{
-            string title = i[0]:"";
-            list<list> children = i[1]:[];
-            Tree = Wizard::AddTreeItem(Tree , parent,  title, title );
+            string title  = i[0]:"";
+            string itemid = i[1]:"";
+            list<list> children = i[2]:[];
+            Tree = Wizard::AddTreeItem(Tree , parent,  title, itemid );
             if (size(children) > 0 ) {
                 Tree = GenerateTree(Tree, title, children);
             }
@@ -94,124 +230,141 @@ term GlobalSettingsDialog() {
   // I don't know if it hase a sence to use MUST_NOPEERMATCH.
   if(TLS_MUSTN){ TLS_MUST = TLS_MUSTN; }
 
-
-  term  relayhost =  `VBox(
-                    `TextEntry(`id(`RelayHostName), _("Hostname / IP"), hostname),
-                    `CheckBox(`id(`RelayHostAuth), `opt (`notify),  _("Relay host need Authentication"), auth),
-                    `Frame("",
-                      `VBox(
-                        `TextEntry(`id(`RelayHostAccount),  _("Account"), account),
-                        `Password(`id(`Password1),  _("Password"), password),
-                        `Password(`id(`Password2),  _("Confirm Passowrd"), password)
-                       )
-                     )
-                   );
-  if( is_RELAY && ! auth) {
-       relayhost =  `VBox(
-                    `TextEntry(`id(`RelayHostName), _("Hostname / IP"), hostname),
-                    `CheckBox(`id(`RelayHostAuth),  `opt (`notify), _("Relay host need Authentication"), auth),
-                    `Frame("",
-                      `VBox(
-                        `TextEntry(`id(`RelayHostAccount),  `opt(`disabled), _("Account"), account),
-                        `Password(`id(`Password1), `opt(`disabled), _("Password"), password),
-                        `Password(`id(`Password2), `opt(`disabled), _("Confirm Passowrd"), password)
-                       )
-                     )
-                   );
-  } else if( ! is_RELAY ) {
-       relayhost =  `VBox(
-                    `TextEntry(`id(`RelayHostName), `opt(`disabled), _("Hostname / IP"), hostname),
-                    `CheckBox(`id(`RelayHostAuth),      `opt(`disabled), _("Relay host need Authentication"), auth),
-                    `Frame("",
-                      `VBox(
-                        `TextEntry(`id(`RelayHostAccount),  `opt(`disabled), _("Account"), account),
-                        `Password(`id(`Password1), `opt(`disabled), _("Password"), password),
-                        `Password(`id(`Password2), `opt(`disabled), _("Confirm Passowrd"), password)
-                       )
-                     )
-                   );
+  term security   = `HBox(
+                           `Left(`RadioButton(`id("NONE"),             _("Do Not Use TLS"), TLS_NONE)),
+                           `Left(`RadioButton(`id("MAY"),              _("Use TLS If Possible"), TLS_MAY)),
+                           `Left(`RadioButton(`id("MUST"),             _("Enforce TLS"), TLS_MUST))
+      //                  ,`Left(`RadioButton(`id("MUST_NOPEERMATCH"), _("Use TLS but do not check CA"), TLS_MUSTN))
+                         );
+  if(is_NONE) {
+     security   = `HBox( `opt (`disabled),
+                           `Left(`RadioButton(`id("NONE"), _("Do Not Use TLS"), TLS_NONE)),
+                           `Left(`RadioButton(`id("MAY"),  _("Use TLS If Possible"), TLS_MAY)),
+                           `Left(`RadioButton(`id("MUST"), _("Enforce TLS"), TLS_MUST))
+      //                  ,`Left(`RadioButton(`id("MUST_NOPEERMATCH"), _("Use TLS but do not check CA"), TLS_MUSTN))
+                         );
   }
 
-  term MaximumMailSize = `TextEntry(`id(`MaximumMailSize), "",(string)MailServer::GlobalSettings["MaximumMailSize"]:"");
+  term  relayhost =  `HBox(`HSpacing (3),
+			   `VBox(
+				 `Left(`CheckBox(`id(`RelayHostAuth), `opt (`notify),  _("Relay Host Requires Authentication"), auth)),
+				 `HBox(
+				       `TextEntry(`id(`RelayHostName), _("Host Name or IP"), hostname),
+				       `TextEntry(`id(`RelayHostAccount),  _("Account"), account)
+				       ),
+				 `HBox(
+				       `Password(`id(`Password1),  _("Password"), password),
+				       `Password(`id(`Password2),  _("Confirm Password"), password)
+				       )
+				 )
+			   );
+  if( is_RELAY && ! auth) {
+       relayhost = `HBox(`HSpacing (3),
+			 `VBox(
+			       `Left(`CheckBox(`id(`RelayHostAuth),  `opt (`notify), _("Relay Host Requires Authentication"), auth)),
+			       `HBox(
+				     `TextEntry(`id(`RelayHostName), _("Host Name or IP"), hostname),
+				     `TextEntry(`id(`RelayHostAccount),  `opt(`disabled), _("Account"), account)
+				     ),
+			       `HBox(
+				     `Password(`id(`Password1), `opt(`disabled), _("Password"), password),
+				     `Password(`id(`Password2), `opt(`disabled), _("Confirm Password"), password)
+				     )
+			       )
+			 );
+  } else if( ! is_RELAY ) {
+       relayhost = `HBox(`HSpacing (3),
+			 `VBox(
+			       `Left(`CheckBox(`id(`RelayHostAuth),      `opt(`disabled), _("Relay Host Requires Authentication"), auth)),
+			       `HBox(
+				     `TextEntry(`id(`RelayHostName), `opt(`disabled), _("Host Name or IP"), hostname),
+				     `TextEntry(`id(`RelayHostAccount),  `opt(`disabled), _("Account"), account)
+				     ),
+			       `HBox(
+				     `Password(`id(`Password1), `opt(`disabled), _("Password"), password),
+				     `Password(`id(`Password2), `opt(`disabled), _("Confirm Password"), password)
+				     )
+			       )
+			 );
+  }
+
+
+  term MaximumMailSize = nil;
   if(!limit) {
-    MaximumMailSize = `TextEntry(`id(`MaximumMailSize), `opt(`disabled),"",(string)MailServer::GlobalSettings["MaximumMailSize"]:"");
+    MaximumMailSize = `TextEntry(`id(`MaximumMailSize), `opt(`disabled),"","0");
+  } else {
+    // We need the Mail Size in kb
+    integer MMS = tointeger((string)MailServer::GlobalSettings["MaximumMailSize"]:"0");
+    if( MMS > 0 && MMS < 1024 ) {
+         MMS = 1;
+         MailServer::GlobalSettings["Changed"] = true;
+    } else {
+         MMS = MMS / 1024;
+    }
+    MaximumMailSize = `TextEntry(`id(`MaximumMailSize), "",sformat("%1",MMS));
   }
 
   term content = `VBox (
+       `TextEntry(`id(`Banner), _("Server Identification") ,(string)MailServer::GlobalSettings["Banner"]:"SuSE Linux Mail Server"),
+       `VStretch(),
        `Frame(_("Message Size"),
          `RadioButtonGroup(`id(`MailSize),
            `HBox(
-             `RadioButton(`id("MailSizeNoLimit"), `opt (`notify), _("No Limit"), !limit),
-             `RadioButton(`id("MailSizeLimit"), `opt (`notify), _("Maximum Mail Size"), limit),
-             MaximumMailSize,
-             `Label("KByte")
+             `HWeight(2, `RadioButton(`id("MailSizeNoLimit"), `opt (`notify), _("No Limit"), !limit)),
+             `HWeight(3, `RadioButton(`id("MailSizeLimit"), `opt (`notify), _("Maximum Mail Size"), limit)),
+	     `HWeight(2, MaximumMailSize),
+	     `HWeight(1, `Label(_("KByte")))
             )
           )
-        ),
-       `VStretch(),
-       `Frame(_("Server Identification"),
-            `TextEntry(`id(`Banner), "" ,(string)MailServer::GlobalSettings["Banner"]:"SuSE Linux Mail Server")
         ),
        `VStretch(),
        `Frame(_("Outgoing Mails"),
-         `HBox(
-           `HWeight(1,
-              `VBox(
-                `VStretch(),
-                `RadioButtonGroup(`id(`SendingMailType),
-                  `VBox(
-                    `Left(`RadioButton(`id("relayhost"), `opt (`notify), _("Use Relay Host"), is_RELAY)),
-                    `Left(`RadioButton(`id("DNS"),       `opt (`notify), _("Direct Delivery (DNS)"), is_DNS)),
-                    `Left(`RadioButton(`id("NONE"),      `opt (`notify), _("No Outgoing Mail"), is_NONE))
-                   )
-                 ),
-                `VStretch(),
-                `RadioButtonGroup(`id(`SendingMailTLS),
-                   `HBox(
-                      `Frame(_("Security"),
-                        `VBox(
-                           `Left(`RadioButton(`id("NONE"),             _("Do not use TLS"), TLS_NONE)),
-                           `Left(`RadioButton(`id("MAY"),              _("Use TLS if Possible"), TLS_MAY)),
-                           `Left(`RadioButton(`id("MUST"),             _("Enforce TLS"), TLS_MUST))
-      //                  ,`Left(`RadioButton(`id("MUST_NOPEERMATCH"), _("Use TLS but do not check CA"), TLS_MUSTN))
-                         )
-                      ),
-                      `HStretch()
-                   )
-                 ),
-                `VStretch()
-               )
-            ),
-           `HWeight(1,
-              `VBox(
-                `Frame(_("Relay Host Settings"),relayhost
-                 )
-               )
-            )
-          )
-        )
+	      `VBox(
+		    `RadioButtonGroup(`id(`SendingMailType),
+				      `VBox(
+					    `HBox(
+						  `Left(`RadioButton(`id("DNS"),       `opt (`notify), _("Direct Delivery (DNS)"), is_DNS)),
+						  `Left(`RadioButton(`id("NONE"),      `opt (`notify), _("No Outgoing Mail"), is_NONE))
+						  ),
+					    `Left(`RadioButton(`id("relayhost"), `opt (`notify), _("Use Relay Host"), is_RELAY)),
+					    relayhost
+					    )
+				      ),
+		    `VStretch(),
+		    `RadioButtonGroup(`id(`SendingMailTLS),
+				      `HBox(
+					    `HStretch(),
+					    `Frame(_("Security"),security),
+					    `HStretch()
+					    )
+				      )
+		    )
+	      )
    );
 
   return content;
 }
 
-term MailTransportsDialog(string CID) {
+list<term> MakeSelectedList(list<string> items, string value ) {
+   list<term> SelectedList = [];
+   foreach(string i, items, ``{
+      if( i == value ) {
+         SelectedList = add(SelectedList, `item(`id(i), i, true));
+      } else {
+         SelectedList = add(SelectedList, `item(`id(i), i ));
+      }
+   });
+   return SelectedList;
+}
+
+void ShowMailTransport(string CID, string ACTION) {
   list<map<string,string> > Transports      = (list<map<string,string> >) MailServer::MailTransports["Transports"]:[];
-  list      Transport_items = [];
-  string    TransportID     = "";
+  map<string,string>        TLSSites        = (map<string,string>)        MailServer::MailTransports["TLSSites"]:$[];
+  map<string,list>          SASLAccounts    = (map<string,list>)          MailServer::MailTransports["SASLAccounts"]:$[];
   string    Destination     = "";
   boolean   Subdomains      = true;
   string    Protocol        = "smtp";
-  map<string,list<term> > Protocols = $[ "smtp":[ `item(`id("smtp"),  "smtp", true ),
-                                          `item(`id("uucp"),  "uucp" ),
-                                          `item(`id("error"), "error" ) ],
-				 "uucp":[ `item(`id("smtp"),  "smtp" ),
-                                          `item(`id("uucp"),  "uucp", true ),
-                                          `item(`id("error"), "error" ) ],
-				 "error":[`item(`id("smtp"),  "smtp" ),
-                                          `item(`id("uucp"),  "uucp" ),
-                                          `item(`id("error"), "error", true ) ]
-			      ];
+  list<string>Protocols     = [ "smtp", "uucp", "error" ];
   string    Server          = "";
   boolean   NOMX            = true;
   string    TLS             = "";
@@ -221,103 +374,267 @@ term MailTransportsDialog(string CID) {
   boolean   TransportTLSnone    = false;
   boolean   TransportTLSuse     = true;
   boolean   TransportTLSenforce = false;
+  string    TransportID     = "";
 
+  term main = `VBox(
+             `Left(`TextEntry(`id(`Destination), _("Destination"),     Destination)),
+             `Left(`CheckBox (`id(`Subdomains),  _("With Subdomains"), Subdomains)),
+             `Left(`ComboBox (`id(`Protocol), `opt(`editable), _("Transport"), MakeSelectedList(Protocols,Protocol))),
+             `Left(`TextEntry(`id(`Server),      _("Server"),     Server)),
+             `Left(`CheckBox (`id(`NOMX),        _("Suppress MX Lookups"), NOMX))
+           );
 
-  foreach(map Transport,Transports, ``{
-    TransportID = Transport["Destination"]:"";
-//    term my_item = `item( `id(TransportID), Transport["Destination"]:""+" | "+
-//                                            Transport["Nexthop"]:""+" | "+
-//                                            Transport["Transport"]:""+" | "+
-//					    Transport["TLS"]:"");
-    term my_item = `item( `id(TransportID), Transport["Destination"]:"",
-                                            Transport["Nexthop"]:"",
-                                            Transport["Transport"]:"",
-                                            Transport["TLS"]:"");
+  if( ACTION == "edit" ) {
+	foreach(map Transport,Transports, ``{
+	  TransportID = Transport["Destination"]:"";
+	  if(CID == TransportID) {
+	    Protocol    = Transport["Transport"]:"";
+	    if(!contains(Protocols,Protocol) ) {
+	      Protocols = add(Protocols,Protocol);
+	    }
+	    Destination = Transport["Destination"]:"";
+	    if( find(Transport["Nexthop"]:"", "\[") > -1) {
+	      Server = deletechars(Transport["Nexthop"]:"","[");
+	      Server = deletechars(Server,"]");
+	    } else {
+	      Server = Transport["Nexthop"]:"";
+	      NOMX   = false;
+	    }
+	    TLS         = TLSSites[Server]:"NONE";
+	    if(TLS == "NONE") {
+	      TransportTLSnone    = true;
+	      TransportTLSuse     = false;
+	      TransportTLSenforce = false;
+	    }else if(TLS == "MUST"){
+	      TransportTLSnone    = false;
+	      TransportTLSuse     = false;
+	      TransportTLSenforce = true;
+	    }
+	    if(SASLAccounts[Server]:[] != []) {
+		Auth = true;
+		Account = SASLAccounts[Server,0]:"";
+		Password= SASLAccounts[Server,1]:"";
+	    }
+	  }
+	});
+       if(Destination == "") {
+            return;
+       }
+       main = `VBox(
+             `Left(`TextEntry(`id(`Destination), _("Destination"),     Destination)),
+             `Left(`ComboBox (`id(`Protocol), `opt(`editable), _("Transport"), MakeSelectedList(Protocols,Protocol))),
+             `Left(`TextEntry(`id(`Server),      _("Server"),     Server)),
+             `Left(`CheckBox (`id(`NOMX),        _("Suppress MX Lookups"), NOMX))
+           );
 
-    if(CID == TransportID) {
-      Destination = Transport["Destination"]:"";
-      TLS         = Transport["TLS"]:"";
-      Auth        = ((string)Transport["Auth"]:"0" == "1");
-      Account     = Transport["Account"]:"";
-      Password    = Transport["Password"]:"";
-      if( find(Transport["Nexthop"]:"", "\[") > -1) {
-        Server = deletechars(Transport["Nexthop"]:"","[");
-        Server = deletechars(Server,"]");
-      } else {
-        Server = Transport["Nexthop"]:"";
-	NOMX   = false;
-      }
-      if(TLS == "NONE") {
-        TransportTLSnone    = true;
-	TransportTLSuse     = false;
-	TransportTLSenforce = false;
-      }else if(TLS == "MUST"){
-        TransportTLSnone    = false;
-	TransportTLSuse     = false;
-	TransportTLSenforce = true;
-      }
-//      my_item = `item( `id(TransportID), Transport["Destination"]:""+" | "+
-//                                         Transport["Nexthop"]:""+" | "+
-//                                         Transport["Transport"]:""+" | "+
-//                                         Transport["TLS"]:"",true);
-    }
-    Transport_items = add(Transport_items,my_item);
-  });
-
+  }
   term TransportAuth  = `VBox(
-    `Left(`CheckBox (`id(`Auth),     `opt (`notify), _("Server need Authentication"), true)),
+    `Left(`CheckBox (`id(`Auth),     `opt (`notify), _("Server Requires Authentication"), true)),
     `Left(`TextEntry(`id(`Account),   _("Account"),          Account)),
     `Left(`Password (`id(`Password1), _("Password"),         Password)),
-    `Left(`Password (`id(`Password2), _("Confirm Passowrd"), Password))
+    `Left(`Password (`id(`Password2), _("Confirm Password"), Password))
   );
   if(!Auth) {
     TransportAuth  = `VBox(
-      `Left(`CheckBox (`id(`Auth),      `opt (`notify),  _("Server need Authentication"),       false)),
+      `Left(`CheckBox (`id(`Auth),      `opt (`notify),  _("Server Requires Authentication"),       false)),
       `Left(`TextEntry(`id(`Account),   `opt(`disabled), _("Account"),          Account)),
       `Left(`Password (`id(`Password1), `opt(`disabled), _("Password"),         Password)),
-      `Left(`Password (`id(`Password2), `opt(`disabled), _("Confirm Passowrd"), Password))
+      `Left(`Password (`id(`Password2), `opt(`disabled), _("Confirm Password"), Password))
     );
   }
+  UI::OpenDialog(`opt(`decorated ),
+    `VBox(
+      `Frame(_("Manage Mail Routing"),
+         `HBox(
+	   main,
+	   `Frame(_("Security"),
+	     `VBox(
+	       `Left(`Label(_("TLS Mode:"))),
+	       `RadioButtonGroup(`id(`TLS),
+		 `HBox(
+		   `Left(`RadioButton(`id("NONE"),  _("No"),     TransportTLSnone)),
+		   `Left(`RadioButton(`id("MAY"),   _("Use"),    TransportTLSuse)),
+		   `Left(`RadioButton(`id("MUST"),  _("Enforce"),TransportTLSenforce))
+		  )
+	       ),
+	       TransportAuth
+	     )
+           )
+	 )
+       ),
+       `HBox(
+	 `PushButton(`id(`cancel),   _("Cancel")),
+         `HStretch(),
+	 `PushButton(`id(`ok),   _("OK"))
+       )
+     )
+    );
 
+    any    ret               = nil;
+    map    SenderRestriction = $[];
+    while(true)
+    {
+        map event = UI::WaitForEvent();
+        ret       = event["ID"]:nil;
+        if(ret == `cancel) {
+	   break;
+        }
+
+        if( ret == `Auth ) {
+           if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
+             UI::ChangeWidget(`id(`Account),   `Enabled, true);
+             UI::ChangeWidget(`id(`Password1), `Enabled, true);
+             UI::ChangeWidget(`id(`Password2), `Enabled, true);
+           } else {
+             UI::ChangeWidget(`id(`Account),   `Enabled, false);
+             UI::ChangeWidget(`id(`Password1), `Enabled, false);
+             UI::ChangeWidget(`id(`Password2), `Enabled, false);
+           }
+           continue;
+        }
+        MailServer::MailTransports["Changed"] = true;
+        list<map> Transports  = (list<map>) MailServer::MailTransports["Transports"]:[];
+
+        //Now we generate the new/edited entry
+        string password1  = "";
+        string password2  = "";
+        string Account    = "";
+        map NewTransport  = $[];
+        string NewTLSSite = "";
+        string NewTLS     = "";
+        NewTransport["Destination"] = (string)UI::QueryWidget(`id(`Destination), `Value);
+        NewTransport["Transport"]   = (string)UI::QueryWidget(`id(`Protocol), `Value);
+        NewTransport["Nexthop"]     = (string)UI::QueryWidget(`id(`Server), `Value);
+        // Now we looking for if everything is all right
+        if( !regexpmatch(NewTransport["Destination"]:"","^[0-9a-zA-Z.\*-]*$") || NewTransport["Destination"]:"" == ""){
+           Report::Error(_("The destination is invalid."));
+           continue;
+        }
+        if( !regexpmatch(NewTransport["Nexthop"]:"","^[0-9a-zA-Z.-]*$") || NewTransport["Nexthop"]:"" == ""){
+           Report::Error(_("The server is invalid."));
+           continue;
+        }
+        if(NewTransport["Transport"]:"smtp" != "error" ) {
+          NewTLSSite           = (string)UI::QueryWidget(`id(`Server), `Value);
+          NewTLS               = (string)UI::QueryWidget(`id(`TLS), `CurrentButton);
+          if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
+            password1 = (string)UI::QueryWidget(`id(`Password1), `Value);
+            password2 = (string)UI::QueryWidget(`id(`Password2), `Value);
+            Account   = (string)UI::QueryWidget(`id(`Account), `Value);
+          }
+          if((boolean)UI::QueryWidget(`id(`NOMX), `Value)){
+            NewTransport["Nexthop"] = "["+NewTransport["Nexthop"]:""+"]";
+          }
+        }
+
+        if(ACTION == "add") {
+             list TR = [];
+             foreach(map Transport, Transports, ``{
+               TR = add(TR,Transport["Destination"]:"");
+             });
+            //TODO search for .<domainname to>
+            if(contains( TR, NewTransport["Destination"]:"")) {
+               Report::Error(_("There is already a transport defined for this destination."));
+               continue;
+            }
+        }
+        if( ACTION == "edit"  ) {
+        // modify
+              if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
+                if( password1 != password2) {
+                    Report::Error(_("The passwords are not identical."));
+                    continue;
+                }
+              }
+	      MailServer::MailTransports["Transports"] = [];
+	      foreach(map Transport, Transports, ``{
+		if(Transport["Destination"]:"" == CID) {
+	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
+		} else {
+	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
+                }
+	      });
+              CID = NewTransport["Destination"]:"";
+              if( NewTLSSite != "" && NewTLS != "" ) {
+                     TLSSites[NewTLSSite] = NewTLS;
+                     MailServer::MailTransports["TLSSites"] = TLSSites;
+              }
+	      if(  Account != "" ) {
+		SASLAccounts[NewTLSSite] = [Account,password1];
+                MailServer::MailTransports["SASLAccounts"] = SASLAccounts;
+	      }
+         } else {
+         // add
+             if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
+               if( password1 != password2) {
+                   Report::Error(_("The passwords are not identical."));
+                   continue;
+               }
+             }
+	     MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
+             if((boolean)UI::QueryWidget(`id(`Subdomains), `Value)){
+                NewTransport["Destination"] = "."+NewTransport["Destination"]:"";
+	        MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
+             }
+             CID = NewTransport["Destination"]:"";
+             if( NewTLSSite != "" && NewTLS != "" && TLSSites[NewTLSSite]:"" == "") {
+                     TLSSites[NewTLSSite] = NewTLS;
+                     MailServer::MailTransports["TLSSites"] = TLSSites;
+             }
+	     if(  Account != "" ) {
+		SASLAccounts[NewTLSSite] = [Account,password1];
+                MailServer::MailTransports["SASLAccounts"] = SASLAccounts;
+	     }
+         }
+         break;
+       }
+   UI::CloseDialog();
+   return;
+}
+
+term MailTransportsDialog() {
+  list<map<string,string> > Transports      = (list<map<string,string> >) MailServer::MailTransports["Transports"]:[];
+  map<string,string>        TLSSites        = (map<string,string>)        MailServer::MailTransports["TLSSites"]:$[];
+  list      Transport_items = [];
+  string    TransportID     = "";
+  string    Server = "";
+  string    TLS = "";
+
+  foreach(map Transport,Transports, ``{
+    TransportID = Transport["Destination"]:"";
+    if( find(Transport["Nexthop"]:"", "\[") > -1) {
+      Server = deletechars(Transport["Nexthop"]:"","[");
+      Server = deletechars(Server,"]");
+    } else {
+      Server = Transport["Nexthop"]:"";
+    }
+    TLS   = TLSSites[Server]:"NONE";
+    term my_item = `item( `id(TransportID), Transport["Destination"]:"",
+                                            Transport["Nexthop"]:"",
+                                            Transport["Transport"]:"",
+                                            TLS);
+
+    Transport_items = add(Transport_items,my_item);
+  });
+y2milestone("MailTransports %1",MailServer::MailTransports);
 
   term content = `VBox (
-     `Frame(_("Manage Mail Routing"),
-       `VBox(
-         `HBox(
-           `VBox(
-             `Left(`TextEntry(`id(`Destination), _("Destination"),     Destination)),
-             `Left(`CheckBox (`id(`Subdomains),  _("With Subdomains"), Subdomains)),
-             `Left(`HBox(`Label(_("Transport")),`ComboBox (`id(`Protocol), "", Protocols[Protocol]:nil))),
-             `Left(`TextEntry(`id(`Server),      _("Server"),     Server)),
-             `Left(`CheckBox (`id(`NOMX),        _("Suppress MX Lookups"), NOMX))
-            ),
-           `Frame(_("Security"),
-             `HBox(
-               `RadioButtonGroup(`id(`TLS),
-                 `VBox(
-                   `Left(`RadioButton(`id("NONE"),  _("No TLS"),     TransportTLSnone)),
-                   `Left(`RadioButton(`id("MAY"),   _("Use TLS"),    TransportTLSuse)),
-                   `Left(`RadioButton(`id("MUST"),  _("Enforce TLS"),TransportTLSenforce))
-                  )
-                ),
-                TransportAuth
-              )
-            )
-          ),
-         `HBox(
-           `PushButton(`id(`Add),   _("Add")),
-           `PushButton(`id(`Edit),  _("Edit")),
-           `PushButton(`id(`Delete),_("Delete")),
-           `PushButton(`id(`Clean), _("Clean Fields"))
+     `Left(`Label(_("Defined Mail Transport Route"))),
+     `HBox(
+       `HWeight(22,
+          `Table(`id(`table), `opt(`immediate,`keepSorting,`notify),`header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
+       ),
+       `HWeight(6,
+         `Top(
+	   `VBox(
+	     `HBox ( `HWeight(1, `PushButton(`id(`Add),   _("Add")))),
+	     `HBox ( `HWeight(1, `PushButton(`id(`Edit),  _("Change")))),
+	     `HBox ( `HWeight(1, `PushButton(`id(`Delete),_("Delete"))))
+	    )
           )
-        )
-      ),
-     `Frame(_("Defined Mail Transport Routen"),
-       `HBox(
-         //`SelectionBox(`id(`Table), `opt (`notify),_("Destination | Server | Transport | Security"),Transport_items)
-         `Table(`id(`table), `opt(`immediate,`keepSorting,`notify),`header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
-        )
-      )
+       )
+     ),
+     `Left(`CheckBox(`id(`Use), `opt(`notify), _("&Use Defined Mail Transport Route"), (boolean)MailServer::MailTransports["Use"]:true))
    );
   return content;
 }
@@ -328,7 +645,7 @@ term MailPreventionDialog(string CID, string CIDRBL) {
   string  BasicProtection   =  (string)MailServer::MailPrevention["BasicProtection"]:"";
   list<string> RBLList      = (list<string>) MailServer::MailPrevention["RBLList"]:[];
   list<map<string,string> > AccessList = (list<map<string,string> >) MailServer::MailPrevention["AccessList"]:[];
-  boolean VirusScanning     = ((string)MailServer::MailPrevention["VirusScanning"]:"0" == "1");
+  boolean VirusScanning     = (boolean)MailServer::MailPrevention["VirusScanning"]:false;
   boolean BasicProtectionOff    = false;
   boolean BasicProtectionMedium = false;
   boolean BasicProtectionHard   = true;
@@ -356,37 +673,51 @@ term MailPreventionDialog(string CID, string CIDRBL) {
   term content = `VBox (
 	`Frame(_("SPAM Prevention"),
 	  `HBox(
-	    `RadioButtonGroup(`id(`BasicProtection),
-	      `VBox(
-	        `Left(`RadioButton(`id("off"),    `opt(`notify), _("Off"),    BasicProtectionOff)),
-	        `Left(`RadioButton(`id("medium"), `opt(`notify), _("Medium"), BasicProtectionMedium)),
-	        `Left(`RadioButton(`id("hard"),   `opt(`notify), _("Hard"),   BasicProtectionHard))
-	       )
+	    `HWeight(7,
+		    `Top(
+		       `RadioButtonGroup(`id(`BasicProtection),
+			      `VBox(
+	                        `Left(`Label(_("Basic Settings:"))),
+				`Left(`RadioButton(`id("off"),    `opt(`notify), _("Off"),    BasicProtectionOff)),
+				`Left(`RadioButton(`id("medium"), `opt(`notify), _("Medium"), BasicProtectionMedium)),
+				`Left(`RadioButton(`id("hard"),   `opt(`notify), _("Hard"),   BasicProtectionHard))
+			       )
+		       )
+		    )
 	     ),
-	      `VBox(`SelectionBox(`id(`RBLList), "Confiugred RBL Server",RBLItems)
+	     `HWeight(13,
+		 `Top(
+		     `VBox(
+		        `SelectionBox(`id(`RBLList), _("Configured RBL Server"),RBLItems)
+		     )
+		 )
 	     ),
-	     `VBox(
-	        `Left(`PushButton(`id(`RBLAdd),   _("Add"))),
-		`Left(`PushButton(`id(`RBLDelete),_("Delete")))
+	     `HWeight(6,
+		 `Top(
+		     `VBox(
+	                `Label(""),
+			`PushButton(`id(`RBLAdd),   _("Add")),
+			`PushButton(`id(`RBLDelete),_("Delete"))
+		     )
+		 )
 	     )
 	   )
          ),
-	`Frame(_("Sender Restrictions"),
-	  `HBox(
-	      `VBox(
+	`Left(`Label(_("Sender Restrictions"))),
+	`HBox(
+	     `HWeight(20,
 	        `Table(`id(`table), `opt(`immediate,`keepSorting,`notify),`header(_("Sender Address"),_("Action"),_("Option")),AccessItems)
-	       ),
-	      `VBox(
-	        `PushButton(`id(`AccessAdd),   _("Add")),
-		`PushButton(`id(`AccessDelete),_("Delete"))
-	       )
-	   )
-	 ),
-	`Frame(_("Virus Scanning"),
-	  `HBox(
-               `Left(`CheckBox (`id(`VirusScanning), `opt(`notify), _("Start Virus Scanner AMAVIS"), VirusScanning))
-	   )
-	 )
+	      ),
+	      `HWeight(6,
+                `Top(
+		      `VBox(
+			`PushButton(`id(`AccessAdd),   _("Add")),
+			`PushButton(`id(`AccessDelete),_("Delete"))
+		      )
+                 )
+             )
+	),
+        `Left(`CheckBox (`id(`VirusScanning), `opt(`notify), _("Start Virus Scanner AMAVIS"), VirusScanning))
    );
    return content;
 }
@@ -419,11 +750,11 @@ string RBLAdd () {
 map AccessAdd () {
    UI::OpenDialog(`opt(`decorated ),  `Frame(_("Add New Sender Restriction"),
             `VBox(
-              `TextEntry(`id(`NewSender),  "Sender Address",  ""),
+              `TextEntry(`id(`NewSender),  _("Sender Address"),  ""),
 	      `ComboBox (`id(`NewSenderAction), _("Action"), [ "REJECT", "DEFER_IF_REJECT","DEFER_IF_PERMIT",
 	                                                       "OK", "DUNNO", "PREPEND", "HOLD", "DISCARD",
 							       "FILTER", "REDIRECT", "" ]),
-              `TextEntry(`id(`NewSenderOption),  "Option",  ""),
+              `TextEntry(`id(`NewSenderOption),  _("Option"),  ""),
               `HBox(
 	         `PushButton(`id(`cancel),   _("Cancel")),
 	         `PushButton(`id(`ok),   _("OK"))
@@ -451,7 +782,7 @@ map AccessAdd () {
 }
 
 term MailRelayingDialog() {
-  boolean UserRestriction = ((string)MailServer::MailRelaying["UserRestriction"]:"0" == "1");
+//  boolean UserRestriction = ((string)MailServer::MailRelaying["UserRestriction"]:"0" == "1");
   boolean RequireSASL     = ((string)MailServer::MailRelaying["RequireSASL"]:"0" == "1");
   boolean SMTPDTLSnone    = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "none");
   boolean SMTPDTLSuse     = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "use");
@@ -468,55 +799,39 @@ term MailRelayingDialog() {
   });
 
    term security = `HBox(
+      `Top(
         `VBox(
-          `Left(`CheckBox(`id(`UserRestriction),`opt (`notify),_("Use User/Group Based Restrictions"),UserRestriction)),
-          `Left(`CheckBox(`id(`RequireSASL),_("Require SASL Authentication"),RequireSASL))
-         ),
-        `Frame(_("TLS Mode for the SMTPD Daemon"),
-          `RadioButtonGroup(`id(`SMTPDTLSMode),
-             `VBox(
-                `Left(`RadioButton(`id("none"),     _("No TLS"),SMTPDTLSnone)),
-                `Left(`RadioButton(`id("use"),      _("Use TLS"),SMTPDTLSuse)),
-                `Left(`RadioButton(`id("enforce"),  _("Enforce TLS"),SMTPDTLSenforce)),
-                `Left(`RadioButton(`id("auth_only"),_("Use TLS only for SASL authentication"),SMTPDTLSauth_only))
-              )
-           )
+          `Label(""),
+          `Left(`CheckBox(`id(`RequireSASL), _("Require SASL Authentication"),RequireSASL))
          )
-      );
-  if(UserRestriction){
-    security = `HBox(
+      ),
+     `RadioButtonGroup(`id(`SMTPDTLSMode),
         `VBox(
-          `Left(`CheckBox(`id(`UserRestriction),`opt (`notify), _("Use User/Group Based Restrictions"),true)),
-          `Left(`CheckBox(`id(`RequireSASL),    `opt(`disabled),_("Require SASL Authentication"),true))
-         ),
-        `Frame(_("TLS Mode for the SMTPD Daemon"),
-          `RadioButtonGroup(`id(`SMTPDTLSMode),
-             `VBox(
-                `Left(`RadioButton(`id("none"),     `opt(`disabled), _("No TLS"),     false)),
-                `Left(`RadioButton(`id("use"),      `opt(`disabled), _("Use TLS"),    false)),
-                `Left(`RadioButton(`id("enforce"),  _("Enforce TLS"),SMTPDTLSenforce)),
-                `Left(`RadioButton(`id("auth_only"),_("Use TLS only for SASL authentication"),SMTPDTLSauth_only))
-              )
-           )
+           `Left(`Label(_("TLS Mode for the SMTPD Daemon"))),
+           `Left(`RadioButton(`id("none"),     _("No TLS"),     SMTPDTLSnone)),
+           `Left(`RadioButton(`id("use"),      _("Use TLS"),    SMTPDTLSuse)),
+           `Left(`RadioButton(`id("enforce"),  _("Enforce TLS"),SMTPDTLSenforce)),
+           `Left(`RadioButton(`id("auth_only"),_("Use TLS Only for SASL Authentication"),SMTPDTLSauth_only))
          )
-      );
-  }
+      )
+    );
+
   term content = `VBox (
      `Frame(_("Trusted Local Networks"),
        `VBox(
-         `Frame(_("New Network"),
-           `HBox(
-               `TextEntry(`id(`NewNetwork),     "", ""),
-               `PushButton(`id(`AddNewNetwork), _("Add"))
-            )
-          ),
-         `Frame(_("Defined Trusted Networks"),
-           `HBox(
-//             `Table(`id(`TrustedNetworks), `header(_("Network")),Network_items),
-             `SelectionBox(`id(`TrustedNetworks), "",Networks),
-             `PushButton(`id(`DeleteNetwork), _("Delete"))
-            )
-          )
+	       `HBox(
+		    `TextEntry(`id(`NewNetwork),     _("New Network"), ""),
+		    `PushButton(`id(`AddNewNetwork), _("Add"))
+	       ),
+	       `HBox(
+		    `SelectionBox(`id(`TrustedNetworks), _("Defined Trusted Networks"),Networks),
+		    `Top(
+		       `VBox(
+			  `Label(""),
+			  `PushButton(`id(`DeleteNetwork), _("Delete"))
+		       )
+		    )
+	       )
        )
      ),
     `Frame(_("Security Settings for Sending Mail via the Server"),security)
@@ -531,9 +846,17 @@ term MailLocalDeliveryDialog() {
   boolean TypeNONE     = ((string)MailServer::MailLocalDelivery["Type"]:"" == "none");
   boolean limit        = ((string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0" != "0");
 
+  integer MMS = tointeger((string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
+  if( MMS > 0 && MMS < 1024 ) {
+         MMS = 1;
+         MailServer::MailLocalDelivery["Changed"] = true;
+  } else {
+         MMS = MMS / 1024;
+  }
+
   term settings = `HBox();
   if(TypeCYRUS){
-    integer MailboxSizeLimit = tointeger((string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
+    integer MailboxSizeLimit = MMS;
     integer QuotaLimit       = tointeger((string)MailServer::MailLocalDelivery["QuotaLimit"]:"0");
     integer ImapIdleTime     = tointeger((string)MailServer::MailLocalDelivery["ImapIdleTime"]:"0");
     integer PopIdleTime      = tointeger((string)MailServer::MailLocalDelivery["PopIdleTime"]:"0");
@@ -541,35 +864,39 @@ term MailLocalDeliveryDialog() {
     boolean HardQuotaLimit   = ((string)MailServer::MailLocalDelivery["HardQuotaLimit"]:"0" == "1");
     boolean AlternateNameSpace   = ((string)MailServer::MailLocalDelivery["AlternateNameSpace"]:"0" == "1");
     string  FallBackMailbox  = (string)MailServer::MailLocalDelivery["FallBackMailbox"]:"root";
-    string  Security         = (string)MailServer::MailLocalDelivery["Security"]:"TLS";
-    boolean PLAIN            = (Security == "PLAIN");
-    boolean SSL              = (Security == "SSL");
-    boolean TLS              = (Security == "TLS");
-    settings = `Frame(_("IMAP Settings"),
+    boolean ImapSecurity     = ((string)MailServer::MailLocalDelivery["Security"]:"0" == "1");
+    settings = `Frame(_("Cyrus IMAP Settings"),
       `VBox(
-        `Frame(_("Security"),
-	  `RadioButtonGroup(`id(`Security),
-	    `HBox(
-	      `RadioButton(`id("PLAIN"), _("Plain"),  PLAIN),
-	      `HStretch(),
-	      `RadioButton(`id("SSL"), _("SSL (imaps)"),  SSL),
-	      `HStretch(),
-	      `RadioButton(`id("TLS"), _("TLS (imaps via imap)"),  TLS)
+	  `HBox(
+	    `Label(" "),
+            `Frame(_("Security (SSL and TLS)"),
+	      `HBox(
+		  `Left(`CheckBox(`id(`ImapSecurity),_("Enabled"), ImapSecurity))
+	      )
+	    )
+	),
+	`HBox(
+	  `Label(" "),
+	  `HWeight(1,
+            `VBox(
+              `Left(`IntField(`id(`MailboxSizeLimit),_("Default Mailbox Size (KB)"),0,MAXINT,MailboxSizeLimit)),
+              `Left(`IntField(`id(`QuotaLimit),      _("Quota Warning Limit (%)"),0,100,QuotaLimit))
+	    )
+	  ),
+	  `HWeight(1,
+	    `VBox(
+	      `Left(`IntField(`id(`ImapIdleTime),    _("IMAP Idle Time (Min)"),30,100,ImapIdleTime)),
+	      `Left(`IntField(`id(`PopIdleTime),     _("POP Idle Time (Min)"),10,100,PopIdleTime))
 	    )
 	  )
 	),
 	`HBox(
-	  `VBox(
-	     `HBox(`Label(_("Default Mailbox Size")),`IntField(`id(`MailboxSizeLimit),"KB",0,MAXINT,MailboxSizeLimit)),
-	     `HBox(`Label(_("Quota Warning Limit")), `IntField(`id(`QuotaLimit),      "%",0,100,QuotaLimit)),
-	     `HBox(`Label(_("IMAP Idle Time")),      `IntField(`id(`ImapIdleTime),    "Min",30,100,ImapIdleTime)),
-	     `HBox(`Label(_("IMAP Idle Time")),      `IntField(`id(`PopIdleTime),     "Min",10,100,PopIdleTime))
-	   ),
-	  `VBox(
-	     `Left(`CheckBox(`id(`HardQuotaLimit),    _("Hard Quota Limit"),HardQuotaLimit)),
-	     `Left(`CheckBox(`id(`AlternateNameSpace),_("Use Alternate Name Space"),AlternateNameSpace)),
-	     `Left(`TextEntry(`id(`FallBackMailbox),  _("Fall Back Mailbox"), FallBackMailbox))
-	  )
+	  `Label(" "),
+          `VBox(
+             `Left(`CheckBox(`id(`HardQuotaLimit),    _("Hard Quota Limit"),HardQuotaLimit)),
+             `Left(`CheckBox(`id(`AlternateNameSpace),_("Use Alternate Name Space"),AlternateNameSpace))
+	  ),
+          `TextEntry(`id(`FallBackMailbox),  _("Fallback Mailbox"), FallBackMailbox)
 	)
       )
     );
@@ -579,64 +906,77 @@ term MailLocalDeliveryDialog() {
     boolean varspool = regexpmatch(SpoolDirectory,"var");
     boolean homedir  = regexpmatch(SpoolDirectory,"HOME/Mail");
 //    boolean custom   = (regexpmatch(SpoolDirectory,"HOME") && !homedir);
-    term MailboxSizeTerm = `TextEntry(`id(`MailboxSizeLimit), "", (string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
+    term MailboxSizeTerm = `TextEntry(`id(`MailboxSizeLimit), "", sformat("%1",MMS));
     if(!limit) {
-         MailboxSizeTerm = `TextEntry(`id(`MailboxSizeLimit), `opt(`disabled),"", (string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
+         MailboxSizeTerm = `TextEntry(`id(`MailboxSizeLimit), `opt(`disabled),"", "0");
     }
 
-    settings = `Frame(_("Mailbox Settings"),
+    settings = `Frame(_("Settings for File System Delivery"),
        `VBox(
-	 `Frame(_("Type"),
-	   `RadioButtonGroup(`id(`MailboxType),
-	     `HBox(
-		`RadioButton(`id("mbox"), _("Maibox"),  !mdir),
-	        `HStretch(),
-		`RadioButton(`id("mdir"), _("Maildir"), mdir),
-	        `HStretch()
-	      )
-	    )
-	  ),
-         `Frame(_("Repository"),
-	   `RadioButtonGroup(`id(`Repository),
-	     `HBox(
-	        `Left(`RadioButton(`id("varspool"), "/var/spool/mail/$USER",  varspool)),
-	        `HStretch(),
-	        `Left(`RadioButton(`id("homedir"),  "$HOME/Mail",              homedir)),
-	        `HStretch()
-//		`HBox(`Left(`RadioButton(`id("custom"),   "$HOME/",             custom)),
-//		      `Left(`TextEntry(`id(`customdir),     "", ""))
-//		     )
-	      )
-	    )
-	  ),
-	 `Frame(_("Mailbox Size"),
-	   `RadioButtonGroup(`id(`MailboxSize),
-	   `HBox(
-	     `RadioButton(`id("NoLimit"), `opt (`notify), _("No Limit"), !limit),
-	     `RadioButton(`id("Limit"), `opt (`notify), _("Mailbox Size"), limit),
-	     MailboxSizeTerm,
-	     `Label("KByte")
-	    )
-	  )
-	),
-	 `HStretch()
-        )
+         `HBox(
+	   `Label(" "),
+	   `HWeight(12,
+           `Frame(_("Type"),
+             `RadioButtonGroup(`id(`MailboxType),
+               `VBox(
+                 `Left(`RadioButton(`id("mbox"), _("Mailbox"),  !mdir)),
+                 `Left(`RadioButton(`id("mdir"), _("Maildir"), mdir))
+               )
+             )
+           )),
+	   `Label(" "),
+	   `HWeight(12,
+           `Frame(_("Repository"),
+             `RadioButtonGroup(`id(`Repository),
+               `VBox(
+                  `Left(`RadioButton(`id("varspool"), "/var/spool/mail/$USER",  varspool)),
+                  `Left(`RadioButton(`id("homedir"),  "$HOME/Mail",              homedir))
+                )
+             )
+	   )),
+	   `Label(" ")
+         ),
+	 `Label(" "),
+         `HBox(
+	   `Label(" "),
+           `Frame(_("Mailbox Size"),
+             `RadioButtonGroup(`id(`MailboxSize),
+               `HBox(
+                 `RadioButton(`id("NoLimit"), `opt (`notify), _("No Limit"), !limit),
+                 `RadioButton(`id("Limit"), `opt (`notify), _("Mailbox Size"), limit),
+                 MailboxSizeTerm,
+                 `Label(_("KByte"))
+               )
+             )
+	   ),
+	   `Label(" ")
+	 ),
+         `Label(" ")
+       )
+    );
+  } else if(TypePROCMAIL){
+    settings = `Frame(_("Settings for Procmail"),
+        `HBox(
+	  `HStretch(),
+          `Label(_("There are no settings for procmail.")),
+	  `HStretch()
+	)
     );
   }
 
   term content = `VBox(
       `Frame(_("Local Delivery Type"),
-         `RadioButtonGroup(`id(`Type),
-            `HBox(
-	        `RadioButton(`id("cyrus"),    `opt(`notify), _("Cyrus IMAP"), TypeCYRUS),
-		`HStretch(),
-	        `RadioButton(`id("procmail"), `opt(`notify), _("Procmail"),   TypePROCMAIL),
-		`HStretch(),
-	        `RadioButton(`id("local"),    `opt(`notify), _("Filesystem"), TypeLOCAL),
-		`HStretch(),
-	        `RadioButton(`id("none"),     `opt(`notify), _("No local Delivery"), TypeNONE)
+         `HBox(
+		 `RadioButtonGroup(`id(`Type),
+		    `VBox(
+			`Left(`RadioButton(`id("cyrus"),    `opt(`notify), _("Cyrus IMAP"), TypeCYRUS)),
+			`Left(`RadioButton(`id("procmail"), `opt(`notify), _("Procmail"),   TypePROCMAIL)),
+			`Left(`RadioButton(`id("local"),    `opt(`notify), _("File System"), TypeLOCAL)),
+			`Left(`RadioButton(`id("none"),     `opt(`notify), _("No Local Delivery"), TypeNONE))
+		     )
+		  ),
+		  `HStretch()
 	     )
-          )
       ),
       settings,
       `VStretch()
@@ -645,14 +985,24 @@ term MailLocalDeliveryDialog() {
 }
 
 term FetchingMailDialog() {
-  list<term>   table_items  = [];
-  integer      IID          = 0;
+  list<term>  table_items       = [];
+  integer     IID               = 0;
   list<map<string,string> > entries = (list<map<string,string> >) MailServer::FetchingMail["Items"]:[];
-  boolean      FetchByDialIn   = ((string) MailServer::FetchingMail["FetchByDialIn"]:""   == "1");
-  boolean      FetchMailSteady = ((string) MailServer::FetchingMail["FetchMailSteady"]:"" == "1");
-  //boolean      FetchByDialIn   = (boolean)MailServer::FetchingMail["FetchByDialIn"]:false;
-  //boolean      FetchMailSteady = (boolean)MailServer::FetchingMail["FetchMailSteady"]:false;
-  integer      FetchingInterval= tointeger((string) MailServer::FetchingMail["FetchingInterval"]:"");
+  boolean     FetchByDialIn     = ((string) MailServer::FetchingMail["FetchByDialIn"]:""   == "1");
+  boolean     FetchMailSteady   = ((string) MailServer::FetchingMail["FetchMailSteady"]:"" == "1");
+  integer     FetchingInterval  = tointeger((string) MailServer::FetchingMail["FetchingInterval"]:"");
+  boolean     NoLocalDelivery   = ((string)MailServer::MailLocalDelivery["Type"]:"" == "none");
+
+  if(NoLocalDelivery) {
+          MailServer::FetchingMail["FetchByDialIn"] = 0;
+          MailServer::FetchingMail["FetchMailSteady"] = 0;
+          return `Frame("",
+               `VBox(
+	              `Label(_("There is no local mail delivery defined.")),
+	              `Label(_("You cannot define mail fetching jobs."))
+		)
+	);
+  }
 
   foreach( map<string,string> entry, entries, ``{
     term item = `item(`id(IID), entry["server"]:"", entry["protocol"]:"",entry["remote_user"]:"",entry["local_user"]:"");
@@ -661,74 +1011,71 @@ term FetchingMailDialog() {
   });
 
   term FetchingIntervalTerm = `HBox(
-                `CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Steady"),FetchMailSteady),
-		`Label(_("Fetching Intervall")),
-                `IntField(`id(`FetchingInterval), "Min",10,120,FetchingInterval),
+                `CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Regularly"),FetchMailSteady),
+		`Label(_("Fetching Interval")),
+                `IntField(`id(`FetchingInterval), _("Min"),10,120,FetchingInterval),
                 `HStretch()
        );
   if(!FetchMailSteady) {
          FetchingIntervalTerm = `HBox(
-	        `CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Steady"),FetchMailSteady),
-                `Label(`opt(`disabled),_("Fetching Intervall")),
-                `IntField(`id(`FetchingInterval), `opt(`disabled),"Min",10,120,FetchingInterval),
+	        `CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Regularly"),FetchMailSteady),
+                `Label(`opt(`disabled),_("Fetching Interval")),
+                `IntField(`id(`FetchingInterval), `opt(`disabled),_("Min"),5,120,FetchingInterval),
                 `HStretch()
          );
   }
+  term Scheduler = nil;
+
+
+  if( size(MailServer::PPPCards) == 1 ) {
+       Scheduler = `VBox(
+                       `Left(`CheckBox(`id(`FetchByDialIn),  `opt(`notify),_("Fetch Mail by Connecting to Internet"),FetchByDialIn)),
+                       `Left(FetchingIntervalTerm)
+                   );
+  } else if( size(MailServer::PPPCards) > 1 ) {
+       Scheduler = `VBox(
+                       `HBox(
+                           `Left(`CheckBox(`id(`FetchByDialIn),  `opt(`notify),_("Fetch Mail by Connecting to Internet"),FetchByDialIn)),
+                           `Left(`ComboBox(`id(`Interface), _("Choose the Internet interface."), MakeSelectedList(MailServer::PPPCards,MailServer::FetchingMail["Interface"]:"")))
+                       ),
+                       `Left(FetchingIntervalTerm)
+                   );
+  } else {
+       Scheduler = `VBox(
+                       `Left(FetchingIntervalTerm)
+                   );
+  }
 
   term content = `VBox(
-	   `Frame(_("Mail Fetching Scheudler"),
-	     `VBox(
-	       `Left(`CheckBox(`id(`FetchByDialIn),  `opt(`notify),_("Fetch Mail by Connecting Internet."),FetchByDialIn)),
-	       `Left(FetchingIntervalTerm)
-	     )
+	   `Frame(_("Mail Fetching Scheduler"),
+              Scheduler
            ),
            `HBox(
-	     `Frame(_("Defined  Fetchmail Jobs"),
+	     `VBox(
+	       `Left(`Label(_("Defined  Fetchmail Jobs"))),
 	       `Table(`id(`table), `opt(`keepSorting),`header(_("Server"),_("Protocol"),_("User"),_("Local User")),table_items)
 	     ),
-	     `VBox(
-	       `PushButton(`id(`Add),   _("Add")),
-//	       `PushButton(`id(`Edit),  _("Edit")),
-	       `PushButton(`id(`Delete),_("Delete"))
+	     `Top(
+	       `VBox(
+	         `Label(""),
+	         `PushButton(`id(`Add),   _("Add")),
+//	         `PushButton(`id(`Edit),  _("Edit")),
+	         `PushButton(`id(`Delete),_("Delete"))
+	       )
 	     )
 	   )
    );
-/*  term FetchingIntervalTerm = `HBox(`Label(_("Fetching Intervall")), `IntField(`id(`FetchingInterval), "Min",10,120,FetchingInterval));
-  if(!FetchMailSteady) {
-    FetchingIntervalTerm = `HBox(`Label(`opt(`disabled),_("Fetching Intervall")), `IntField(`id(`FetchingInterval), `opt(`disabled),"Min",10,120,FetchingInterval));
-  }
-
-  term content = `HBox(
-	   `HWeight(2,`VBox(
-	     `Frame(_("Defined  Fetchmail Jobs"),
-	       `Table(`id(`table), `header(_("Server"),_("Protocol"),_("User"),_("Local User")),table_items)
-	     ),
-	     `HBox(
-	       `PushButton(`id(`Add),   _("Add")),
-	       `PushButton(`id(`Edit),  _("Edit")),
-	       `PushButton(`id(`Delete),_("Delete"))
-	     )
-	   )),
-	   `HWeight(1,`Frame(_("Mail Fetching Scheudler"),
-	     `VBox(
-	       `Left(`CheckBox(`id(`FetchByDialIn),  `opt(`notify),_("Fetch Mail by Connecting Internet."),FetchByDialIn)),
-	       `Left(`CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Steady"),FetchMailSteady)),
-	       `Left(FetchingIntervalTerm),
-               `VStretch()
-	     )
-	   ))
-   );*/
   return content;
 }
 
 map FetchmailAddItem(){
    UI::OpenDialog(`opt(`decorated ),  `Frame(_("Add New Fetchmail Job"),
             `VBox(
-              `TextEntry(`id(`server),       "Server Address",  ""),
+              `TextEntry(`id(`server),       _("Server Address"),  ""),
 	      `ComboBox (`id(`protocol),     _("Protocol"), [ "AUTO", "POP2", "POP3", "IMAP", "APOP", "KPOP", "SDPS", "ETRN", "ODMR", ]),
-              `TextEntry(`id(`remote_user),  "Remote User",  ""),
-              `TextEntry(`id(`password),     "Remote User's Password",  ""),
-              `TextEntry(`id(`local_user),   "Local User",  ""),
+              `TextEntry(`id(`remote_user),  _("Remote User"),  ""),
+              `TextEntry(`id(`password),     _("Remote User's Password"),  ""),
+              `TextEntry(`id(`local_user),   _("Local User"),  ""),
               `HBox(
 	         `PushButton(`id(`cancel),   _("Cancel")),
 	         `PushButton(`id(`ok),   _("OK"))
@@ -758,54 +1105,115 @@ map FetchmailAddItem(){
 
 }
 
-term MailLocalDomainsDialog() {
+term MailLocalDomainsDialog(string CID) {
   list<term> Domains = [];
+  boolean     NoLocalDelivery   = ((string)MailServer::MailLocalDelivery["Type"]:"" == "none");
+  if(NoLocalDelivery) {
+          return `Frame("",
+               `VBox(
+                      `Label(_("There is no local mail delivery defined.")),
+                      `Label(_("You cannot define local domains for the mail server."))
+		     )
+                );
+  }
+
+  string  Name         = "";
+  string  Type         = "none";
+  boolean Masquerading = false;
+  list<string> Types   = ["main","virtual","local","none"];
+
   foreach(map Domain, MailServer::MailLocalDomains["Domains"]:[], ``{
       Domains = add( Domains, `item(`id(Domain["Name"]:""),
                                      Domain["Name"]:"",
 				     Domain["Type"]:"",
 				     Domain["Masquerading"]:""
                    ));
+      if(CID == Domain["Name"]:"" ) {
+            Name         = Domain["Name"]:"";
+	    Type         = Domain["Type"]:"";
+            Masquerading = (boolean)(Domain["Masquerading"]:"" == "yes");
+      }
   });
-y2milestone("Domains %1", Domains);
+  if( Name == "" && size(MailServer::MailLocalDomains["Domains"]:[]) > 0) {
+     map Domain = select((list<map>)MailServer::MailLocalDomains["Domains"]:[],0,$[]);
+     Name         = Domain["Name"]:"";
+     Type         = Domain["Type"]:"";
+     Masquerading = (boolean)(Domain["Masquerading"]:"" == "yes");
+  }
+
   term content = `VBox (
        `VBox(
-         `Frame(_("Define New My Domain"),
+         `Frame(_("Define New Domain"),
            `HBox(
-               `TextEntry(`id(`Name),     "Name", ""),
+               `TextEntry(`id(`Name), `opt(`disabled),    _("Name"), Name),
 	       `HStretch(),
-	       `ComboBox (`id(`Type), _("Type"), ["virtual","local"]),
-	       `CheckBox(`id(`Masquerading),_("Masquerading"),true),
-               `PushButton(`id(`Add), _("Add"))
-            )
-          ),
-         `Frame(_("Defined My Domains"),
-           `HBox(
-             `Table(`id(`table), `header(_("Domain"), _("Type"), _("Masquerading")),Domains),
-             `PushButton(`id(`Delete), _("Delete"))
-            )
+	       `ComboBox (`id(`Type), _("Type"), MakeSelectedList(Types,Type)),
+	       `VBox(
+	          `Label(""),
+	          `CheckBox(`id(`Masquerading),_("Masquerading"),Masquerading)
+	       ),
+	       `VBox(
+	          `Label(""),
+                  `PushButton(`id(`Change), _("Change"))
+	       )
+           )
+         ),
+         `Left(`Label(_("Defined Domains"))),
+         `HBox(
+             `Table(`id(`table), `opt(`immediate,`keepSorting,`notify), `header(_("Domain"), _("Type"), _("Masquerading")),Domains)
+//             `Top(`PushButton(`id(`Delete), _("Delete")))
           )
        )
    );
   return content;
 }
 
+boolean CheckMainDomain() {
+           integer maindomain = 0;
+           integer domains    = 0;
+
+	   if(((string)MailServer::MailLocalDelivery["Type"]:"" == "none")) {
+		return true;
+	   }
+           foreach(map Domain, MailServer::MailLocalDomains["Domains"]:[], ``{
+                if( Domain["Type"]:"" == "main" ) {
+                   maindomain = maindomain + 1;
+                }
+                domains = domains + 1;
+           });
+           if( maindomain == 0 ) {
+              Report::Warning(_("There is no main mail domain defined. Please fix it!"));
+	      MailServer::MailLocalDomains["Changed"] = false;
+              if(domains > 0) {
+                return false;
+              }
+           } else if(maindomain > 1 ) {
+              Report::Warning(_("You have defined more then one main mail domain. Please fix it!"));
+	      MailServer::MailLocalDomains["Changed"] = false;
+              return false;
+           }
+       return true;
+}
+
 any ComplexDialog() {
 
    Wizard::CreateTreeDialog();
    list<map> Tree = GenerateTree([], "", MailServer::ModulesTreeContent) ;
-   Wizard::CreateTree(Tree, _("&Mail Server Configuration Modules"));
+   Wizard::CreateTree(Tree, _("Mail Server Configuration"));
 
-   string helptext = "Bla Bla Bla";
-   term content = GlobalSettingsDialog();
+   string helptext       = HELPS["GlobalSettings"]:"Bla Bla Bla";
+   term   content        = GlobalSettingsDialog();
+   string title          = _("Mail Server Global Settings");
    string FocusedContent = "GlobalSettings";
 
    string CID = ""; //CurrentItem
    string CIDRBL = ""; //CurrentItem
 
-   Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, true, true);
+   Wizard::SetContents(title, content ,helptext, true, true);
+   Wizard::SetDesktopIcon("mailserver");
    UI::WizardCommand(`SetBackButtonLabel( "" ) );
-   UI::WizardCommand(`SetNextButtonLabel( _("Save") ) );
+   UI::WizardCommand(`SetNextButtonLabel( _("OK") ) );
+   Wizard::SelectTreeItem(FocusedContent);
 
    any ret       = nil;
    any EventType = nil;
@@ -813,6 +1221,7 @@ any ComplexDialog() {
    {
         boolean focus_changed     = false;
         string  OldFocusedContent = FocusedContent;
+
         map event = UI::WaitForEvent();
         ret       = event["ID"]:nil;
         EventType = event["EventType"]:nil;
@@ -825,8 +1234,9 @@ any ComplexDialog() {
         if(FocusedContent == "GlobalSettings") {
            MailServer::GlobalSettings["Changed"]            = true;
            if(UI::QueryWidget(`id(`MailSize), `CurrentButton) == "MailSizeLimit") {
-             MailServer::GlobalSettings["MaximumMailSize"]    = UI::QueryWidget(`id(`MaximumMailSize), `Value);
-             if(UI::QueryWidget(`id(`MaximumMailSize), `Value) == "0" ) {
+	     integer MMS = tointeger(UI::QueryWidget(`id(`MaximumMailSize), `Value)) * 1024;
+             MailServer::GlobalSettings["MaximumMailSize"]    = sformat("%1",MMS);
+	     if(UI::QueryWidget(`id(`MaximumMailSize), `Value) == "0" ) {
                MailServer::GlobalSettings["MaximumMailSize"]    = "1";
              }
            } else {
@@ -854,105 +1264,22 @@ any ComplexDialog() {
                 MailServer::GlobalSettings["SendingMail","RelayHost","Password"] = password1;
               }
            }
-           content        = GlobalSettingsDialog();
-           helptext       = HELPS["GlobalSettings"]:"Bla Bla Bla";
+           title    = _("Mail Server Global Settings");
+           content  = GlobalSettingsDialog();
+           helptext = HELPS["GlobalSettings"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailTransports") {
-           if( ret == `Auth ) {
-	      if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
-	        UI::ChangeWidget(`id(`Account),   `Enabled, true);
-		UI::ChangeWidget(`id(`Password1), `Enabled, true);
-		UI::ChangeWidget(`id(`Password2), `Enabled, true);
-	      } else {
-	        UI::ChangeWidget(`id(`Account),   `Enabled, false);
-		UI::ChangeWidget(`id(`Password1), `Enabled, false);
-		UI::ChangeWidget(`id(`Password2), `Enabled, false);
-	      }
-	      continue;
-           }
-           MailServer::MailTransports["Changed"] = true;
-	   list<map> Transports  = (list<map>) MailServer::MailTransports["Transports"]:[];
-	   if(size ((list) MailServer::MailTransports["Transports"]:[]) > 0) {
-	         CID = (string)(UI::QueryWidget(`id(`table), `CurrentItem));
-           }
-           //Now we generate the new/edited entry
-           string password1 = (string)UI::QueryWidget(`id(`Password1), `Value);
-           string password2 = (string)UI::QueryWidget(`id(`Password2), `Value);
-	   map NewTransport = $[];
-           NewTransport["Destination"] = (string)UI::QueryWidget(`id(`Destination), `Value);
-           NewTransport["Transport"]   = (string)UI::QueryWidget(`id(`Protocol), `Value);
-           NewTransport["Nexthop"]     = (string)UI::QueryWidget(`id(`Server), `Value);
-           if(NewTransport["Transport"]:"smtp" != "error" ) {
-             NewTransport["TLS"]         = (string)UI::QueryWidget(`id(`TLS), `CurrentButton);
-             if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
-               NewTransport["Auth"]      = "1";
-               NewTransport["Account"]   = (string)UI::QueryWidget(`id(`Account), `Value);
-               NewTransport["Password"]  = password1;
-             }
-             if((boolean)UI::QueryWidget(`id(`NOMX), `Value)){
-               NewTransport["Nexthop"] = "["+NewTransport["Nexthop"]:""+"]";
-             }
-           }
-           if(ret == `Add || ret == `Edit) {
-           //TODO Checking if the attributes are correct & that Destination is unique
-               if(regexpmatch(NewTransport["Destination"]:"","[ öä#+ü]") || NewTransport["Destination"]:"" == ""){
-                    Report::Error(_("The destination is invalid."));
-                    continue;
-               }
-               if(ret == `Add) {
-                  list TR = [];
-                  foreach(map Transport, Transports, ``{
-                    TR = add(TR,Transport["Destination"]:"");
-                  });
-                  //TODO search for .<domainname to>
-		  if(contains( TR, NewTransport["Destination"]:"")) {
-                     Report::Error(_("There is already a transport defined for this destination."));
-                     continue;
-		  }
-               }
-           }
-	   if(ret == `Add) {
-              if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
-                if( password1 != password2) {
-                    Report::Error(_("The passwords are not identical."));
-                    continue;
-                }
-              }
-	      MailServer::MailTransports["Transports"] = [];
-	      foreach(map Transport, Transports, ``{
-	        MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
-		if(Transport["Destination"]:"" == CID) {
-	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
-                  if((boolean)UI::QueryWidget(`id(`Subdomains), `Value)){
-                    NewTransport["Destination"] = "."+NewTransport["Destination"]:"";
-	            MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
-                  }
-		}
-	      });
-	      if(size ((list) MailServer::MailTransports["Transports"]:[]) == 0) {
-	        MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
-                if((boolean)UI::QueryWidget(`id(`Subdomains), `Value)){
-                   NewTransport["Destination"] = "."+NewTransport["Destination"]:"";
-	           MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
-                }
-	      }
-              CID = NewTransport["Destination"]:"";
+           CID   = (string)UI::QueryWidget(`id(`table), `CurrentItem);
+	   if(ret == `Use) {
+	     MailServer::MailTransports["Use"] = (boolean)UI::QueryWidget(`id(`Use), `Value);
+             MailServer::MailTransports["Changed"] = true;
+             continue;
+	   } else if(ret == `Add) {
+              ShowMailTransport(CID,"add");
 	   } else if(ret == `Edit) {
-              if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
-                if( password1 != password2) {
-                    Report::Error(_("The passwords are not identical."));
-                    continue;
-                }
-              }
-	      MailServer::MailTransports["Transports"] = [];
-	      foreach(map Transport, Transports, ``{
-		if(Transport["Destination"]:"" == CID) {
-	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
-		} else {
-	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
-                }
-	      });
-              CID = NewTransport["Destination"]:"";
+              ShowMailTransport(CID,"edit");
 	   } else if (ret == `Delete) {
+              MailServer::MailTransports["Changed"] = true;
+              list<map> Transports  = (list<map>) MailServer::MailTransports["Transports"]:[];
 	      MailServer::MailTransports["Transports"] = [];
 	      foreach(map Transport, Transports, ``{
 		if(Transport["Destination"]:"" != CID) {
@@ -960,11 +1287,10 @@ any ComplexDialog() {
 	           MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
 		}
 	      });
-	   } else if (ret == `Clean) {
-               CID = "";
-           }
-	   content        = MailTransportsDialog(CID);
-	   helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
+	   }
+           title    = _("Mail Server Transport Configuration");
+	   content  = MailTransportsDialog();
+	   helptext = HELPS["MailTransports"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailPrevention") {
 	  if(ret == `VirusScanning || ret == "off" || ret == "medium" || ret == "hard") {
 	    MailServer::MailPrevention["Changed"] = true;
@@ -1004,13 +1330,10 @@ any ComplexDialog() {
 	    });
 	  }
           MailServer::MailPrevention["BasicProtection"] = (string)UI::QueryWidget(`id(`BasicProtection), `CurrentButton);
-          if((boolean) UI::QueryWidget(`id(`VirusScanning), `Value)) {
-             MailServer::MailPrevention["VirusScanning"] = "1";
-          } else {
-             MailServer::MailPrevention["VirusScanning"] = "0";
-          }
-          content        = MailPreventionDialog(CID,CIDRBL);
-          helptext       = HELPS["MailPrevention"]:"Bla Bla Bla";
+          MailServer::MailPrevention["VirusScanning"] = (boolean) UI::QueryWidget(`id(`VirusScanning), `Value);
+          title    = _("Mail Server SPAM Basic Prevention Configuration");
+          content  = MailPreventionDialog(CID,CIDRBL);
+          helptext = HELPS["MailPrevention"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailRelaying") {
            MailServer::MailRelaying["Changed"]            = true;
 	   string SMTPDTLSMode = (string)UI::QueryWidget(`id(`SMTPDTLSMode), `CurrentButton);
@@ -1030,18 +1353,9 @@ any ComplexDialog() {
            } else {
              MailServer::MailRelaying["RequireSASL"] = "0";
            }
-           if((boolean)UI::QueryWidget(`id(`UserRestriction), `Value)){
-	     //TODO It must be fixed!!!!
-             MailServer::MailRelaying["UserRestriction"] = "1";
-             MailServer::MailRelaying["RequireSASL"]     = "1";
-	     if(SMTPDTLSMode != "enforce" && SMTPDTLSMode != "auth_only") {
-	        MailServer::MailRelaying["SMTPDTLSMode"]    = "enforce";
-             }
-           } else {
-             MailServer::MailRelaying["UserRestriction"] = "0";
-           }
-           content        = MailRelayingDialog();
-           helptext       = HELPS["MailRelaying"]:"Bla Bla Bla";
+           title    = _("Mail Server Relaying Configuration");
+           content  = MailRelayingDialog();
+           helptext = HELPS["MailRelaying"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailLocalDelivery") {
            MailServer::MailLocalDelivery["Changed"]  = true;
            MailServer::MailLocalDelivery["Type"] = (string)UI::QueryWidget(`id(`Type), `CurrentButton);
@@ -1057,19 +1371,26 @@ any ComplexDialog() {
 		   if(UI::QueryWidget(`id(`MailboxSize), `CurrentButton) == "NoLimit") {
 		      MailServer::MailLocalDelivery["MailboxSizeLimit"] = "0";
 		   } else {
-		      MailServer::MailLocalDelivery["MailboxSizeLimit"] = UI::QueryWidget(`id(`MailboxSizeLimit), `Value);
-		      if(MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0" == "0") {
+                     integer MMS = tointeger(UI::QueryWidget(`id(`MailboxSizeLimit), `Value)) * 1024;
+		     MailServer::MailLocalDelivery["MailboxSizeLimit"] = sformat("%1",MMS);
+
+		     if(MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0" == "0") {
 			 MailServer::MailLocalDelivery["MailboxSizeLimit"] = "1";
-		      }
+		     }
 		   }
 	   }
-	   if( UI::WidgetExists(`id(`Security)) && UI::WidgetExists(`id(`QuotaLimit)) && UI::WidgetExists(`id(`HardQuotaLimit))) {
+	   if( UI::WidgetExists(`id(`ImapSecurity)) && UI::WidgetExists(`id(`QuotaLimit)) && UI::WidgetExists(`id(`HardQuotaLimit))) {
 	     MailServer::MailLocalDelivery["MailboxSizeLimit"] = tostring(UI::QueryWidget(`id(`MailboxSizeLimit), `Value));
 	     MailServer::MailLocalDelivery["QuotaLimit"]       = tostring(UI::QueryWidget(`id(`QuotaLimit), `Value));
 	     MailServer::MailLocalDelivery["ImapIdleTime"]     = tostring(UI::QueryWidget(`id(`ImapIdleTime), `Value));
 	     MailServer::MailLocalDelivery["PopIdleTime"]      = tostring(UI::QueryWidget(`id(`PopIdleTime), `Value));
 	     MailServer::MailLocalDelivery["FallBackMailbox"]  = UI::QueryWidget(`id(`FallBackMailbox), `Value);
-	     MailServer::MailLocalDelivery["Security"]         = UI::QueryWidget(`id(`Security), `CurrentButton);
+	     if( (boolean)UI::QueryWidget(`id(`ImapSecurity), `Value) ) {
+		 MailServer::MailLocalDelivery["Security"]  = "1";
+	     } else {
+		 MailServer::MailLocalDelivery["Security"]  = "0";
+	     }
+
 	     if((boolean)UI::QueryWidget(`id(`HardQuotaLimit), `Value)) {
 	         MailServer::MailLocalDelivery["HardQuotaLimit"]      = "1";
 	     } else {
@@ -1081,8 +1402,9 @@ any ComplexDialog() {
 	         MailServer::MailLocalDelivery["AlternateNameSpace"]      = "0";
 	     }
 	   }
-           content        = MailLocalDeliveryDialog();
-           helptext       = HELPS["MailLocalDelivery"]:"Bla Bla Bla";
+           title    = _("Mail Server Local Delivery Configuration");
+           content  = MailLocalDeliveryDialog();
+           helptext = HELPS["MailLocalDelivery"]:"Bla Bla Bla";
         } else if(FocusedContent == "FetchingMail") {
            MailServer::FetchingMail["Changed"]  = true;
 	   if(ret == `Add) {
@@ -1117,67 +1439,90 @@ any ComplexDialog() {
            if(UI::WidgetExists(`id(`FetchingInterval))) {
              MailServer::FetchingMail["FetchingInterval"] = tostring(UI::QueryWidget(`id(`FetchingInterval), `Value));
            }
-           content        = FetchingMailDialog();
-           helptext       = HELPS["FetchingMail"]:"Bla Bla Bla";
+           if(!UI::WidgetExists(`id(`FetchByDialIn)))   MailServer::FetchingMail["FetchByDialIn"] = "0";
+           if(UI::WidgetExists(`id(`Interface)))        MailServer::FetchingMail["Interface"]     = (string)UI::QueryWidget(`id(`Interface), `Value);
+           title    = _("Mail Server Mail Fetching Configuration");
+           content  = FetchingMailDialog();
+           helptext = HELPS["FetchingMail"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailLocalDomains") {
-	   MailServer::MailLocalDomains["Changed"] = true;
-	   if(ret == `Delete) {
+           CID   = (string)UI::QueryWidget(`id(`table), `CurrentItem);
+	   if(ret == `Change) {
+	     string Name         = (string)UI::QueryWidget(`id(`Name), `Value);
+	     string Type         = (string)UI::QueryWidget(`id(`Type), `Value);
+	     string Masquerading = "no";
+	     if((boolean)UI::QueryWidget(`id(`Masquerading), `Value)) {
+	        Masquerading = "yes";
+	     }
 	     list<map> Domains = (list<map>)  MailServer::MailLocalDomains["Domains"]:[];
-             CID   = (string)UI::QueryWidget(`id(`table), `CurrentItem);
 	     MailServer::MailLocalDomains["Domains"] = [];
              foreach(map Domain, Domains, ``{
 	        if( CID != Domain["Name"]:"" ) {
                   MailServer::MailLocalDomains["Domains"] = add( MailServer::MailLocalDomains["Domains"]:[], Domain);
-		}
-              });
-           } else if(ret == `Add) {
-	      string Name         = (string)UI::QueryWidget(`id(`Name), `Value);
-	      string Type         = (string)UI::QueryWidget(`id(`Type), `Value);
-	      string Masquerading = "no"; 
-	      if((boolean)UI::QueryWidget(`id(`Masquerading), `Value)) {
-	        Masquerading = "yes";
-	      }
-              MailServer::MailLocalDomains["Domains"] = add (MailServer::MailLocalDomains["Domains"]:[],
+		} else {
+                  MailServer::MailLocalDomains["Domains"] = add (MailServer::MailLocalDomains["Domains"]:[],
                                          $[ "Name"         : Name,
-					    "Type"         : Type,
-					    "Masquerading" : Masquerading
+                                            "Type"         : Type,
+                                            "Masquerading" : Masquerading
                                           ]);
+                }
+              });
+	      MailServer::MailLocalDomains["Changed"] = true;
            }
-           content        = MailLocalDomainsDialog();
-           helptext       = HELPS["MailLocalDomains"]:"Bla Bla Bla";
+           if(! CheckMainDomain()) {
+              FocusedContent = "MailLocalDomains";
+              ret = "MailLocalDomains";
+	      UI::SetFocus (`id ("MailLocalDomains"));
+           }
+           title    = _("Mail Server Local Domain Configuration");
+           content  = MailLocalDomainsDialog(CID);
+           helptext = HELPS["MailLocalDomains"]:"Bla Bla Bla";
         }
+
+	if (ret == `wizardTree )
+	{
+            ret = Wizard::QueryTreeItem();
+	    y2milestone("Selected: %1", ret);
+	}
         if(ret == "GlobalSettings" && FocusedContent != "GlobalSettings") {
            content        = GlobalSettingsDialog();
+	   title          = _("Mail Server Global Settings");
            helptext       = HELPS["GlobalSettings"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="GlobalSettings";
         } else if(ret == "MailTransports" && FocusedContent != "MailTransports") {
-           content        = MailTransportsDialog("");
+           content        = MailTransportsDialog();
+	   title          = _("Mail Server Transport Configuration");
            helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailTransports";
         } else if(ret == "MailPrevention" && FocusedContent != "MailPrevention") {
            content        = MailPreventionDialog(CID,CIDRBL);
+	   title          = _("Mail Server SPAM Basic Prevention Configuration");
            helptext       = HELPS["MailPrevention"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailPrevention";
         } else if(ret == "MailRelaying" && FocusedContent != "MailRelaying") {
            content        = MailRelayingDialog();
+	   title          = _("Mail Server Relaying Configuration");
            helptext       = HELPS["MailRelaying"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailRelaying";
         } else if(ret == "MailLocalDelivery" && FocusedContent != "MailLocalDelivery") {
            content        = MailLocalDeliveryDialog();
+	   title          = _("Mail Server Local Delivery Configuration");
            helptext       = HELPS["MailLocalDelivery"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailLocalDelivery";
         } else if(ret == "FetchingMail" && FocusedContent != "FetchingMail") {
            content        = FetchingMailDialog();
+	   title          = _("Mail Server Mail Fetching Configuration");
            helptext       = HELPS["FetchingMail"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="FetchingMail";
         } else if(ret == "MailLocalDomains" && FocusedContent != "MailLocalDomains") {
-           content        = MailLocalDomainsDialog();
+           CheckMainDomain();
+           content        = MailLocalDomainsDialog("");
+	   title          = _("Mail Server Local Domain Configuration");
            helptext       = HELPS["MailLocalDomains"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailLocalDomains";
@@ -1186,89 +1531,28 @@ y2milestone("event %1",event);
 y2milestone("event %1",ret);
 y2milestone("FocusedContent %1",FocusedContent);
         if(ret != `cancel && ret != `abort && ret != `next ) {
-          Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, false, true);
+          Wizard::SetContents(title, content ,helptext, false, true);
+          Wizard::SetDesktopIcon("mailserver");
           UI::WizardCommand(`SetBackButtonLabel( "" ) );
-          UI::WizardCommand(`SetNextButtonLabel( _("Save") ) );
-	  UI::ChangeWidget(`id(`table), `CurrentItem, CID);
+          UI::WizardCommand(`SetNextButtonLabel( _("OK") ) );
+	  if(UI::WidgetExists(`id(`table))) UI::ChangeWidget(`id(`table), `CurrentItem, CID);
+          if(!MailServer::CertExist){
+            // If there is no certificate you can not use server side TLS SSL
+	    if(UI::WidgetExists(`id(`SMTPDTLSMode))) UI::ChangeWidget(`id(`SMTPDTLSMode), `Enabled, false);
+	    if(UI::WidgetExists(`id(`ImapSecurity))) UI::ChangeWidget(`id(`ImapSecurity), `Enabled, false);
+	    MailServer::MailLocalDelivery["Security"] = "0";
+	    MailServer::MailRelaying["SMTPDTLSMode"]  = "none";
+	  }
+	  if (focus_changed)
+	  {
+	      UI::SetFocus (`id (`wizardTree));
+	  }
         }
    }
-
+   UI::CloseDialog();
    return ret;
 }
 
-/**
- * Configure1 dialog
- * @return dialog result
- */
-any Configure1Dialog () {
-
-    /* MailServer configure1 dialog caption */
-    string caption = _("MailServer Configuration");
-
-    /* MailServer configure1 dialog contents */
-    term contents = `Label (_("First part of configuration of mail-server"));
-
-    Wizard::SetContentsButtons(caption, contents, HELPS["c1"]:"",
-	    Label::BackButton(), Label::NextButton());
-
-    any ret = nil;
-    while(true) {
-
-	ret = UI::UserInput();
-
-	/* abort? */
-	if(ret == `abort || ret == `cancel) {
-	    if(ReallyAbort()) break;
-	    else continue;
-	}
-        else if(ret == `next || ret == `back) {
-            break;
-        }
-        else {
-            y2error("unexpected retcode: %1", ret);
-            continue;
-        }
-    }
-
-    return ret;
-}
-
-/**
- * Configure2 dialog
- * @return dialog result
- */
-any Configure2Dialog () {
-
-    /* MailServer configure2 dialog caption */
-    string caption = _("MailServer Configuration");
-
-    /* MailServer configure2 dialog contents */
-    term contents = `Label (_("Second part of configuration of mail-server"));
-
-    Wizard::SetContentsButtons(caption, contents, HELPS["c2"]:"",
-	    Label::BackButton(), Label::NextButton());
-
-    any ret = nil;
-    while(true) {
-
-	ret = UI::UserInput();
-
-	/* abort? */
-	if(ret == `abort || ret == `cancel) {
-	    if(ReallyAbort()) break;
-	    else continue;
-	}
-        else if(ret == `next || ret == `back) {
-            break;
-        }
-        else {
-            y2error("unexpected retcode: %1", ret);
-            continue;
-        }
-    }
-
-    return ret;
-}
 
 /* EOF */
 }

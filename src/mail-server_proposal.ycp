@@ -62,9 +62,9 @@ else if(func == "AskUser") {
 else if(func == "Description") {
     ret = $[
 	/* Rich text title for MailServer in proposals */
-	"rich_text_title" : _("MailServer"),
+	"rich_text_title" : _("Mail Server"),
 	/* Menu title for MailServer in proposals */
-	"menu_title" : _("&MailServer"),
+	"menu_title" : _("&Mail Server"),
 	"id" : "mail-server",
     ];
 }

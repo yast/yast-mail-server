@@ -67,19 +67,19 @@ suseDefaultBase: ou=MAIL,dc=suse,dc=de
 dn: cn=USERS,ou=ldapconfig,dc=suse,dc=de
 objectClass: suseUserConfiguration
 cn: USERS
-suseDefaultBase: ou=ldapconfig,dc=suse,dc=de
+suseDefaultBase: ou=USERS,dc=suse,dc=de
 
 # GROUPS Base
 dn: cn=GROUPS,ou=ldapconfig,dc=suse,dc=de
 objectClass: suseGroupConfiguration
 cn: GROUPS
-suseDefaultBase: ou=ldapconfig,dc=suse,dc=de
+suseDefaultBase: ou=GROUPS,dc=suse,dc=de
 
 # DNS Base
 dn: cn=defaultDNS,ou=ldapconfig,dc=suse,dc=de
 objectClass: suseDNSConfiguration
 cn: defaultDNS
-suseDefaultBase: ou=ldapconfig,dc=suse,dc=de
+suseDefaultBase: ou=DNS,dc=suse,dc=de
 
 # DHCP Base
 dn: cn=defaultDHCP,ou=ldapconfig,dc=suse,dc=de

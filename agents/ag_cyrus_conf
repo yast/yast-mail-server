@@ -1,10 +1,10 @@
 #! /usr/bin/perl -w -T
 
-package ag_postfix_mastercf;
+package ag_cyrus_conf;
 # FIXME: How should that be handled?
 use lib qw(/usr/lib/YaST2/servers_non_y2);
 use strict;
-use MasterCFParser;
+use CyrusConfParser;
 use YaST::SCRAgent;
 use ycp;
 our @ISA = ("YaST::SCRAgent");
@@ -26,17 +26,17 @@ sub OtherCommand () {
     my $class = shift;
     my ($symbol, $config, @rest) = @_;
     
-    if ($symbol ne "MasterCF") {
+    if ($symbol ne "CyrusConf") {
         return $class->SetError(summary=> "The first command must be the configuration.(Seen '$_')",
                                 code => "SCR_INIT_ERR");
     } else {
-        $_CFINST = new MasterCFParser( $config->{"path"}, \&y2error );
+        $_CFINST = new CyrusConfParser( $config->{"file"}, \&y2error );
         if( not defined $_CFINST ) {
-            return $class->SetError(summary => "Can not initialize MasterCFParser",
+            return $class->SetError(summary => "Can not initialize CyrusConfParser",
                                     code => "SCR_INIT_ERR");
         }
-	if( $_CFINST->readMasterCF() ) {
-            return $class->SetError(summary => "Can not read master.cf",
+	if( $_CFINST->readCyrusConf() ) {
+            return $class->SetError(summary => "Can not read cyrus.conf",
                                     code => "SCR_INIT_ERR");
 	}
 	# FIXME: Set logging callback here
@@ -49,7 +49,7 @@ sub Read {
     my $class         = shift;
     my ($path, @args) = @_;
 
-    if( $_CFINST->readMasterCF() ) {
+    if( $_CFINST->readCyrusConf() ) {
 	# FIXME: How about $class->SetError() ???
 	return undef;
     }
@@ -62,7 +62,7 @@ sub Write {
     my ($path, @args) = @_;
 
     return undef if ! $class->check_initialized();
-    if( $_CFINST->writeMasterCF() ) {
+    if( $_CFINST->writeCyrusConf() ) {
 	# FIXME: How about $class->SetError() ???
 	return undef;
     }
@@ -76,18 +76,18 @@ sub Execute {
 
     return undef if ! $class->check_initialized();
 
-    if( $path eq '.modifyService' ) {
+    if( $path eq '.toggleService' ) {
 	my $service = $args[0];
-	return undef if $_CFINST->modifyService( $service );
-    } elsif ( $path eq '.findService' ) {
-	my $service = $args[0];
-	return $_CFINST->getServiceByAttributes( $service );
-    } elsif ( $path eq '.deleteService' ) {
-	my $service = $args[0];
-	return undef if $_CFINST->deleteService( $service );
+	return undef if $_CFINST->toggleService( $service );
     } elsif ( $path eq '.addService' ) {
 	my $service = $args[0];
-	return undef if $_CFINST->addService($service);
+	return undef if $_CFINST->addService( $service );
+    } elsif ( $path eq '.serviceExists' ) {
+	my $service = $args[0];
+	return $_CFINST->serviceExists( $service );
+    } elsif ( $path eq '.serviceEnabled' ) {
+	my $service = $args[0];
+	return $_CFINST->serviceEnabled( $service );
     }
 
     return undef; 
@@ -95,4 +95,4 @@ sub Execute {
   
 
 package main;
-ag_postfix_mastercf->Run;
+ag_cyrus_conf->Run;

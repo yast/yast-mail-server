@@ -16,13 +16,17 @@ ynclude_DATA =			\
 	dialogs.ycp		\
 	complex.ycp
 
+ycpchook = mail-server
+$(ycpchook):
+	ln -sf . $@
+
 desktop_DATA =			\
 	mail-server.desktop
 
 module_DATA =			\
 	MailServer.ycp		
 
-schema_DATA = SUSE-Mail.schema
+schema_DATA = suse-mailserver.schema
 
 EXTRA_DIST = $(client_DATA) $(ynclude_DATA) $(module_DATA) $(desktop_DATA) $(schema_DATA)
 
