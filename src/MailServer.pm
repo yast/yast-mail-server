@@ -133,7 +133,7 @@ sub ReadGlobalSettings {
  #
 BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  "any" ]; }
 sub WriteGlobalSettings {
-    my $self = shift;
+    my $self           = shift;
     my $GlobalSettings = shift;
     my $MSize          = $GlobalSettings->{'MSize'};
     my $RelayTyp       = $GlobalSettings->{'Relay'}{'Type'};
@@ -177,6 +177,28 @@ sub WriteGlobalSettings {
 
     Service::Reload('postfix');
     return 1;
+}
+
+##
+ # Dump the mail-server Mail Routing to a single map
+ # @return map Dumped settings (later acceptable by WriteMailRouting ())
+ #
+BEGIN { $TYPEINFO{ReadMailRouting}  =["function", "any"  ]; }
+sub ReadMailRouting {
+    my $self           = shift;
+    my %MailRouting    = ( 
+			   'Changed' => 'false',
+			   'Routes'  => [] 
+			 );
+}
+
+##
+ # Write the mail-server Mail Routing from a single map
+ #
+BEGIN { $TYPEINFO{WriteMailRouting}  =["function", "boolean", "any"  ]; }
+sub WriteMailRouting {
+    my $self           = shift;
+    my $MailRouting    = shift;
 }
 
 ##
