@@ -109,6 +109,3 @@ objectclass ( MailOC:5 NAME 'SuSEMailMyNetworks' SUP top STRUCTURAL
         MUST ( SuSEMailClient )
         MAY  ( cn ) )
 
-objectclass ( MailOC:6 NAME 'suseMailServerConfiguration' SUP suseModuleConfiguration STRUCTURAL
-        DESC 'To build mynetworks maps in LDAP' )
-
