@@ -136,10 +136,10 @@ C<$GlobalSettings = ReadGlobalSettings()>
                                'MaximumMailboxSize'    => 0,
                                'Relay'                 => {
                                                         'Type'          => '',
-                                                        'Security'      => '',
+                                                        'TLS'           => '',
                                                         'RelayHost'     => {
                                                                          'Name'     => '',
-                                                                         'Security' => '',
+                                                                         'TLS'      => '',
                                                                          'Auth'     => 0,
                                                                          'Account'  => '',
                                                                          'Password' => ''
@@ -167,10 +167,10 @@ sub ReadGlobalSettings {
                                'MaximumMailboxSize'    => 0,
                                'Relay'                 => { 
                                                         'Type'          => '',
-                                                        'Security'      => '',
+                                                        'TLS'           => '',
                                                         'RelayHost'     => {
                                                                          'Name'     => '',
-                                                                         'Security' => '',
+                                                                         'TLS'      => '',
                                                                          'Auth'     => 0,
                                                                          'Account'  => '',
                                                                          'Password' => ''
@@ -234,7 +234,7 @@ sub WriteGlobalSettings {
     my $MaximumMailboxSize = $GlobalSettings->{'MaximumMailboxSize'};
     my $RelayTyp           = $GlobalSettings->{'Relay'}{'Type'};
     my $RelayHostName      = $GlobalSettings->{'Relay'}{'RelayHost'}{'Name'};
-    my $RelayHostSecurity  = $GlobalSettings->{'Relay'}{'RelayHost'}{'Security'};
+    my $RelayHostTLS       = $GlobalSettings->{'Relay'}{'RelayHost'}{'TLS'};
     my $RelayHostAuth      = $GlobalSettings->{'Relay'}{'RelayHost'}{'Auth'};
     my $RelayHostAccount   = $GlobalSettings->{'Relay'}{'RelayHost'}{'Account'};
     my $RelayHostPassword  = $GlobalSettings->{'Relay'}{'RelayHost'}{'Password'};
@@ -307,7 +307,7 @@ sub ReadMailTransports {
     my %Transport       = (
                              'Destination'  => '',
                              'Nexthop'      => '',
-                             'Security'     => '',
+                             'TLS'          => '',
                              'Auth'         => '',
                              'Account'      => '',
                              'Password'     => ''
@@ -331,7 +331,7 @@ sub ReadMailTransports {
     foreach(@{$ret}){
        $Transport{'Destination'}     = $_->{'SuSEMailTransportDestination'};
        $Transport{'Nexthop'}         = $_->{'SuSEMailTransportNexthop'};
-       $Transport{'Security'}        = $_->{'SuSEMailTransporTLS'};
+       $Transport{'TLS'}             = $_->{'SuSEMailTransporTLS'};
        $Transport{'Auth'}            = 0;
        $Transport{'Account'}         = '';
        $Transport{'Password'}        = '';
@@ -419,15 +419,15 @@ sub WriteMailTransports {
        $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$mail_basedn;
        $entry{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
        $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
-       $entry{'SuSEMailTransportSecurity'}      = 'NONE';
+       $entry{'SuSEMailTransportTLS'}           = 'NONE';
        if($Transport->{'Auth'}) {
                # If needed write the sasl auth account & password
                write_attribute($SaslPasswd,$Transport->{'Destination'},"$Transport->{'Account'}:$ransport->{'Password'}");
        }
-       if($Transport->{'Security'} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/) {
-            $entry{'SuSEMailTransportSecurity'}      = $Transport->{'Security'};
+       if($Transport->{'TLS'} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/) {
+            $entry{'SuSEMailTransportTLS'}      = $Transport->{'TLS'};
        } else {
-            $ERROR->{'summary'} = _("Wrong Value for MailTransportSecurity Value"),
+            $ERROR->{'summary'} = _("Wrong Value for MailTransportTLS Value"),
             $ERROR->{'code'}    = "PARAM_CHECK_FAILED"
        }
        push @Entries, %entry;
@@ -450,7 +450,7 @@ sub WriteMailTransports {
        my $dn  = [ 'dn' => $entry{'dn'} ];
        my $tmp = [ 'SuSEMailTransportDestination' => $entry{'SuSEMailTransportDestination'},
                    'SuSEMailTransportNexthop'     => $entry{'SuSEMailTransportNexthop'},
-                   'SuSEMailTransportSecurity'    => $entry{'SuSEMailTransportSecurity'}
+                   'SuSEMailTransportTLS'         => $entry{'SuSEMailTransportTLS'}
                  ];
        SCR::Execute('.ldap.add',$dn,$tmp);
     }
