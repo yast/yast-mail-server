@@ -17,12 +17,37 @@ import "YaPI::MailServer";
 
 include "mail-server/helps.ycp";
 
-boolean AuthorizingDialog () {
+any AuthorizingDialog () {
     string caption = _("Mail Server Administrator Authorization.");
     term contents = `HBox(
                             `TextEntry(`id(`user),   _("Enter Admin User Name:"), ""),
                             `Password(`id(`passwd),  _("Enter Admin Password:"), "")
                          );
+
+    Wizard::SetContentsButtons(caption, contents, HELPS["c1"]:"",
+	    Label::BackButton(), Label::NextButton());
+
+    any ret = nil;
+    while(true) {
+
+        ret = UI::UserInput();
+
+        /* abort? */
+        if(ret == `abort || ret == `cancel) {
+            if(ReallyAbort()) break;
+            else continue;
+        }
+        else if(ret == `next || ret == `back) {
+            break;
+        }
+        else {
+            y2error("unexpected retcode: %1", ret);
+            continue;
+        }
+    }
+
+    return ret;
+
 }
 
 /**
