@@ -598,7 +598,7 @@ sub cond_IMAP_OP {
     if( $op eq "add" ) {
 	my $errtxt = "";
 	$ret = $imap->create($fname);
-	if($$ret{Status} ne "ok") {
+	if($$ret{Status} ne "ok" && $$ret{Text} !~ /Mailbox already exists/) {
 	    y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
 	    $errtxt .= "create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
 	    #return undef;
