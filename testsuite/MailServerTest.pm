@@ -33,11 +33,11 @@ sub run {
    print "Hier I am\n";
    my %GS = ( 
                            'Changed'           => '1',
-                           'MaximumMailSize'   => 0,
+                           'MaximumMailSize'   => 12345678,
                            'Banner'            => 'Das ist mein Mailserver',
                            'SendingMail'   => { 
                                         'Type'      => 'relayhost',
-                                        'TLS'       => '',
+                                        'TLS'       => 'NONE',
                                         'RelayHost'     => {
                                                          'Name'     => 'relay.suse.de',
                                                          'Auth'     => 1,
