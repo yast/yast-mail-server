@@ -30,7 +30,7 @@ include "mail-server/wizards.ycp";
 
 map cmdline_description = $[
     "id" 	: "mail-server",
-    /* Command line help text for the Xmail-server module */
+    /* Command line help text for the mail-server module */
     "help"	: _("Configuration of mail-server"),
     "guihandler"        : MailServerSequence,
     "initialize"        : MailServer::Read,
