@@ -1,7 +1,8 @@
 #! /usr/bin/perl -w -T
 
 package ag_postfix_mastercf;
-use lib qw(.);
+# FIXME: How should that be handled?
+use lib qw(/usr/lib/YaST2/servers_non_y2);
 use strict;
 use MasterCFParser;
 use YaST::SCRAgent;
@@ -29,7 +30,7 @@ sub OtherCommand () {
         return $class->SetError(summary=> "The first command must be the configuration.(Seen '$_')",
                                 code => "SCR_INIT_ERR");
     } else {
-        $_CFINST = new MasterCFParser( $config->{"path"} );
+        $_CFINST = new MasterCFParser( $config->{"path"}, \&y2error );
         if( not defined $_CFINST ) {
             return $class->SetError(summary => "Can not initialize MasterCFParser",
                                     code => "SCR_INIT_ERR");
@@ -41,6 +42,23 @@ sub OtherCommand () {
 }
 
 sub Read { 
+    my $class         = shift;
+    my ($path, @args) = @_;
+
+    return undef if ! $class->check_initialized();
+    if( $_CFINST->readMasterCF() ) {
+	# FIXME: How about $class->SetError() ???
+	return undef;
+    }
+    
+    if( $path eq '.findService' ) {
+	my ($service, $command) = @args;
+	return $_CFINST->getServiceByAttributes( { 'service' => $service,
+						   'command' => $command } );
+    } else {
+	return $_CFINST->getRAWCF();
+    }
+
     return 1;
 }
 
