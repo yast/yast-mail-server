@@ -495,12 +495,16 @@ term MailRelayingDialog() {
 }
 
 term MailLocalDeliveryDialog() {
-  boolean TypeCYRUS    = ((string)MailServer::LocalDelivery["Type"]:"" == "cyrus");
-  boolean TypePROCMAIL = ((string)MailServer::LocalDelivery["Type"]:"" == "procmail");
-  boolean TypeLOCAL    = ((string)MailServer::LocalDelivery["Type"]:"" == "local");
-  boolean TypeNONE     = ((string)MailServer::LocalDelivery["Type"]:"" == "none");
+  boolean TypeCYRUS    = ((string)MailServer::MailLocalDelivery["Type"]:"" == "cyrus");
+  boolean TypePROCMAIL = ((string)MailServer::MailLocalDelivery["Type"]:"" == "procmail");
+  boolean TypeLOCAL    = ((string)MailServer::MailLocalDelivery["Type"]:"" == "local");
+  boolean TypeNONE     = ((string)MailServer::MailLocalDelivery["Type"]:"" == "none");
 
   term settings = `HBox();
+  if(TypeCYRUS){
+  } else if(TypePROCMAIL){
+  } else if(TypeLOCAL){
+  }
   term content = `VBox (
       `Frame(_("Local Delivery Type"),
          `RadioButtonGroup(`id(`Type),
@@ -508,10 +512,11 @@ term MailLocalDeliveryDialog() {
 	        `RadioButton(`id("cyrus"),    `opt(`notify), _("Cyrus IMAP"), TypeCYRUS),
 	        `RadioButton(`id("procmail"), `opt(`notify), _("Procmail"),   TypePROCMAIL),
 	        `RadioButton(`id("local"),    `opt(`notify), _("Filesystem"), TypeLOCAL),
-	        `RadioButton(`id("none"),     `opt(`notify), _("Filesystem"), TypeNONE)
+	        `RadioButton(`id("none"),     `opt(`notify), _("No local Delivery"), TypeNONE)
 	     )
           )
-      )
+      ),
+      settings
    );
   return content;
 }
