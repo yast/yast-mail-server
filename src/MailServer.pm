@@ -248,7 +248,41 @@ sub Export {
  #
 BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", [ "map", "any", "any" ] ]; }
 sub ReadGlobalSettings {
-    # TODO FIXME: your code here (return the above mentioned variables)...
+    my %GlobalSettings = ( 
+    			   'Changed' => 'false',
+    			   'MSize'   => '',
+    			   'Relay'   => ( 
+			   		'Type'      => '',
+			   		'Security'  => '',
+					'RHost'     => (
+							 'Name'     => '',
+							 'Security' => '',
+							 'Auth'     => '',
+							 'Account'  => '',
+							 'Password' => ''
+						       ),
+			   		
+			   	      ),
+			 );
+    # Reading maximal size of transported messages			 
+    $GlobalSettings{'MSize'}                  = SCR::Read('.mail.postfix.main','message_size_limit') || 0 ;
+
+    # Determine if relay host is used
+    $GlobalSettings{'Relay'}{'RHost'}{'Name'} = SCR::Read('.mail.postfix.main','relayhost') || '';
+
+    if($GlobalSettings{'Relay'}{'RHost'}{'Name'} ne '') {
+      # If relay host is used read & set some parameters
+    	$GlobalSettings{'Relay'}{'Type'} = 'relayhost';
+	
+        # Determine if relay host need sasl authentication
+	$GlobalSettings{'Relay'}{'RHost'}{'Auth'} = SCR::Read('.mail.postfix.main','smtp_sasl_auth_enable') || 'no';
+        if($GlobalSettings{'Relay'}{'RHost'}{'Auth'} eq 'yes') {
+	  
+	}
+    } else {
+    	$GlobalSettings{'Relay'}{'Type'} = 'DNS';
+    }
+    
     return {};
 }
 
