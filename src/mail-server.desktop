@@ -8,7 +8,7 @@ X-KDE-HasReadOnlyMode=true
 X-KDE-Library=yast2
 X-SuSE-YaST-Call=mail-server
 
-X-SuSE-YaST-Group=Misc
+X-SuSE-YaST-Group=Net_advanced
 X-SuSE-YaST-Argument=
 X-SuSE-YaST-RootOnly=true
 X-SuSE-YaST-AutoInst=
@@ -16,8 +16,8 @@ X-SuSE-YaST-Geometry=
 X-SuSE-YaST-SortKey=
 X-SuSE-YaST-AutoInstResource= mail-server
 
-Icon=mail-server
+Icon=sendmail
 Exec=/sbin/yast2 mail-server 
 
-Name=MailServer
-GenericName=Configure mail-server
+Name=Mail Server
+GenericName=Configure mail server
