@@ -1143,7 +1143,7 @@ term MailLocalDomainsDialog(string CID) {
 
   term content = `VBox (
        `VBox(
-         `Frame(_("Define New Domain"),
+         `Frame(_("Configure Mail Domain"),
            `HBox(
                `TextEntry(`id(`Name), `opt(`disabled),    _("Name"), Name),
 	       `HStretch(),
