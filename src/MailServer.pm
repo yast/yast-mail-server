@@ -38,7 +38,14 @@ my $mail_basedn  = 'dc=suse,dc=de';
 my $user_basedn  = 'dc=suse,dc=de';
 my $group_basedn = 'dc=suse,dc=de';
 my $ldapserver   = 'localhost';
+my $port         = 389;
 my $ldapadmin    = 'root';
+my $my_ldap      = [ 'host' => $ldapserver,
+                     'port' => $ldapport
+                   ];
+my $admin_bind   = [ 'binddn' => 'uid='.$ldapadmin.','.$user_basedn,
+                     'bindpw' => 'Salahm1'
+                   ];
 # -------------------------------------------------
 
 # -------------- error handling -------------------
@@ -261,13 +268,19 @@ sub ReadMailTransports {
     foreach(@{$ret}){
        $Transport{'Destination'}     = $_->{'SuSEMailTransportDestination'};
        $Transport{'Nexthop'}         = $_->{'SuSEMailTransportNexthop'};
-       $Transport{'Security'}        = $_->{'SuSEMailTransportSecurity'};
-       $Transport{'Auth'}            = $_->{'SuSEMailTransportAuth'};
+       $Transport{'Security'}        = 0;
+       $Transport{'Auth'}            = 0;
        $Transport{'Account'}         = '';
        $Transport{'Password'}        = '';
-       my $tmp = read_attribute($SaslPaswd,$Transport{'Destination'});
+       my $tmp = $Transport{'Destination'};
+       $tmp =~ s/\.//g;
+       if(SCR::Read('.mail.postfix.mastercf.findService', $tmp, 'smtp  -o smtpd_enforce_tls=yes')) {
+            $Transport{'Security'} = 1;
+       }
+       $tmp = read_attribute($SaslPaswd,$Transport{'Destination'});
        if($tmp) {
            ($Transport{'Account'},$Transport{'Password'}) = split /:/, $tmp;
+            $Transport{'Auth'} = 1;
        }
        push @{$MailTransports{'Transports'}}, %Transport;
     }
@@ -291,13 +304,13 @@ sub WriteMailTransports {
                           );
 
     # Anonymous bind 
-    SCR::Execute('.ldap');
-    SCR::Execute('.ldap.bind');
+    SCR::Execute('.ldap',$my_ldap);
+    SCR::Execute('.ldap.bind',$admin_bind);
 
     # Searching all the transport lists
     my $ret = SCR::Read('.ldap.search',\%SearchMap);
     foreach(@{$ret}){    
-       SCR::Execute('.ldap.delete',$_->{'dn'});
+       SCR::Write('.ldap.delete',['dn'=>$_->{'dn'}]);
     }
 
     foreach(@{$MailTransports->{'Transports'}}){
@@ -308,7 +321,7 @@ sub WriteMailTransports {
        if($_->{'Security'} eq 'SSL' ) {
             $entry{'SuSEMailTransportSecurity'}      = $_->{'Security'};
 	    my $TransportDestination = $entry{'SuSEMailTransportDestination'};
-	    $TransportDestination =~ s/\.//g
+	    $TransportDestination =~ s/\.//g;
 	    SCR::Write('.mail.postfix.mastercf', $TransportDestination, 'smtp  -o smtpd_enforce_tls=yes');
        }
        SCR::Execute('.ldap.add',);
