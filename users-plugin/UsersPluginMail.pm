@@ -17,6 +17,8 @@ our %TYPEINFO;
 
 use Locale::gettext;
 use POSIX ();
+use Net::IMAP;
+use Data::Dumper;
 
 POSIX::setlocale(LC_MESSAGES, "");
 textdomain("mail-server");
@@ -291,7 +293,7 @@ sub EditBefore {
     # data of original user/group are saved as a submap of $config
     # data with key "org_data"
 
-#    $data	= update_object_classes ($config, $data);
+    $data	= update_object_classes ($config, $data);
 
     y2internal ("EditBefore Mail called");
     return $data;
@@ -308,8 +310,24 @@ sub Edit {
     my $config	= $_[0];
     my $data	= $_[1]; # the whole map of current user/group after Users::Edit
 
+    my $addresses = $data->{"susemailacceptaddress"};
+    y2internal(Dumper($addresses));
+    my $naddr = undef;
+    if( ref($addresses) ne "ARRAY" ) {
+	$addresses =~ s/\s//g;
+	$naddr = $addresses if $addresses eq "";
+    } else {
+	foreach my $a ( @$addresses ) {
+	    $a =~ s/\s//g;
+	    push @$naddr, $a if $a ne "";
+	}
+    }
+    $data->{"susemailacceptaddress"} = $naddr;
+    y2internal(Dumper($data));
+
+
     y2internal ("Edit Mail called");
-    return addRequiredMailData($data);
+    return $data;
 }
 
 sub addRequiredMailData {
@@ -318,11 +336,25 @@ sub addRequiredMailData {
     if( ! contains( $data->{objectclass}, "susemailrecipient", 1) ) {
 	push @{$data->{'objectclass'}}, "susemailrecipient";
     }
-    if( ! contains( $data->{susemailacceptaddress}, "$data->{'uid'}", 1) ) {
-	# FIXME: get default domain name from LDAP
-	my $domain = "suse.de";
-	push @{$data->{'susemailacceptaddress'}} = $data->{'uid'}.".".$domain;
+
+    # FIXME: get default domain name from LDAP
+    my $domain = "suse.de";
+    my $mailaddress = $data->{'uid'}."\@".$domain;
+    if( defined $data->{susemailacceptaddress} ) {
+	if( ref($data->{susemailacceptaddress}) eq "ARRAY" &&
+	    ! contains( $data->{susemailacceptaddress}, $mailaddress, 1) ) {
+	    push @{$data->{'susemailacceptaddress'}}, $mailaddress;
+	} elsif ( ref($data->{susemailacceptaddress}) ne "ARRAY" &&
+		  $data->{susemailacceptaddress} ne $mailaddress ) {
+	    my $tmp = $data->{'susemailacceptaddress'};
+	    $data->{'susemailacceptaddress'} = [];
+	    push @{$data->{'susemailacceptaddress'}}, $tmp;
+	    push @{$data->{'susemailacceptaddress'}}, $mailaddress;
+	}
+    } else {
+	$data->{susemailacceptaddress} = $mailaddress;
     }
+
     return $data;
 }
 
