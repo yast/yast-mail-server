@@ -1,13 +1,49 @@
-#! /usr/bin/perl -w
-# File:                modules/MailServer.pm
-# Package:        Configuration of mail-server
-# Summary:        MailServer settings, input and output functions
-# Authors:        Peter Varkoly <varkoly@suse.de>
-#
-# $Id$
-#
-# Representation of the configuration of mail-server.
-# Input and output routines.
+=head1 NAME
+
+YaPI::MailServer
+
+=head1 PREFACE
+
+This package is the public Yast2 API to configure the postfix.
+Representation of the configuration of mail-server.
+Input and output routines.
+
+=head1 SYNOPSIS
+
+use YaPI::MailServer
+
+$GlobalSettings = ReadGlobalSettings() 
+
+ Dump the mail-server Global Settings to a single map
+ Return map Dumped settings (later acceptable by WriteGlobalSettings ())
+ %GlobalSettings is a hash containing the basic settings of postfix.
+       %GlobalSettings = (
+                               'Changed'               => '0',
+                               'MaximumMailSize'       => 0,
+                               'MaximumMailboxSize'    => 0,
+                               'Relay'                 => {
+                                                        'Type'          => '',
+                                                        'Security'      => '',
+                                                        'RelayHost'     => {
+                                                                         'Name'     => '',
+                                                                         'Security' => '',
+                                                                         'Auth'     => 0,
+                                                                         'Account'  => '',
+                                                                         'Password' => ''
+                                                                       },
+
+                                                      },
+                         );
+
+
+
+=head1 DESCRIPTION
+
+=over 2
+
+=cut
+
+
 
 
 package MailServer;
@@ -93,10 +129,6 @@ my $proposal_valid = 0;
  #
 my $write_only = 0;
 
-##
- # Dump the mail-server Global Settings to a single map
- # @return map Dumped settings (later acceptable by WriteGlobalSettings ())
- #
 BEGIN { $TYPEINFO{ReadMasterCF}  =["function", "any"  ]; }
 sub ReadMasterCF {
     my $MasterCf  = SCR::Read('.mail.postfix.mastercf');
@@ -104,10 +136,6 @@ sub ReadMasterCF {
     return $MasterCf;
 }
 
-##
- # Dump the mail-server Global Settings to a single map
- # @return map Dumped settings (later acceptable by WriteGlobalSettings ())
- #
 BEGIN { $TYPEINFO{findService}  =["function", "any"  ]; }
 sub findService {
     my ($service, $command ) = @_;
@@ -126,7 +154,7 @@ sub ReadGlobalSettings {
     my $MainCf    = SCR::Read('.mail.postfix.main.table');
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
     my %GlobalSettings = ( 
-                               'Changed'               => 'false',
+                               'Changed'               => '0',
                                'MaximumMailSize'       => 0,
                                'MaximumMailboxSize'    => 0,
                                'Relay'                 => { 
@@ -246,7 +274,7 @@ sub ReadMailTransports {
 
 
     my %MailTransports  = ( 
-                           'Changed' => 'false',
+                           'Changed' => '0',
                            'Transports'  => [] 
                           );
     my %Transport       = (
@@ -358,7 +386,7 @@ BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any"  ]; }
 sub ReadMailPrevention {
     my $self            = shift;
     my %MailPrevention      = (
-                               'Changed'               => 'false',
+                               'Changed'               => '0',
 			       'SPAMprotection'        => 'hard',
 			       'RPLList'               => [],
 			       'AcceptedSenderList'    => ['*'],
@@ -456,7 +484,37 @@ sub WriteMailPrevention {
                                  code    => "PARAM_CHECK_FAILED" );
          return 0;
     }
-}    
+}
+
+##
+ # Dump the mail-server server side relay settings to a single map
+ # @return map Dumped settings (later acceptable by WriteMailRelaying ())
+ #
+BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any"  ]; }
+sub ReadMailRelaying {
+    my $self            = shift;
+    my %MailRelaying    = (
+                                'TrustedNetworks' => ['127.0.0.0/8'],
+                                'RequireSASL'     => 1,
+                                'RequireTSL'      => 1,
+                                'changed'         => 0
+                          );
+
+
+
+}
+
+##
+ # Write the mail-server server side relay settings  from a single map
+ #
+BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean", "any"  ]; }
+sub WriteMailRelaying {
+    my $self          = shift;
+    my $MailRelaying  = shift;
+
+}
+
+##
 
 ##
  # Create a textual summary and a list of unconfigured cards
