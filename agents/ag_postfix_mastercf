@@ -63,6 +63,20 @@ sub Read {
 }
 
 sub Write { 
+    my $class         = shift;
+    my ($path, @args) = @_;
+
+    return undef if ! $class->check_initialized();
+    if( $_CFINST->readMasterCF() ) {
+	# FIXME: How about $class->SetError() ???
+	return undef;
+    }
+
+    if( $path eq '.modifyService' ) {
+	my $service = $args[0];
+	return $_CFINST->modifyService($service);
+    }
+
     return 1; 
 }
 
