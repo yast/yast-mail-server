@@ -104,7 +104,7 @@ objectclass ( MailOC:4 NAME 'SuSEMailAccess' SUP top STRUCTURAL
         MUST ( SuSEMailClient $ SuSEMailAction  )
         MAY  ( description ) )
 
-objectclass ( MailOC:4 NAME 'SuSEMailMyNetworks' SUP top STRUCTURAL
+objectclass ( MailOC:5 NAME 'SuSEMailMyNetworks' SUP top STRUCTURAL
         DESC 'To build mynetworks maps in LDAP'
         MUST ( SuSEMailClient )
         MAY  ( cn ) )
