@@ -11,6 +11,7 @@ use Locale::gettext;
 use POSIX ();     # Needed for setlocale()
 
 use Data::Dumper;
+use strict;
 
 POSIX::setlocale(LC_MESSAGES, "");
 textdomain("MailServer");
@@ -37,6 +38,9 @@ sub run {
   my $GlobalSettings;
   MailServer->WriteGlobalSettings(\%GS);
   $GlobalSettings = MailServer->ReadGlobalSettings();
+  my $mastercf = MailServer::ReadMasterCF();
+   my $fsrv = MailServer::findService("smtp","smtp");
+  print Dumper($fsrv);
   print $GlobalSettings->{'MSize'}."\n";
   print $GlobalSettings->{'Changed'}."\n";
   print $GlobalSettings->{'Relay'}{'Type'}."\n";
