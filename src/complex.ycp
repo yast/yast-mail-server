@@ -42,7 +42,7 @@ boolean PollAbort() {
 symbol ReadDialog() {
     Wizard::RestoreHelp(HELPS["read"]:"");
     // MailServer::AbortFunction = PollAbort;
-    boolean ret = MailServer::Write();
+    boolean ret = MailServer::Read();
     return ret ? `next : `abort;
 }
 

@@ -38,7 +38,12 @@ dn: ou=GROUPS,dc=suse,dc=de
 objectClass: organizationalUnit
 ou: GROUPS
 
-# uid=admin,ou=USERS,dc=suse,dc=de
+# Configuration base
+dn: ou=ldapconfig,dc=suse,dc=de
+objectClass: organizationalUnit
+ou: ldapconfig
+
+# USER: admin@suse.de
 dn: uid=admin,ou=USERS,dc=suse,dc=de
 objectclass: top
 objectclass: person
@@ -52,7 +57,35 @@ gidNumber: 0
 homeDirectory: /home/mailadmin
 loginshell: /bin/false
 
-dn: cn=de
+# Mailserver Base
+dn: cn=defaultMailserver,ou=ldapconfig,dc=suse,dc=de
+objectClass: suseMailserverConfiguration
+cn: defaultMailserver
+suseDefaultBase: ou=MAIL,dc=suse,dc=de
+
+# USERS Base
+dn: cn=USERS,ou=ldapconfig,dc=suse,dc=de
+objectClass: suseUserConfiguration
+cn: USERS
+suseDefaultBase: ou=ldapconfig,dc=suse,dc=de
+
+# GROUPS Base
+dn: cn=GROUPS,ou=ldapconfig,dc=suse,dc=de
+objectClass: suseGroupConfiguration
+cn: GROUPS
+suseDefaultBase: ou=ldapconfig,dc=suse,dc=de
+
+# DNS Base
+dn: cn=defaultDNS,ou=ldapconfig,dc=suse,dc=de
+objectClass: suseDNSConfiguration
+cn: defaultDNS
+suseDefaultBase: ou=ldapconfig,dc=suse,dc=de
+
+# DHCP Base
+dn: cn=defaultDHCP,ou=ldapconfig,dc=suse,dc=de
+objectClass: suseDHCPConfiguration
+cn: defaultDHCP
+suseDefaultBase: ou=DHCP,dc=suse,dc=de
 
 # numResponses: 7
 # numEntries: 6
