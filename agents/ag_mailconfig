@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 #
-# Author: Martin Vidner <mvidner@suse.cz>
-# based on ag_yp_makefile by Dan Vesely (dan@suse.cz)
+# Author: Peter Varkoly <varkoly@suse.de>
+# based on ag_mail_table by Martin Vidner <mvidner@suse.cz>
 #
 # $Id$
 #
@@ -33,6 +33,7 @@ our $trailing_comment;
 # Parser features:
 
 my $filename;
+my $is_postmap;
 my $linenum;
 my $line_comment;
 my $line = "";
@@ -42,6 +43,7 @@ my $separator;
 my $oseparator;
 my $continue_escaped_newline;
 my $continue_leading_blanks;
+my $write_empty_value;
 
 my $debug = defined($ARGV[0]) && $ARGV[0] eq "-d";
 
@@ -206,8 +208,10 @@ sub write_file ()
     }
     foreach my $entry (@table)
     {
-	write_comment ($entry->{"comment"});
-	print FILE $entry->{"key"}, $oseparator, $entry->{"value"}, "\n";
+        if( $entry->{"value"} ne '' || $write_empty_value ) {
+	        write_comment ($entry->{"comment"});
+        	print FILE $entry->{"key"}, $oseparator, $entry->{"value"}, "\n";
+        }
     }
     write_comment ($trailing_comment);
     close (FILE);
@@ -217,6 +221,9 @@ sub write_file ()
 	rename $filename, "$filename.YaST2.save" or return log_error ("Creating backup: $!");
     }
     rename "$filename.YaST2.new", $filename or return log_error ("Moving temp file: $!");
+    if($is_postmap) {
+        system("postmap $filename");
+    }
 
     $YaST::SCRAgent::modified = 0;
     return 1;
@@ -242,11 +249,13 @@ if ($symbol ne "Mailtable")
 }
 else
 {
-    $filename = $config->{"filename"};
+    $filename                 = $config->{"filename"};
     $continue_escaped_newline = $config->{"continue_escaped_newline"};
-    $continue_leading_blanks = $config->{"continue_leading_blanks"};
-    $separator = $config->{"colon"} ? qr/:\s+/ : qr/\s+/;
-    $oseparator = $config->{"colon"} ? ":\t" : "\t";
+    $continue_leading_blanks  = $config->{"continue_leading_blanks"};
+    $write_empty_value        = $config->{"write_empty_value"};
+    $separator                = $config->{"separator"}       || qr/\s+/;
+    $oseparator               = $config->{"oseparator"}      || "\t";
+    $is_postmap               = $config->{"is_postmap"}; 
 }
 
 parse_file ();
