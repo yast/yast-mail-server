@@ -25,13 +25,15 @@ configuration API to for Perl programs.
 
 
 
-package MailServer;
+package YaPI::MailServer;
 
 use strict;
+use vars qw(@ISA);
 
 use ycp;
 use YaST::YCP;
 use YaPI;
+@YaPI::MailServer::ISA = qw( YaPI );
 
 use Locale::gettext;
 use POSIX;     # Needed for setlocale()
@@ -46,6 +48,7 @@ our @CAPABILITIES = (
 
 YaST::YCP::Import ("SCR");
 YaST::YCP::Import ("Service");
+YaST::YCP::Import ("Ldap");
 
 
 #sub _ {
@@ -82,7 +85,7 @@ my $write_only = 0;
 
 BEGIN { $TYPEINFO{ReadMasterCF}  =["function", "any"  ]; }
 sub ReadMasterCF {
-    my $MasterCf  = SCR::Read('.mail.postfix.mastercf');
+    my $MasterCf  = SCR->Read('.mail.postfix.mastercf');
 
     return $MasterCf;
 }
@@ -91,7 +94,7 @@ BEGIN { $TYPEINFO{findService}  =["function", "any"  ]; }
 sub findService {
     my ($service, $command ) = @_;
 
-    my $services  = SCR::Read('.mail.postfix.mastercf.findService', $service, $command);
+    my $services  = SCR->Read('.mail.postfix.mastercf.findService', $service, $command);
 
     return $services;
 }
@@ -200,9 +203,9 @@ sub ReadGlobalSettings {
                        }
           );
 
-    my $MainCf    = SCR::Read('.mail.postfix.main.table');
-    my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
-    if( ! SCR::Read('.mail.postfix.master') ) {
+    my $MainCf    = SCR->Read('.mail.postfix.main.table');
+    my $SaslPaswd = SCR->Read('.mail.postfix.saslpasswd.table');
+    if( ! SCR->Read('.mail.postfix.mastercf') ) {
          return $self->SetError( summary =>_("Couln't open master.cf"),
                                  code    => "PARAM_CHECK_FAILED" );
     }
@@ -230,7 +233,7 @@ sub ReadGlobalSettings {
            $GlobalSettings{'SendingMail'}{'RelayHost'}{'Auth'} = 1;
         }
     } else {
-	my $smtpsrv = SCR::Execute('.mail.postfix.master.findService',
+	my $smtpsrv = SCR->Execute('.mail.postfix.mastercf.findService',
 		{ 'service' => 'smtp',
 		  'command' => 'smtp' });
         if( defined $smtpsrv ) {
@@ -319,9 +322,9 @@ sub WriteGlobalSettings {
     my $RelayHostAuth      = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Auth'};
     my $RelayHostAccount   = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Account'};
     my $RelayHostPassword  = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Password'};
-    my $MainCf             = SCR::Read('.mail.postfix.main.table');
-    my $SaslPasswd         = SCR::Read('.mail.postfix.saslpasswd.table');
-    if( ! SCR::Read('.mail.postfix.master') ) {
+    my $MainCf             = SCR->Read('.mail.postfix.main.table');
+    my $SaslPasswd         = SCR->Read('.mail.postfix.saslpasswd.table');
+    if( ! SCR->Read('.mail.postfix.mastercf') ) {
          return $self->SetError( summary =>_("Couln't open master.cf"),
                                  code    => "PARAM_CHECK_FAILED" );
     }
@@ -334,11 +337,11 @@ sub WriteGlobalSettings {
     # If SendingMailType ne NONE we have to have a look 
     # at master.cf if smt is started
     if($SendingMailType ne 'NONE') {
-       my $smtpsrv = SCR::Execute('.mail.postfix.master.findService',
+       my $smtpsrv = SCR->Execute('.mail.postfix.mastercf.findService',
                    { 'service' => 'smtp',
                      'command' => 'smtp' });
        if(! defined $smtpsrv ) {
-           SCR::Execute('.mail.postfix.master.deleteService', { 'service' => 'smtp', 'command' => 'smtp' });
+           SCR->Execute('.mail.postfix.mastercf.deleteService', { 'service' => 'smtp', 'command' => 'smtp' });
        }
     }
     
@@ -356,7 +359,7 @@ sub WriteGlobalSettings {
            write_attribute($SaslPasswd,$RelayHostName,"$RelayHostAccount:$RelayHostPassword");
         }
     } elsif ($SendingMailType eq 'NONE') {
-	SCR::Execute('.mail.postfix.master.deleteService', { 'service' => 'smtp', 'command' => 'smtp' });
+	SCR->Execute('.mail.postfix.mastercf.deleteService', { 'service' => 'smtp', 'command' => 'smtp' });
     } else {
       return $self->SetError( summary =>_("Unknown mail sending type. Allowed values are:").
                                           " NONE | DNS | relayhost",
@@ -390,8 +393,8 @@ sub WriteGlobalSettings {
     write_attribute($MainCf,'message_size_limit',$MaximumMailSize);
     write_attribute($MainCf,'smtpd_banner',$GlobalSettings->{'Banner'});
 
-    SCR::Write('.mail.postfix.main.table',$MainCf);
-    SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
+    SCR->Write('.mail.postfix.main.table',$MainCf);
+    SCR->Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
 
     return 1;
 }
@@ -552,14 +555,14 @@ sub ReadMailTransports {
 						'SuSEMailTransportTLS']
                           );
 
-    my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
+    my $SaslPaswd = SCR->Read('.mail.postfix.saslpasswd.table');
                              
     # Anonymous bind 
-    SCR::Execute('.ldap');
-    SCR::Execute('.ldap.bind');
+    SCR->Execute('.ldap');
+    SCR->Execute('.ldap.bind');
 
     # Searching all the transport lists
-    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+    my $ret = SCR->Read('.ldap.search',\%SearchMap);
 
     # filling up our array
     foreach(@{$ret}){
@@ -661,7 +664,7 @@ sub WriteMailTransports {
                           );
 
     # We'll need the sasl passwords entries
-    my $SaslPasswd = SCR::Read('.mail.postfix.saslpasswd.table');
+    my $SaslPasswd = SCR->Read('.mail.postfix.saslpasswd.table');
 
     # Make LDAP Connection 
     my $ErrorSummary = read_ldap_settings();
@@ -675,17 +678,17 @@ sub WriteMailTransports {
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    if(! SCR::Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
 
     # First we have to clean the corresponding SaslPasswd entries in the hash
-    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+    my $ret = SCR->Read('.ldap.search',\%SearchMap);
     foreach my $entry (@{$ret}){    
        write_attribute($SaslPasswd,$entry->{'SuSEMailTransportDestination'},'');
     }
@@ -722,9 +725,9 @@ sub WriteMailTransports {
 
     # If there is no ERROR we do the changes
     # First we clean all the transport lists
-    $ret = SCR::Read('.ldap.search',\%SearchMap);
+    $ret = SCR->Read('.ldap.search',\%SearchMap);
     foreach my $entry (@{$ret}){    
-       SCR::Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
+       SCR->Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
     }
 
     foreach my $entry (@Entries){
@@ -733,9 +736,9 @@ sub WriteMailTransports {
                    'SuSEMailTransportNexthop'     => $entry->{'SuSEMailTransportNexthop'},
                    'SuSEMailTransportTLS'         => $entry->{'SuSEMailTransportTLS'}
                  ];
-       SCR::Execute('.ldap.add',$dn,$tmp);
+       SCR->Execute('.ldap.add',$dn,$tmp);
     }
-    SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
+    SCR->Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
 
     return 1;
 }
@@ -851,17 +854,17 @@ sub ReadMailPrevention {
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    if(! SCR::Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
 
     # First we read the main.cf
-    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+    my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     # We ar looking for the BasicProtection Basic Prevention
     my $smtpd_helo_restrictions = read_attribute($MainCf,'smtpd_helo_restrictions');
@@ -890,7 +893,7 @@ sub ReadMailPrevention {
                    'filter'  => "ObjectClass=SuSEMailAccess",
                    'attrs'   => ['SuSEMailClient','SuSEMailAction']
                  );
-    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+    my $ret = SCR->Read('.ldap.search',\%SearchMap);
     foreach my $entry (@{$ret}){    
        $AccessEntry{'MailClient'} = $entry->{'SuSEMailClient'};
        $AccessEntry{'MailAccess'} = $entry->{'SuSEMailAction'};
@@ -929,17 +932,17 @@ sub WriteMailPrevention {
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    if(! SCR::Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
 
     # First we read the main.cf
-    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+    my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     #Collect the RBL host list
     my $clnt_restrictions = '';
@@ -994,10 +997,10 @@ sub WriteMailPrevention {
                    'filter'  => "ObjectClass=SuSEMailAccess",
                    'attrs'   => []
                  );
-    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+    my $ret = SCR->Read('.ldap.search',\%SearchMap);
     #First we clean the access table
     foreach my $entry (@{$ret}){    
-       SCR::Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
+       SCR->Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
     }
     #Now we write the new table
     foreach my $entry (@{$MailPrevention->{'AccessList'}}) {
@@ -1005,7 +1008,7 @@ sub WriteMailPrevention {
        my $tmp = [ 'SuSEMailClient'   => $entry->{'MailClient'},
                    'SuSEMailAction'   => $entry->{'SuSEMailAction'}
                  ];
-       SCR::Execute('.ldap.add',$dn,$tmp);
+       SCR->Execute('.ldap.add',$dn,$tmp);
     }
 
     # now we looks if the ldap entries in the main.cf for the access table are OK.
@@ -1079,17 +1082,17 @@ sub ReadMailRelaying {
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    if(! SCR::Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
 
     # First we read the main.cf
-    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+    my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     # Now we look if there are manual inclued mynetworks entries
     my $TrustedNetworks    = read_attributes($MainCf,'mynetworks');
@@ -1105,7 +1108,7 @@ sub ReadMailRelaying {
 #                   'filter'  => "ObjectClass=SuSEMailMyNetorks",
 #                   'attrs'   => ['SuSEMailClient']
 #                 );
-#    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+#    my $ret = SCR->Read('.ldap.search',\%SearchMap);
 #
 #    foreach my $entry (@{$ret}){
 #        foreach(@{$entry->{'SuSEMailClient'}}) {
@@ -1169,17 +1172,17 @@ sub WriteMailRelaying {
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    if(! SCR::Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
 
     # First we read the main.cf
-    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+    my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     # now we collent the trusted networks;
     my $TrustedNetworks    = '';
@@ -1215,7 +1218,7 @@ sub WriteMailRelaying {
                                  code    => "PARAM_CHECK_FAILED" );
     }
 
-    SCR::Write('.mail.postfix.main.table',$MainCf);
+    SCR->Write('.mail.postfix.main.table',$MainCf);
 
     return 1;
 
@@ -1254,17 +1257,17 @@ sub ReadMailLocalDelivery {
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    if(! SCR::Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
 
     # First we read the main.cf
-    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+    my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     my $MailboxCommand     = read_attribute($MainCf,'mailbox_command');
     my $MailboxTransport   = read_attribute($MainCf,'mailbox_transport');
@@ -1290,16 +1293,16 @@ sub ReadMailLocalDelivery {
         $MailLocalDelivery{'Type'} = 'procmail';
     } elsif($MailboxTransport =~ /lmtp:unix:\/var\/lib\/imap\/socket\/lmtp/) {
         $MailLocalDelivery{'Type'} = 'cyrus';
-        $MailLocalDelivery{'MailboxSizeLimit'}         = SCR::Read('.etc.imapd_conf.autocreatequota');
-        $MailLocalDelivery{'QuotaLimit'}               = SCR::Read('.etc.imapd_conf.quotawarn');
-        $MailLocalDelivery{'ImapIdleTime'}             = SCR::Read('.etc.imapd_conf.timeout');
-        $MailLocalDelivery{'PopIdleTime'}              = SCR::Read('.etc.imapd_conf.poptimeout');
-        if(  SCR::Read('.etc.imapd_conf.altnamespace') eq 'yes' ) {
+        $MailLocalDelivery{'MailboxSizeLimit'}         = SCR->Read('.etc.imapd_conf.autocreatequota');
+        $MailLocalDelivery{'QuotaLimit'}               = SCR->Read('.etc.imapd_conf.quotawarn');
+        $MailLocalDelivery{'ImapIdleTime'}             = SCR->Read('.etc.imapd_conf.timeout');
+        $MailLocalDelivery{'PopIdleTime'}              = SCR->Read('.etc.imapd_conf.poptimeout');
+        if(  SCR->Read('.etc.imapd_conf.altnamespace') eq 'yes' ) {
             $MailLocalDelivery{'AlternateNameSpace'}   = 1; 
         } else {
             $MailLocalDelivery{'AlternateNameSpace'}   = 0; 
         }
-        if(  SCR::Read('.etc.imapd_conf.lmtp_overquota_perm_failure') eq 'yes' ) {
+        if(  SCR->Read('.etc.imapd_conf.lmtp_overquota_perm_failure') eq 'yes' ) {
             $MailLocalDelivery{'HardQuotaLimit'}       = 1; 
         } else {
             $MailLocalDelivery{'HardQuotaLimit'}       = 0; 
@@ -1336,17 +1339,17 @@ sub WriteMailLocalDelivery {
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    if(! SCR::Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR::Read('.ldap.error');
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
          return $self->SetError( $ERROR );
     }
 
     # First we read the main.cf
-    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+    my $MainCf             = SCR->Read('.mail.postfix.main.table');
    
     if(      $MailLocalDelivery->{'Type'} eq 'local') {
 	write_attribute($MainCf,'mailbox_command','');
@@ -1381,19 +1384,19 @@ sub WriteMailLocalDelivery {
 	write_attribute($MainCf,'mail_spool_directory','');
 	write_attribute($MainCf,'mailbox_command','');
 	write_attribute($MainCf,'mailbox_transport','lmtp:unix:public/lmtp'); 
-        SCR::Write('.etc.imapd_conf.autocreatequota',$MailLocalDelivery->{'MailboxSizeLimit'});
-        SCR::Write('.etc.imapd_conf.quotawarn',$MailLocalDelivery->{'QuotaLimit'});
-        SCR::Write('.etc.imapd_conf.timeout',$MailLocalDelivery->{'ImapIdleTime'});
-        SCR::Write('.etc.imapd_conf.poptimeout',$MailLocalDelivery->{'PopIdleTime'});
+        SCR->Write('.etc.imapd_conf.autocreatequota',$MailLocalDelivery->{'MailboxSizeLimit'});
+        SCR->Write('.etc.imapd_conf.quotawarn',$MailLocalDelivery->{'QuotaLimit'});
+        SCR->Write('.etc.imapd_conf.timeout',$MailLocalDelivery->{'ImapIdleTime'});
+        SCR->Write('.etc.imapd_conf.poptimeout',$MailLocalDelivery->{'PopIdleTime'});
         if( $MailLocalDelivery->{'AlternateNameSpace'} ) {
-	    SCR::Write('.etc.imapd_conf.altnamespace','yes');
+	    SCR->Write('.etc.imapd_conf.altnamespace','yes');
 	} else {
-	    SCR::Write('.etc.imapd_conf.altnamespace','no');
+	    SCR->Write('.etc.imapd_conf.altnamespace','no');
 	}
         if( $MailLocalDelivery->{'HardQuotaLimit'} ) {
-	    SCR::Write('.etc.imapd_conf.lmtp_overquota_perm_failure','yes');
+	    SCR->Write('.etc.imapd_conf.lmtp_overquota_perm_failure','yes');
         } else {
-	    SCR::Write('.etc.imapd_conf.lmtp_overquota_perm_failure','no');
+	    SCR->Write('.etc.imapd_conf.lmtp_overquota_perm_failure','no');
         }
     } else {
         return $self->SetError( summary => _('Bad value for MailLocalDeliveryType. Possible values are:').
@@ -1401,8 +1404,8 @@ sub WriteMailLocalDelivery {
                                   code  => "PARAM_CHECK_FAILED" );
     }
 
-    SCR::Write('.mail.postfix.main.table',$MainCf);
-    SCR::Write('.etc.imapd_conf',undef);
+    SCR->Write('.mail.postfix.main.table',$MainCf);
+    SCR->Write('.etc.imapd_conf',undef);
     return 1;
 }    
 
@@ -1508,7 +1511,7 @@ sub check_ldap_configuration {
                        );
 
     #First we read the whool main.cf configuration
-    my $MainCF    = SCR::Read('.mail.postfix.main.table');
+    my $MainCF    = SCR->Read('.mail.postfix.main.table');
 
     #Now we are looking for if all the needed ldap entries are done
     my $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_host');
@@ -1554,7 +1557,7 @@ sub check_ldap_configuration {
 
     # If we had made changes we have to save it
     if($changes) {
-       SCR::Write('.mail.postfix.main.table',$MainCF);
+       SCR->Write('.mail.postfix.main.table',$MainCF);
     }
 
     return $changes;
@@ -1571,12 +1574,12 @@ sub read_ldap_settings {
     #$ldapadmin    = '';
     #$my_ldap      = [];
     #$admin_bind   = [];
-    $ldapserver  = SCR::Read('.etc.openldap.ldap_conf.host');
-    $ldapport    = SCR::Read('.etc.openldap.ldap_conf.port');
-    $mail_basedn = SCR::Read('.etc.openldap.ldap_conf.mail_basedn');
-    $dns_basedn  = SCR::Read('.etc.openldap.ldap_conf.dns_basedn');
-    $user_basedn = SCR::Read('.etc.openldap.ldap_conf.user_basedn');
-    $group_basedn= SCR::Read('.etc.openldap.ldap_conf.group_basedn');
+    $ldapserver  = SCR->Read('.etc.openldap.ldap_conf.host');
+    $ldapport    = SCR->Read('.etc.openldap.ldap_conf.port');
+    $mail_basedn = SCR->Read('.etc.openldap.ldap_conf.mail_basedn');
+    $dns_basedn  = SCR->Read('.etc.openldap.ldap_conf.dns_basedn');
+    $user_basedn = SCR->Read('.etc.openldap.ldap_conf.user_basedn');
+    $group_basedn= SCR->Read('.etc.openldap.ldap_conf.group_basedn');
     if( ! $ldapserver ){
                  return _("No LDAP host");
     }

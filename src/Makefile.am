@@ -20,8 +20,7 @@ desktop_DATA =			\
 	mail-server.desktop
 
 module_DATA =			\
-	MailServer.ycp		\
-	MailServer.pm
+	MailServer.ycp		
 
 schema_DATA = SUSE-Mail.schema
 

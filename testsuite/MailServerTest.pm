@@ -6,7 +6,9 @@ BEGIN {
     push @INC, '/usr/share/YaST2/modules/';
 }
 
-use MailServer;
+use YaST::YCP;
+use ycp;
+use YaPI::MailServer;
 use Locale::gettext;
 use POSIX ();     # Needed for setlocale()
 
@@ -17,6 +19,14 @@ POSIX::setlocale(LC_MESSAGES, "");
 textdomain("MailServer");
 
 
+sub printError {
+    my $err = shift;
+    foreach my $k (keys %$err) {
+        print STDERR "$k = ".$err->{$k}."\n";
+    }
+    print STDERR "\n";
+    exit 1;
+}
 
 sub run {
 
@@ -38,7 +48,7 @@ sub run {
                                       },
                          );
   my $GlobalSettings;
-  YaPI::MailServer->WriteGlobalSettings(\%GS,'cn=admin,dc=suse,dc=de','secret');
+  my $ERROR = YaPI::MailServer->WriteGlobalSettings(\%GS,'cn=admin,dc=suse,dc=de','secret');
   $GlobalSettings = YaPI::MailServer->ReadGlobalSettings();
   my $mastercf = YaPI::MailServer->ReadMasterCF();
   my $fsrv = YaPI::MailServer->findService("smtp","smtp");
