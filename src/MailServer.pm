@@ -15,7 +15,7 @@ package MailServer;
 use strict;
 
 use ycp;
-use YaST::YCP qw(Boolean);
+use YaST::YCP;
 
 use Locale::gettext;
 use POSIX;     # Needed for setlocale()
@@ -26,6 +26,32 @@ textdomain("mail-server");
 sub _ {
     return gettext($_[0]);
 }
+# -------------- error handling -------------------
+my %__error = ();
+
+BEGIN { $TYPEINFO{SetError} = ["function", "boolean", ["map", "string", "any" ]]; }
+sub SetError {
+    my $class = shift;      # so that SetError can be called via -> like all
+                            # other SCRAgent functions
+    %__error = @_;
+    if( !$__error{package} && !$__error{file} && !$__error{line})
+    {
+        @__error{'package','file','line'} = caller();
+    }
+    if ( defined $__error{summary} ) {
+        y2error($__error{code}."[".$__error{line}.":".$__error{file}." ".$__error{summary});
+    } else {
+        y2error($__error{code});
+    }
+    return undef;
+}
+
+BEGIN { $TYPEINFO{Error} = ["function", ["map", "string", "any"] ]; }
+sub Error {
+    return \%__error;
+}
+
+# -------------------------------------------------
 
 our %TYPEINFO;
 
@@ -53,200 +79,10 @@ my $proposal_valid = 0;
 my $write_only = 0;
 
 ##
- # Data was modified?
- # @return true if modified
- #
-BEGIN { $TYPEINFO {Modified} = ["function", "boolean"]; }
-sub Modified {
-    y2debug ("modified=$modified");
-    return Boolean($modified);
-}
-
-# Settings: Define all variables needed for configuration of mail-server
-# TODO FIXME: Define all the variables necessary to hold
-# TODO FIXME: the configuration here (with the appropriate
-# TODO FIXME: description)
-# TODO FIXME: For example:
-#   ##
-#    # List of the configured cards.
-#    #
-#   my @cards = ();
-#
-#   ##
-#    # Some additional parameter needed for the configuration.
-#    #
-#   my $additional_parameter = 1;
-
-##
- # Read all mail-server settings
- # @return true on success
- #
-BEGIN { $TYPEINFO{Read} = ["function", "boolean"]; }
-sub Read {
-
-    # MailServer read dialog caption
-    my $caption = _("Initializing mail-server Configuration");
-
-    # TODO FIXME Set the right number of stages
-    my $steps = 4;
-
-    my $sl = 0.5;
-    sleep($sl);
-
-    # TODO FIXME Names of real stages
-    # We do not set help text here, because it was set outside
-    Progress::New( $caption, " ", $steps, [
-	    # Progress stage 1/3
-	    _("Read the database"),
-	    # Progress stage 2/3
-	    _("Read the previous settings"),
-	    # Progress stage 3/3
-	    _("Detect the devices")
-	], [
-	    # Progress step 1/3
-	    _("Reading the database..."),
-	    # Progress step 2/3
-	    _("Reading the previous settings..."),
-	    # Progress step 3/3
-	    _("Detecting the devices..."),
-	    # Progress finished
-	    _("Finished")
-	],
-	""
-    );
-
-    # read database
-    Progress::NextStage();
-    # Error message
-    if(0)
-    {
-	Report::Error(_("Cannot read the database1."));
-    }
-    sleep($sl);
-
-    # read another database
-    Progress::NextStep();
-    # Error message
-    if(0)
-    {
-	Report::Error(_("Cannot read the database2."));
-    }
-    sleep($sl);
-
-    # read current settings
-    Progress::NextStage();
-    # Error message
-    if(0)
-    {
-	Report::Error(_("Cannot read current settings."));
-    }
-    sleep($sl);
-
-    # detect devices
-    Progress::NextStage();
-    # Error message
-    if(0)
-    {
-	Report::Warning(_("Cannot detect devices."));
-    }
-    sleep($sl);
-
-    # Progress finished
-    Progress::NextStage();
-    sleep($sl);
-
-    $modified = 0;
-    return Boolean(1);
-}
-
-##
- # Write all mail-server settings
- # @return true on success
- #
-BEGIN { $TYPEINFO{Write} = ["function", "boolean"]; }
-sub Write {
-
-    # MailServer read dialog caption
-    my $caption = _("Saving mail-server Configuration");
-
-    # TODO FIXME And set the right number of stages
-    my $steps = 2;
-
-    my $sl = 0.5;
-    sleep($sl);
-
-    # TODO FIXME Names of real stages
-    # We do not set help text here, because it was set outside
-    Progress::New($caption, " ", $steps, [
-	    # Progress stage 1/2
-	    _("Write the settings"),
-	    # Progress stage 2/2
-	    _("Run SuSEconfig")
-	], [
-	    # Progress step 1/2
-	    _("Writing the settings..."),
-	    # Progress step 2/2
-	    _("Running SuSEconfig..."),
-	    # Progress finished
-	    _("Finished")
-	],
-	""
-    );
-
-    # write settings
-    Progress::NextStage();
-    # Error message
-    if(0)
-    {
-	Report::Error (_("Cannot write settings."));
-    }
-    sleep($sl);
-
-    # run SuSEconfig
-    Progress::NextStage ();
-    # Error message
-    if(0)
-    {
-	Report::Error (_("SuSEconfig script failed."));
-    }
-    sleep($sl);
-
-    # Progress finished
-    Progress::NextStage();
-    sleep($sl);
-
-    return Boolean(1);
-}
-
-##
- # Get all mail-server settings from the first parameter
- # (For use by autoinstallation.)
- # @param settings The YCP structure to be imported.
- # @return boolean True on success
- #
-BEGIN { $TYPEINFO{Import} = ["function", "boolean", [ "map", "any", "any" ] ]; }
-sub Import {
-    my %settings = %{$_[0]};
-    # TODO FIXME: your code here (fill the above mentioned variables)...
-    return Boolean(1);
-}
-
-##
- # Dump the mail-server settings to a single map
- # (For use by autoinstallation.)
- # @return map Dumped settings (later acceptable by Import ())
- #
-BEGIN { $TYPEINFO{Export}  =["function", [ "map", "any", "any" ] ]; }
-sub Export {
-    # TODO FIXME: your code here (return the above mentioned variables)...
-    return {};
-}
-
-##
  # Dump the mail-server Global Settings to a single map
  # @return map Dumped settings (later acceptable by WriteGlobalSettings ())
  #
-BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", [ "map", "any", "any" ] ]; }
+BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", "any"  ]; }
 sub ReadGlobalSettings {
     my %GlobalSettings = ( 
     			   'Changed' => 'false',
@@ -283,7 +119,7 @@ sub ReadGlobalSettings {
     	$GlobalSettings{'Relay'}{'Type'} = 'DNS';
     }
     
-    return {};
+    return \%GlobalSettings;
 }
 
 ##
@@ -291,9 +127,17 @@ sub ReadGlobalSettings {
  # @param settings The YCP structure to be imported.
  # @return boolean True on success
  #
-BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean", [ "map", "any", "any" ] ]; }
-sub Export {
-    # TODO FIXME: your code here (return the above mentioned variables)...
+BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  "any" ]; }
+sub WriteGlobalSettings {
+    my $self = shift;
+    my $GlobalSettings = shift;
+
+    my $error = 1;
+    if( $error ) {
+        return $self->SetError( summary =>_("hier kommt ein algemeiner text in englisch"),
+                                code => "PARAM_CHECK_FAILED" );
+    }
+
     return {};
 }
 
