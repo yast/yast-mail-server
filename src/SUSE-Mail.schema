@@ -80,7 +80,22 @@ attributetype ( MailAT:12 NAME ( 'SuSEMailAction' )
 	DESC 'Is the right hand value of many postmaps'
         EQUALITY caseIgnoreMatch
         SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} 
+        SINGLE-VALUE  )
+
+attributetype ( MailAT:13 NAME ( 'SuSEMailDomainType' )
+	DESC 'Type of the mydomain. Avaiable values: main, local, virtual'
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} 
+        SINGLE-VALUE )
+
+attributetype ( MailAT:14 NAME ( 'SuSEMailDomainMasquerading' )
+	DESC 'Shows if the domain must be masqueraded'
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768}
+        SINGLE-VALUE )
 
 ##
 ## Objectclass Section
@@ -90,9 +105,9 @@ objectclass ( MailOC:1 NAME 'SuSEMailRecipient' SUP top AUXILIARY
         MAY ( SuSEMailAcceptAddress $ SuSEMailAlias $
               SuSEVirtualAddress $ SuSEMailCommand ) )
 
-#objectclass ( MailOC:2 NAME 'SuSEVirtualDomainObject' SUP top AUXILIARY
-#        DESC 'to configure behaviour of virtual domains'
-#        MUST ( MTALocaldomain ))
+objectclass ( MailOC:2 NAME 'SuSEMailDomain' SUP top AUXILIARY
+        DESC 'To configure behaviour of mail domains'
+        MAY  ( SuSEMailDomainType $ SuSEMailDomainMasquerading))
 
 objectclass ( MailOC:3 NAME 'SuSEMailTransport' SUP top STRUCTURAL
         DESC 'To build transport maps in LDAP'

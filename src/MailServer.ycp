@@ -19,6 +19,7 @@ import "Progress";
 import "Report";
 import "Summary";
 import "YaPI::MailServer";
+import "Require";
 
 /**
  * Prototypes
@@ -54,14 +55,6 @@ global define boolean Abort() ``{
 //    if(AbortFunction != nil)
 //	return eval(AbortFunction) == true;
     return false;
-}
-
-/**
- * Data was modified?
- * @return true if modified
- */
-global boolean Modified() {
-    y2debug("modified=%1",modified);
 }
 
 // Settings: Define all variables needed for configuration of mail-server
@@ -101,6 +94,20 @@ global map<string,any>  FetchingMail = $[];
 global map<string,any>  MailLocalDomains = $[];
 
 /**
+ * Data was modified?
+ * @return true if modified
+ */
+global boolean Modified() {
+    if((boolean)GlobalSettings["Changed"]:false    || (boolean)MailTransports["Changed"]:false ||
+       (boolean)MailPrevention["Changed"]:false    || (boolean)MailRelaying["Changed"]:false   ||
+       (boolean)MailLocalDelivery["Changed"]:false || (boolean)FetchingMail["Changed"]:false   ||
+       (boolean)MailLocalDomains["Changed"]:false ) {
+       modified = true;
+    }
+    y2debug("modified=%1",modified);
+}
+
+/**
  * Map of the mail server local domains.
  */
 global map<string,any>  LDAPDefaults = $[];
@@ -121,7 +128,19 @@ global list<list>  ModulesTreeContent = [ ["GlobalSettings"],
 					  ["FetchingMail"],
 					  ["MailLocalDomains"],
 				       ];
+/**
+ * Is a package installed?
+ * @param   package package name, without version or .rpm suffix
+ * @return true/false
+ */
+define boolean Installed (string package) ``{
+    return Require::AreAllPackagesInstalled ([package]);
+}
 
+global boolean procmail_installed  = false;
+global boolean cyrus_installed     = false;
+global boolean postfix_installed   = false;
+global boolean fetchmail_installed = false;
 /**
  * Read all mail-server settings
  * @return true on success
@@ -138,6 +157,8 @@ global boolean Read() {
 
     // We do not set help text here, because it was set outside
     Progress::New( caption, "", steps, [
+	    /* Progress stage 0/7 */
+	    _("Read Needed Packages"),
 	    /* Progress stage 1/7 */
 	    _("Read Mail Server Global Settings"),
 	    /* Progress stage 2/7 */
@@ -154,6 +175,8 @@ global boolean Read() {
 	    _("Read Mail Server Domains")
 
 	], [
+	    /* Progress stage 0/7 */
+	    _("Reading Packages"),
 	    /* Progress stage 1/7 */
 	    _("Reading Mail Server Global Settings"),
 	    /* Progress stage 2/7 */
@@ -174,6 +197,13 @@ global boolean Read() {
 	""
     );
 
+    // read  global settings
+    if(Abort()) return false;
+    Progress::NextStage();
+    procmail_installed  = Installed("procmail");
+    cyrus_installed     = Installed("cyrus-imapd");
+    postfix_installed   = Installed("postfix");
+    fetchmail_installed = Installed("fetchmail");
     // read  global settings
     if(Abort()) return false;
     Progress::NextStage();
