@@ -58,7 +58,11 @@ any MainSequence() {
 
     /* FIXME: adapt to your needs */
     map sequence = $[
-	"ws_start" : "complex"
+	"ws_start" : "complex",
+        "complex"  : $[
+            `abort      : `abort,
+            `next       : `next
+        ]
     ];
 
     any ret = Sequencer::Run(aliases, sequence);

@@ -72,23 +72,66 @@ Choose a mail-server to change or remove.
 Then press <b>Edit</b> or <b>Delete</b> as desired.</p>
 "),
 
-    /* Configure1 dialog help 1/2 */
-    "c1" : _("<p><b><big>Configure, part one</big></b><br>
+    /* GlobalSettings dialog help 1/2 */
+    "GlobalSettings" : _("<p><b><big>Configure, part one</big></b><br>
 Please press the <b>Next</b> button.
 <br></p>") +
-
-    /* Configure1 dialog help 2/2 */
+    /* GlobalSettings dialog help 2/2 */
 _("<p><b><big>Selecting something:</big></b><br>
 It is not possible, you must code it first :-)
 </p>"),
 
-    /* Configure2 dialog help 1/2 */
-    "c2" : _("<p><b><big>Configuration Part Two</big></b><br>
+    /* MailTransports dialog help 1/2 */
+    "MailTransports" : _("<p><b><big>Configuration Part Two</big></b><br>
 Press <b>Next</b>.
 <br></p>
 ") +
+    /* MailTransports dialog help 2/2 */
+_("<p><b><big>Selecting something:</big></b><br>
+It is not possible, you must code it first :-)
+</p>"),
 
-    /* Configure2 dialog help 2/2 */
+    /* MailPrevention dialog help 1/2 */
+    "MailPrevention" : _("<p><b><big>Configure, part one</big></b><br>
+Please press the <b>Next</b> button.
+<br></p>") +
+    /* MailPrevention dialog help 2/2 */
+_("<p><b><big>Selecting something:</big></b><br>
+It is not possible, you must code it first :-)
+</p>"),
+
+    /* MailRelaying dialog help 1/2 */
+    "MailRelaying" : _("<p><b><big>Configure, part one</big></b><br>
+Please press the <b>Next</b> button.
+<br></p>") +
+    /* MailRelaying dialog help 2/2 */
+_("<p><b><big>Selecting something:</big></b><br>
+It is not possible, you must code it first :-)
+</p>"),
+
+    /* MailLocalDelivery dialog help 1/2 */
+    "MailLocalDelivery" : _("<p><b><big>Configure, part one</big></b><br>
+Please press the <b>Next</b> button.
+<br></p>") +
+    /* MailLocalDelivery dialog help 2/2 */
+_("<p><b><big>Selecting something:</big></b><br>
+It is not possible, you must code it first :-)
+</p>"),
+
+    /* FetchingMail dialog help 1/2 */
+    "FetchingMail" : _("<p><b><big>Configure, part one</big></b><br>
+Please press the <b>Next</b> button.
+<br></p>") +
+    /* FetchingMail dialog help 2/2 */
+_("<p><b><big>Selecting something:</big></b><br>
+It is not possible, you must code it first :-)
+</p>"),
+
+    /* MailLocalDomains dialog help 1/2 */
+    "MailLocalDomains" : _("<p><b><big>Configure, part one</big></b><br>
+Please press the <b>Next</b> button.
+<br></p>") +
+    /* MailLocalDomains dialog help 2/2 */
 _("<p><b><big>Selecting something:</big></b><br>
 It is not possible, you must code it first :-)
 </p>"),

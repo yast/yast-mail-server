@@ -134,7 +134,7 @@ global boolean Read() {
 
     integer steps = 8;
 
-    integer sl = 500;
+    integer sl = 10;
     sleep(sl);
 
     // We do not set help text here, because it was set outside
