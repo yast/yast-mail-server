@@ -863,7 +863,7 @@ sub ReadMailPrevention {
 
     # We ar looking for the BasicProtection Basic Prevention
     my $smtpd_helo_restrictions = read_attribute($MainCf,'smtpd_helo_restrictions');
-    if( $smtpd_helo_restrictions !~ /reject_invalid_hostname/ ) {
+    if( $smtpd_helo_restrictions ~! /reject_invalid_hostname/ ) {
        my $smtpd_helo_required  = read_attribute($MainCf,'smtpd_helo_required');
        if( $smtpd_helo_required =~ /no/ ) {
          $MailPrevention{'BasicProtection'} =  'off';    
@@ -1123,8 +1123,8 @@ sub ReadMailRelaying {
     } 
     if($smtpd_sasl_auth_enable eq 'on') {
        $MailRelaying{'RequireSASL'}  = 1;
-       if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/) {
-         return $self->SetError( summary => _('Postfix configuration misteak: smtpd_sasl_auth_enable set yes').
+       if( $smtpd_recipient_restrictions ~! /permit_sasl_authenticated/) {
+         return $self->SetError( summary => _('Postfix configuration misteak: smtpd_sasl_auth_enable set yes,').
                                             _('but smtpd_recipient_restrictions dose not contain permit_sasl_authenticated.'),
                                  code    => "PARAM_CHECK_FAILED" );
        }                          
@@ -1264,27 +1264,31 @@ sub ReadMailLocalDelivery {
     my $MaximumMailboxSize = read_attribute($MainCf,'mailbox_size_limit');
     my $LocalTransport     = read_attribute($MainCf,'local_transport');
 
-    if($MailboxCommand eq '' && $MailboxTransport '' ) {
-        $MailLocalDelivery{'Type'}      = 'local';
-        if( $MailboxSizeLimit ~= /\d+/ ) {
+    if($MailboxTransport eq 'local' || ( $MailboxCommand eq '' && $MailboxTransport '')) {
+       $MailLocalDelivery{'Type'}      = 'local';
+       if( $MailboxSizeLimit =~ /^\d+$/ ) {
             $MailLocalDelivery{'MailboxSize'}  = $MailboxSizeLimit;
-        } 
+       } 
        if( $HomeMailbox ne '' ) {
            $MailLocalDelivery{'SpoolDirectory'} = '$HOME/'.$HomeMailbox;
-       } elsif () {
-           $MailLocalDelivery{'SpoolDirectory'} = $HomeMailbox;
+       } elsif ( $MailSpoolDirectory ne '' ) {
+           $MailLocalDelivery{'SpoolDirectory'} = $MailSpoolDirectory;
        } else {
            $MailLocalDelivery{'SpoolDirectory'} = 'default';
        }
-    } elsif($MailboxCommand ~= /\/usr\/bin\/procmail/) {
+    } elsif($MailboxCommand =~ /\/usr\/bin\/procmail/) {
         $MailLocalDelivery{'Type'} = 'procmail';
-    } elsif($MailboxTransport ~= /lmtp:unix:\/var\/lib\/imap\/socket\/lmtp/) {
+    } elsif($MailboxTransport =~ /lmtp:unix:\/var\/lib\/imap\/socket\/lmtp/) {
         $MailLocalDelivery{'Type'} = 'cyrus';
         $MailLocalDelivery{'MailboxSizeLimit'}         = SCR::Read('.etc.imapd_conf.autocreatequota');
         $MailLocalDelivery{'QuotaLimit'}               = SCR::Read('.etc.imapd_conf.quotawarn');
         $MailLocalDelivery{'ImapIdleTime'}             = SCR::Read('.etc.imapd_conf.timeout');
         $MailLocalDelivery{'PopIdleTime'}              = SCR::Read('.etc.imapd_conf.poptimeout');
-        $MailLocalDelivery{'AlternateNameSpace'}       = SCR::Read('.etc.imapd_conf.altnamespace');
+        if(  SCR::Read('.etc.imapd_conf.altnamespace') eq 'yes' ) {
+            $MailLocalDelivery{'AlternateNameSpace'}   = 1; 
+        } else {
+            $MailLocalDelivery{'AlternateNameSpace'}   = 0; 
+        }
         if(  SCR::Read('.etc.imapd_conf.lmtp_overquota_perm_failure') eq 'yes' ) {
             $MailLocalDelivery{'HardQuotaLimit'}       = 1; 
         } else {
@@ -1331,14 +1335,63 @@ sub WriteMailLocalDelivery {
 
     # First we read the main.cf
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
-
-    my $MaximumMailboxSize = $MailLocalDelivery->{'MaximumMailboxSize'};
-    if($MaximumMailboxSize =~ /[^\d+]/) {
-         return $self->SetError( summary =>_("Maximum Mailbox Size value may only contain decimal number in byte"),
-                                 code    => "PARAM_CHECK_FAILED" );
+   
+    if(      $MailLocalDelivery->{'Type'} eq 'local') {
+	write_attribute($MainCf,'mailbox_command','');
+	write_attribute($MainCf,'mailbox_transport','local');
+	if($MailLocalDelivery->{'MaximumMailboxSize'} =~ /^\d+$/) {
+	     write_attribute($MainCf,'mailbox_size_limit',$MailLocalDelivery->{'MaximumMailboxSize'});     
+	} else {
+            return $self->SetError( summary => _('Maximum Mailbox Size value may only contain decimal number in byte'),
+                                      code    => "PARAM_CHECK_FAILED" );
+	}
+        if(     $MailLocalDelivery{'SpoolDirectory'} eq 'default') {
+	   write_attribute($MainCf,'home_mailbox','');     
+	   write_attribute($MainCf,'mail_spool_directory','');
+	} elsif($MailLocalDelivery{'SpoolDirectory'} =~ /\$HOME\/(.*)/) {
+	   write_attribute($MainCf,'home_mailbox',$1);
+	   write_attribute($MainCf,'mail_spool_directory','');
+	} elsif(-e $MailLocalDelivery{'SpoolDirectory'}) {
+	   write_attribute($MainCf,'home_mailbox','');
+	   write_attribute($MainCf,'mail_spool_directory',$MailLocalDelivery{'SpoolDirectory'});
+	} else {
+            return $self->SetError( summary => _('Bad value for SpoolDirectory. Possible values are:').
+	                                       _('"default", "$HOME/<path>" or a path to an existing directory.'),
+                                      code  => "PARAM_CHECK_FAILED" );
+	}
+    } elsif( $MailLocalDelivery->{'Type'} eq 'procmail') {
+        write_attribute($MainCf,'home_mailbox','');     
+	write_attribute($MainCf,'mail_spool_directory','');
+	write_attribute($MainCf,'mailbox_command','/usr/bin/procmail');
+	write_attribute($MainCf,'mailbox_transport','');
+    } elsif( $MailLocalDelivery->{'Type'} eq 'cyrus') {
+        write_attribute($MainCf,'home_mailbox','');
+	write_attribute($MainCf,'mail_spool_directory','');
+	write_attribute($MainCf,'mailbox_command','');
+	write_attribute($MainCf,'mailbox_transport','lmtp:unix:public/lmtp'); 
+        $MailLocalDelivery{'MailboxSizeLimit'}           = SCR::Write('.etc.imapd_conf.autocreatequota',$MailLocalDelivery->{'MailboxSizeLimit'});
+        $MailLocalDelivery->{'QuotaLimit'}               = SCR::Write('.etc.imapd_conf.quotawarn',$MailLocalDelivery->{'QuotaLimit'});
+        $MailLocalDelivery->{'ImapIdleTime'}             = SCR::Write('.etc.imapd_conf.timeout',$MailLocalDelivery->{'ImapIdleTime'});
+        $MailLocalDelivery->{'PopIdleTime'}              = SCR::Write('.etc.imapd_conf.poptimeout',$MailLocalDelivery->{'PopIdleTime'});
+        if( $MailLocalDelivery->{'AlternateNameSpace'} ) {
+	    SCR::Write('.etc.imapd_conf.altnamespace','yes');
+	} else {
+	    SCR::Write('.etc.imapd_conf.altnamespace','no');
+	}
+        if( $MailLocalDelivery->{'HardQuotaLimit'} ) {
+	    SCR::Write('.etc.imapd_conf.lmtp_overquota_perm_failure','yes');
+        } else {
+	    SCR::Write('.etc.imapd_conf.lmtp_overquota_perm_failure','no');
+        }
+    } else {
+        return $self->SetError( summary => _('Bad value for MailLocalDeliveryType. Possible values are:').
+                                           _('"local", "procmail" or "cyrus".'),
+                                  code  => "PARAM_CHECK_FAILED" );
     }
-    write_attribute($MainCf,'mailbox_size_limit',$MaximumMailboxSize);
 
+    SCR::Write('.mail.postfix.main.table',$MainCf);
+    SCR::Write('.etc.imapd_conf',undef);
+    return 1;
 }    
 
 ##
@@ -1462,7 +1515,7 @@ sub check_ldap_configuration {
 	 $changes = 1;
     }
     $tmp       = read_attribute($MainCF,'ldap'.$config.'_timeout');
-    if($tmp !~ /\d+/){
+    if($tmp ~! /^\d+$/){
          write_attribute($MainCF,'ldap'.$config.'_timeout',20); 
 	 $changes = 1;
     }
