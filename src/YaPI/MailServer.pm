@@ -904,12 +904,12 @@ sub ReadMailPrevention {
 ##
  # Write the mail-server Mail Prevention from a single hash
  #
-BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
+BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", ["map", "string", "any"], "string", "string" ]; }
 sub WriteMailPrevention {
     my $self            = shift;
+    my $MailPrevention  = shift;
     my $AdminDN         = shift;
     my $AdminPassword   = shift;
-    my $MailPrevention  = shift;
 
     my $ERROR  = '';
 
@@ -1143,7 +1143,7 @@ sub ReadMailRelaying {
 ##
  # Write the mail-server server side relay settings  from a single hash
  #
-BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
+BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
 sub WriteMailRelaying {
     my $self            = shift;
     my $AdminDN         = shift;
@@ -1310,7 +1310,7 @@ sub ReadMailLocalDelivery {
 }
 
 
-BEGIN { $TYPEINFO{WriteMailLocalDelivery}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
+BEGIN { $TYPEINFO{WriteMailLocalDelivery}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
 sub WriteMailLocalDelivery {
     my $self              = shift;
     my $AdminDN           = shift;
@@ -1407,6 +1407,74 @@ sub WriteMailLocalDelivery {
     return 1;
 }    
 
+BEGIN { $TYPEINFO{ReadFetchingMail}     =["function", "any", "string", "string" ]; }
+sub ReadFetchingMail {
+}
+
+BEGIN { $TYPEINFO{WriteFetchingMail}    =["function", "boolean", ["map", "string", "any"], "string", "string"]; }
+sub WriteFetchingMail {
+}
+
+BEGIN { $TYPEINFO{ReadMailLocalDomains}  =["function", "any", "string", "string" ]; }
+sub ReadMailLocalDomains {
+}
+
+BEGIN { $TYPEINFO{WriteMailLocalDomains} =["function", "boolean", ["map", "string", "any"], "string", "string"]; }
+sub WriteMailLocalDomains {
+}
+
+BEGIN { $TYPEINFO{ReadLDAPExportDefaults} = ["function", ["map", "string", "any"], ["map", "string", "any"] ]; }
+sub ReadLDAPExportDefaults {
+    my $self = shift;
+    my $data = shift;
+
+    my $ldapMap = {};
+    my $ldapret = undef;
+
+    if(Ldap->Read()) {
+        $ldapMap = Ldap->Export();
+        if(defined $ldapMap->{'ldap_server'} && $ldapMap->{'ldap_server'} ne "") {
+            my $dummy = $ldapMap->{'ldap_server'};
+            $ldapMap->{'ldap_server'} = Ldap->GetFirstServer("$dummy");
+            $ldapMap->{'ldap_port'} = Ldap->GetFirstPort("$dummy");
+        } else {
+            return $self->SetError( summary => "No LDAP Server configured",
+                                    code => "HOST_NOT_FOUND");
+        }
+    }
+
+    if (! SCR->Execute(".ldap", {"hostname" => $ldapMap->{'ldap_server'},
+                                 "port"     => $ldapMap->{'ldap_port'}})) {
+        return $self->SetError(summary => "LDAP init failed",
+                               code => "SCR_INIT_FAILED");
+    }
+
+    # anonymous bind
+    if (! SCR->Execute(".ldap.bind", {}) ) {
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP bind failed",
+                               code => "SCR_INIT_FAILED",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+    }
+    # searching LDAP Bases
+    $ldapret = SCR->Read(".ldap.search", {
+                                          "base_dn" => $ldapMap->{'ldap_domain'},
+                                          "filter" => '(& (objectclass=suseMailServerConfiguration) (cn=default))',
+                                          "scope" => 2,
+                                          "not_found_ok" => 1
+                                         });
+    if (! defined $ldapret) {
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP search failed!",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
+                               code => "LDAP_SEARCH_FAILED");
+    }
+    if(@$ldapret > 0) {
+        $ldapMap->{'mail_dn'} = $ldapret->[0]->{susedefaultbase};
+    }
+
+    return $ldapMap;
+}
 ##
  # Create a textual summary and a list of unconfigured cards
  # @return summary of the current configuration
@@ -1572,12 +1640,6 @@ sub read_ldap_settings {
     #$ldapadmin    = '';
     #$my_ldap      = [];
     #$admin_bind   = [];
-    $ldapserver  = SCR->Read('.etc.openldap.ldap_conf.host');
-    $ldapport    = SCR->Read('.etc.openldap.ldap_conf.port');
-    $mail_basedn = SCR->Read('.etc.openldap.ldap_conf.mail_basedn');
-    $dns_basedn  = SCR->Read('.etc.openldap.ldap_conf.dns_basedn');
-    $user_basedn = SCR->Read('.etc.openldap.ldap_conf.user_basedn');
-    $group_basedn= SCR->Read('.etc.openldap.ldap_conf.group_basedn');
     if( ! $ldapserver ){
                  return _("No LDAP host");
     }

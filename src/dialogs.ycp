@@ -13,9 +13,17 @@ textdomain "mail-server";
 
 import "Label";
 import "Wizard";
-import "MailServer";
+import "YaPI::MailServer";
 
 include "mail-server/helps.ycp";
+
+boolean AuthorizingDialog () {
+    string caption = _("Mail Server Administrator Authorization.");
+    term contents = `HBox(
+                            `TextEntry(`id(`user),   _("Enter Admin User Name:"), ""),
+                            `Password(`id(`passwd),  _("Enter Admin Password:"), "")
+                         );
+}
 
 /**
  * Configure1 dialog
