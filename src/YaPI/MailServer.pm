@@ -199,10 +199,11 @@ sub ReadGlobalSettings {
     }
 
     # Reading maximal size of transported messages
-    $GlobalSettings{'MaximumMailSize'}           = read_attribute($MainCf,'message_size_limit');
+    $GlobalSettings{'MaximumMailSize'}  = read_attribute($MainCf,'message_size_limit');
 
     #
-    $GlobalSettings{'Banner'}                    = read_attribute($MainCf,'smtpd_banner');
+    $GlobalSettings{'Banner'}           = `postconf -h smtpd_banner`;
+    chomp $GlobalSettings{'Banner'};
 
     # Determine if relay host is used
     $GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'} = read_attribute($MainCf,'relayhost');
@@ -525,15 +526,6 @@ sub ReadMailTransports {
                            'Changed' => '0',
                            'Transports'  => [] 
                           );
-    my %Transport       = (
-                             'Destination'  => '',
-                             'Transport'    => 'smtp',
-                             'Nexthop'      => '',
-                             'TLS'          => '',
-                             'Auth'         => '',
-                             'Account'      => '',
-                             'Password'     => ''
-                          );
 
     # Make LDAP Connection 
     my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
@@ -542,8 +534,10 @@ sub ReadMailTransports {
     }
 
     my %SearchMap       = (
-                               'base_dn'    => $ldap_map->{mail_config_dn},
+                               'base_dn'    => $ldap_map->{'mail_config_dn'},
                                'filter'     => "ObjectClass=SuSEMailTransport",
+                               'scope'      => 2,
+                               'map'        => 1,
                                'attributes' => ['SuSEMailTransportDestination',
 			                        'SuSEMailTransportNexthop',
 						'SuSEMailTransportTLS']
@@ -554,27 +548,30 @@ sub ReadMailTransports {
     # Searching all the transport lists
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
 
+
     # filling up our array
-    foreach(@{$ret}){
-       $Transport{'Destination'}     = $_->{'SuSEMailTransportDestination'};
-       if( $_->{'SuSEMailTransportNexthop'} =~ /:/) {
-         ($Transport{'Transport'},$Transport{'Nexthop'}) = split /:/,$_->{'SuSEMailTransportNexthop'};
+    foreach my $dn (keys %{$ret}){
+       my $Transport       = {};
+       $Transport->{'Destination'}     = $ret->{$dn}->{'susemailtransportdestination'}->[0];
+       if( $ret->{$dn}->{'susemailtransportnexthop'}->[0] =~ /:/) {
+         ($Transport->{'Transport'},$Transport->{'nexthop'}) = split /:/,$ret->{$dn}->{'susemailtransportnexthop'}->[0];
        } else {
-         $Transport{'Nexthop'}         = $_->{'SuSEMailTransportNexthop'};
+         $Transport->{'Nexthop'}         = $ret->{$dn}->{'susemailtransportnexthop'}->[0];
        }
-       $Transport{'TLS'}             = $_->{'SuSEMailTransporTLS'};
-       $Transport{'Auth'}            = 0;
-       $Transport{'Account'}         = '';
-       $Transport{'Password'}        = '';
+       $Transport->{'TLS'}             = $ret->{$dn}->{'susemailTransportls'}->[0] || "NONE";
+       $Transport->{'Auth'}            = 0;
+       $Transport->{'Account'}         = '';
+       $Transport->{'Password'}        = '';
        #Looking the type of TSL
-       my $tmp = read_attribute($SaslPaswd,$Transport{'Destination'});
+       my $tmp = read_attribute($SaslPaswd,$Transport->{'Destination'});
        if($tmp) {
-           ($Transport{'Account'},$Transport{'Password'}) = split /:/, $tmp;
-            $Transport{'Auth'} = 1;
+           ($Transport->{'Account'},$Transport->{'Password'}) = split /:/, $tmp;
+            $Transport->{'Auth'} = 1;
        }
-       push @{$MailTransports{'Transports'}}, %Transport;
+       push @{$MailTransports{'Transports'}}, $Transport;
     }
     
+print STDERR Dumper(%MailTransports);
 
     #now we return the result
     return \%MailTransports;
@@ -638,12 +635,13 @@ sub WriteMailTransports {
     my $MailTransports  = shift;
     my $AdminUser       = shift;
     my $AdminPassword   = shift;
-    
+   
     # Pointer for Error MAP
     my $ERROR = [];
 
-    # Array for the Transport Entries
-    my @Entries   = '';
+    # Map for the Transport Entries
+    my %Entries   = (); 
+    my $ldap_map  = {}; 
 
     # If no changes we haven't to do anything
     if(! $MailTransports->{'Changed'}){
@@ -655,14 +653,14 @@ sub WriteMailTransports {
     my $SaslPasswd = SCR->Read('.mail.postfix.saslpasswd.table');
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
 
     # Search hash to find all the Transport Objects
     my %SearchMap       = (
-                               'base_dn' => $ldap_map->{mail_config_dn},
+                               'base_dn' => $ldap_map->{'mail_config_dn'},
                                'filter'  => "ObjectClass=SuSEMailTransport",
                                'attrs'   => ['SuSEMailTransportDestination']
                           );
@@ -675,34 +673,33 @@ sub WriteMailTransports {
 
     # Now let's work
     foreach my $Transport (@{$MailTransports->{'Transports'}}){
-       my %entry = ();
        if( $Transport->{'Destination'} =~ /[^\w\*\.\@]/ ) {
             $ERROR->{'summary'} = _("Wrong Value for Mail Transport Destination. ").
 	                          _('This field may contain only the charaters [a-zA-Z.*@]');
             $ERROR->{'code'}    = "PARAM_CHECK_FAILED";
             return $self->SetError( $ERROR );
       }
-       $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$ldap_map->{mail_config_dn};
-       $entry{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
+       my $dn	= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$ldap_map->{'mail_config_dn'};
+       $Entries{$dn}->{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
        if(defined $Transport->{'Transport'} ) {
-          $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Transport'}.':'.$Transport->{'Nexthop'};
+          $Entries{$dn}->{'SuSEMailTransportNexthop'}       = $Transport->{'Transport'}.':'.$Transport->{'Nexthop'};
        } else {
-          $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
+          $Entries{$dn}->{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
        }
-       $entry{'SuSEMailTransportTLS'}           = 'NONE';
+       $Entries{$dn}->{'SuSEMailTransportTLS'}           = 'NONE';
        if($Transport->{'Auth'}) {
                # If needed write the sasl auth account & password
                write_attribute($SaslPasswd,$Transport->{'Destination'},"$Transport->{'Account'}:$Transport->{'Password'}");
        }
        if($Transport->{'TLS'} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/) {
-            $entry{'SuSEMailTransportTLS'}      = $Transport->{'TLS'};
+            $Entries{$dn}->{'SuSEMailTransportTLS'}      = $Transport->{'TLS'};
        } else {
             $ERROR->{'summary'} = _("Wrong Value for MailTransportTLS");
             $ERROR->{'code'}    = "PARAM_CHECK_FAILED";
             return $self->SetError( $ERROR );
        }
-       push @Entries, %entry;
     }
+#print STDERR Dumper(%Entries);
 
     #have a look if our table is OK. If not make it to work!
     check_ldap_configuration('transport',$ldap_map);
@@ -714,13 +711,20 @@ sub WriteMailTransports {
        SCR->Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
     }
 
-    foreach my $entry (@Entries){
-       my $dn  = [ 'dn' => $entry->{'dn'} ];
-       my $tmp = [ 'SuSEMailTransportDestination' => $entry->{'SuSEMailTransportDestination'},
-                   'SuSEMailTransportNexthop'     => $entry->{'SuSEMailTransportNexthop'},
-                   'SuSEMailTransportTLS'         => $entry->{'SuSEMailTransportTLS'}
-                 ];
-       SCR->Execute('.ldap.add',$dn,$tmp);
+    foreach my $dn (keys %Entries){
+print STDERR $dn;
+       my $DN  = { 'dn' => $dn };
+       my $tmp = { 'Objectclass'                  => [ 'SuSEMailTransport' ],
+                   'SuSEMailTransportDestination' => $Entries{$dn}->{'SuSEMailTransportDestination'},
+                   'SuSEMailTransportNexthop'     => $Entries{$dn}->{'SuSEMailTransportNexthop'},
+                   'SuSEMailTransportTLS'         => $Entries{$dn}->{'SuSEMailTransportTLS'}
+                 };
+       if(! SCR->Write('.ldap.add',$DN,$tmp)){
+          my $ldapERR = SCR->Read(".ldap.error");
+          return $self->SetError(summary => "LDAP add failed",
+                               code => "SCR_EXECUTE_FAILED",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+       }
     }
     SCR->Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
 
@@ -858,7 +862,7 @@ sub ReadMailPrevention {
 
     #Now we read the access table
     my %SearchMap = (
-                   'base_dn' => $ldap_map->{mail_config_dn},
+                   'base_dn' => $ldap_map->{'mail_config_dn'},
                    'filter'  => "ObjectClass=SuSEMailAccess",
                    'attrs'   => ['SuSEMailClient','SuSEMailAction']
                  );
@@ -947,7 +951,7 @@ sub WriteMailPrevention {
     }
     #Now we have a look on the access table
     my %SearchMap = (
-                   'base_dn' => $ldap_map->{mail_config_dn},
+                   'base_dn' => $ldap_map->{'mail_config_dn'},
                    'filter'  => "ObjectClass=SuSEMailAccess",
                    'attrs'   => []
                  );
@@ -958,11 +962,16 @@ sub WriteMailPrevention {
     }
     #Now we write the new table
     foreach my $entry (@{$MailPrevention->{'AccessList'}}) {
-       my $dn  = [ 'dn' => "SuSEMailClient=".$entry->{'SuSEMailClient'}.','. $ldap_map->{mail_config_dn}];
+       my $dn  = [ 'dn' => "SuSEMailClient=".$entry->{'SuSEMailClient'}.','. $ldap_map->{'mail_config_dn'}];
        my $tmp = [ 'SuSEMailClient'   => $entry->{'MailClient'},
                    'SuSEMailAction'   => $entry->{'SuSEMailAction'}
                  ];
-       SCR->Execute('.ldap.add',$dn,$tmp);
+       if(! SCR->Execute('.ldap.add',$dn,$tmp)){
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP bind failed",
+                               code => "SCR_INIT_FAILED",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+       }
     }
 
     # now we looks if the ldap entries in the main.cf for the access table are OK.
@@ -1035,9 +1044,7 @@ sub ReadMailRelaying {
 
     # Now we look if there are manual inclued mynetworks entries
     # my $TrustedNetworks    = read_attribute($MainCf,'mynetworks');
-    my $TrustedNetworks = `postconf mynetworks`;
-    $TrustedNetworks =~ /mynetworks = (.*)/;
-    $TrustedNetworks = $1;
+    my $TrustedNetworks = `postconf -h mynetworks`;
     chomp $TrustedNetworks;
     foreach(split /, |,| /, $TrustedNetworks) { 
        if(! /ldapmynetworks/ && /\w+/) {
@@ -1047,7 +1054,7 @@ sub ReadMailRelaying {
 
     #Now we have a look on the mynetworks ldaptable
 #    my %SearchMap = (
-##                   'base_dn' => $ldap_map->{mail_config_dn},
+##                   'base_dn' => $ldap_map->{'mail_config_dn'},
 #                   'filter'  => "ObjectClass=SuSEMailMyNetorks",
 #                   'attrs'   => ['SuSEMailClient']
 #                 );
@@ -1311,18 +1318,22 @@ sub WriteMailLocalDelivery {
 
 BEGIN { $TYPEINFO{ReadFetchingMail}     =["function", "any", "string", "string" ]; }
 sub ReadFetchingMail {
+    return 1;
 }
 
 BEGIN { $TYPEINFO{WriteFetchingMail}    =["function", "boolean", ["map", "string", "any"], "string", "string"]; }
 sub WriteFetchingMail {
+    return 1;
 }
 
 BEGIN { $TYPEINFO{ReadMailLocalDomains}  =["function", "any", "string", "string" ]; }
 sub ReadMailLocalDomains {
+    return 1;
 }
 
 BEGIN { $TYPEINFO{WriteMailLocalDomains} =["function", "boolean", ["map", "string", "any"], "string", "string"]; }
 sub WriteMailLocalDomains {
+    return 1;
 }
 
 
@@ -1380,7 +1391,7 @@ sub ReadLDAPDefaults {
                                code => "LDAP_SEARCH_FAILED");
     }
     if(@$ldapret > 0) {
-        $ldapMap->{'mail_config_dn'} = $ldapret->[0]->{susedefaultbase};
+        $ldapMap->{'mail_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
     }
     # now we search user base
     $ldapret = SCR->Read(".ldap.search", {
@@ -1397,7 +1408,7 @@ sub ReadLDAPDefaults {
                                code => "LDAP_SEARCH_FAILED");
     }
     if(@$ldapret > 0) {
-        $ldapMap->{'user_config_dn'} = $ldapret->[0]->{susedefaultbase};
+        $ldapMap->{'user_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
     }
     # now we search group base
     $ldapret = SCR->Read(".ldap.search", {
@@ -1414,7 +1425,7 @@ sub ReadLDAPDefaults {
                                code => "LDAP_SEARCH_FAILED");
     }
     if(@$ldapret > 0) {
-        $ldapMap->{'group_config_dn'} = $ldapret->[0]->{susedefaultbase};
+        $ldapMap->{'group_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
     }
     # now we search DNS base
     $ldapret = SCR->Read(".ldap.search", {
@@ -1431,7 +1442,7 @@ sub ReadLDAPDefaults {
                                code => "LDAP_SEARCH_FAILED");
     }
     if(@$ldapret > 0) {
-        $ldapMap->{'DNS_config_dn'} = $ldapret->[0]->{susedefaultbase};
+        $ldapMap->{'DNS_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
     }
     # now we search the admin user DN
     $ldapret = SCR->Read(".ldap.search", {
@@ -1478,7 +1489,6 @@ sub ReadLDAPDefaults {
 
     return $ldapMap;
 }
-
 ##
  # Create a textual summary and a list of unconfigured cards
  # @return summary of the current configuration
@@ -1607,8 +1617,8 @@ sub check_ldap_configuration {
 	 $changes = 1;
     }
     $tmp       = read_attribute($MainCF,'ldap'.$config.'_search_base');
-    if($tmp ne $ldap_map->{mail_config_dn}) {
-         write_attribute($MainCF,'ldap'.$config.'_search_base',$ldap_map->{mail_config_dn}); 
+    if($tmp ne $ldap_map->{'mail_config_dn'}) {
+         write_attribute($MainCF,'ldap'.$config.'_search_base',$ldap_map->{'mail_config_dn'}); 
 	 $changes = 1;
     }
     $tmp       = read_attribute($MainCF,'ldap'.$config.'_query_filter');
