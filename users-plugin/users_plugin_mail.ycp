@@ -1,0 +1,196 @@
+/**
+ * File:
+ *	users_plugin_ldap_all.ycp
+ *
+ * Package:
+ *	Configuration of Users
+ *
+ * Summary:
+ *	This is part GUI of UsersPluginMail - plugin for editing all LDAP
+ *	user/group attributes.
+ *
+ * $Id$
+ */
+
+
+{
+    textdomain "users"; // use own textdomain for new plugins
+
+    import "Label";
+    import "Popup";
+    import "Report";
+    import "Wizard";
+
+    import "Ldap";
+    import "LdapPopup";
+    import "Users";
+    import "UsersLDAP";
+    import "UsersPluginMail"; // plugin module
+
+    any ret = nil;
+    string func			= "";
+    map<string,any> config	= $[];
+    map<string,any> data	= $[];
+
+    /* Check arguments */
+    if(size(WFM::Args()) > 0 && is(WFM::Args(0), string)) {
+	func = (string) WFM::Args(0);
+	if(size(WFM::Args()) > 1 && is(WFM::Args(1), map))
+	    config = (map<string,any>)WFM::Args(1);
+	if(size(WFM::Args()) > 2 && is(WFM::Args(2), map))
+	    data = (map<string,any>)WFM::Args(2);
+    }
+    y2milestone("----------------------------------------");
+    y2milestone("users plugin started: Mail");
+
+    y2debug ("func=%1", func);
+    y2debug ("config=%1", config);
+    y2debug ("data=%1", data);
+
+    if (func == "Summary") {
+	ret = UsersPluginMail::Summary (config, $[]);
+    }
+    else if (func == "Name") {
+	ret = UsersPluginMail::Name (config, $[]);
+    }
+    else if (func == "Dialog") {
+	// define the dialog for this plugin and return it's contents
+
+	string caption	= UsersPluginMail::Name (config, $[]);
+	string what	= config["what"]:"user";
+	string action	= data["what"]:"";
+
+	map<string, any> tmp_data	= $[];
+	list<string> object_class = (list<string>)sort (data["objectclass"]:[]);
+
+	// if this plugin wasn't present in default plugin set, we have to call
+	// BeforeAdd/BeforeEdit e.g. to get object class!
+	if (!contains (data["plugins"]:[], "UsersPluginMail"))
+	{
+	    if (action == "add_user" || action == "add_group")
+		data = UsersPluginMail::AddBefore (config, data);
+	    else if (action == "edit_user" || action == "edit_group")
+		data = UsersPluginMail::EditBefore (config, data);
+	    object_class = (list<string>)sort (data["objectclass"]:[]);
+	    tmp_data["objectclass"]	= object_class;
+	}
+
+	// helptext 1/3
+	string help_text = _("<p>
+Here, see the table of all allowed attributes for the current LDAP entry that were not set in previous dialogs.</p>") +
+
+	// helptext 1/3 (don't translate objectclass"),
+        // %1 is list of values
+	sformat (_("<p>
+The list of attributes is given by the value of \"objectclass\"
+(which is currently:
+<br>%1).
+</p>
+"), mergestring (object_class, ",<br>")) +
+
+	// helptext 3/3
+	_("<p>
+Edit each attribute using <b>Edit</b>. Some attributes 
+could be required, as defined in the user template in the <b>LDAP Client Module</b>.</p>
+");
+
+        list items			= [];
+        list used_attributes	= [];
+        list new_attributes		= [];
+        boolean modified		= false;
+
+	term contents = `HBox(`HSpacing (1.5), `VBox(
+	    `VSpacing(0.5),
+	    `TextEntry(`id(`mailaddress), _("EMail address"), data["susemailacceptaddress"]:"" ),
+	    `VSpacing (0.5)
+	    ),
+	    `HSpacing (1.5)
+	);
+
+	Wizard::CreateDialog ();
+        Wizard::SetDesktopIcon("users");
+
+	// dialog caption
+	Wizard::SetContentsButtons(_("Additional LDAP Settings"),
+	    contents, help_text, Label::BackButton(), Label::NextButton());
+
+	Wizard::HideAbortButton ();
+
+	ret = `next;
+        UI::SetFocus (`id(`table));
+	repeat
+	{
+	    ret = UI::UserInput();
+	    if ( ret == `edit || ret == `table)
+	    {
+		string attr		=
+		    (string) UI::QueryWidget (`id(`table), `CurrentItem);
+		list<string> value	= tmp_data [attr]:data[attr]:[];
+		value			= LdapPopup::EditAttribute (
+		    attr, value, [], Ldap::SingleValued (attr), []);
+		if (value == tmp_data [attr]:data[attr]:[])
+		{
+		    ret = `notnext;
+		    continue;
+		}
+		UI::ChangeWidget (`id(`table),`Item(attr,1),
+		    mergestring(value,","));
+		tmp_data [attr] = value;
+	    }
+	    if ( ret == `next )
+	    {
+		string err = UsersPluginMail::Check (
+		    config,
+		    (map<string,any>) union (data, tmp_data));
+
+		if (err != "")
+		{
+		    Report::Error (err);
+		    ret = `notnext;
+		    continue;
+		}
+
+		if (tmp_data == $[])
+		{
+		    break;
+		}
+		// if this plugin wasn't in default set, we must save its name
+		if (!contains (data["plugins"]:[], "UsersPluginMail"))
+		{
+		    tmp_data["plugins"] = add (tmp_data["plugins"]:[],
+			"UsersPluginMail");
+		}
+		if (data["what"]:"" == "edit_user")
+		{
+		    Users::EditUser (tmp_data);
+		}
+		else if (data["what"]:"" == "add_user")
+		{
+		    Users::AddUser (tmp_data);
+		}
+		else if (data["what"]:"" == "edit_group")
+		{
+		    Users::EditGroup (tmp_data);
+		}
+		else if (data["what"]:"" == "add_group")
+		{
+		    Users::AddGroup (tmp_data);
+		}
+	    }
+	} until (is(ret,symbol) &&
+	    contains ([`next, `abort, `back, `cancel], (symbol) ret));
+
+	Wizard::CloseDialog ();
+    }
+    /* unknown function */
+    else {
+	y2error("unknown function: %1", func);
+	ret = false;
+    }
+
+    y2debug ("ret=%1", ret);
+    y2milestone("users plugin finished");
+    y2milestone("----------------------------------------");
+
+    return ret;
+}
