@@ -14,6 +14,29 @@ objectidentifier MailAT SUSE:10.4.2
 ## Attribute Section
 ##
 
+attributetype ( MailAT:1 NAME ( 'SuSEMailAcceptAddress' )
+        DESC 'RFC 822 email address'
+        EQUALITY caseIgnoreIA5Match 
+        SUBSTR caseIgnoreIA5SubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
+
+attributetype ( MailAT:2 NAME ( 'SuSEVirtualAddress' )
+        DESC 'virtual address'
+        EQUALITY caseIgnoreIA5Match
+        SUBSTR caseIgnoreIA5SubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
+
+attributetype ( MailAT:3 NAME ( 'SuSEMailAlias' )
+        DESC 'email alias'
+        EQUALITY caseIgnoreIA5Match
+        SUBSTR caseIgnoreIA5SubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
+
+attributetype ( MailAT:4 NAME ( 'SuSEMailCommand' )
+        DESC 'for aliases which must be expanded to a command'
+        EQUALITY caseIgnoreIA5Match
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} SINGLE-VALUE )
+
 attributetype ( MailAT:6 NAME ( 'SuSEMailRestrictedAddressRegexp' )
         EQUALITY caseIgnoreMatch
         SUBSTR caseIgnoreSubstringsMatch
@@ -46,10 +69,10 @@ attributetype ( MailAT:10 NAME ( 'SuSEMailTransportTLS' )
 ##
 ## Objectclass Section
 ##
-objectclass ( MailOC:1 NAME 'SUSEMailRecipient' SUP top AUXILIARY
+objectclass ( MailOC:1 NAME 'SuSEMailRecipient' SUP top AUXILIARY
         DESC 'represents an entry which is able to receive mail'
-        MAY ( SUSEMailAcceptAddress $ SUSEMailAlias $ SUSEMailHost $
-              SUSEVirtualAddress $ SUSEMailCommand $ SUSEMailTransport) )
+        MAY ( SuSEMailAcceptAddress $ SuSEMailAlias $
+              SuSEVirtualAddress $ SuSEMailCommand ) )
 
 objectclass ( MailOC:2 NAME 'SuSEVirtualDomainObject' SUP top AUXILIARY
         DESC 'to configure behaviour of virtual domains'
