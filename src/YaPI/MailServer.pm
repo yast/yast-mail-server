@@ -548,7 +548,7 @@ sub ReadMailTransports {
        my $Transport       = {};
        $Transport->{'Destination'}     = $ret->{$dn}->{'susemailtransportdestination'}->[0];
        if( $ret->{$dn}->{'susemailtransportnexthop'}->[0] =~ /:/) {
-         ($Transport->{'Transport'},$Transport->{'nexthop'}) = split /:/,$ret->{$dn}->{'susemailtransportnexthop'}->[0];
+         ($Transport->{'Transport'},$Transport->{'Nexthop'}) = split /:/,$ret->{$dn}->{'susemailtransportnexthop'}->[0];
        } else {
          $Transport->{'Nexthop'}         = $ret->{$dn}->{'susemailtransportnexthop'}->[0];
        }
@@ -565,7 +565,7 @@ sub ReadMailTransports {
        push @{$MailTransports{'Transports'}}, $Transport;
     }
     
-print STDERR Dumper(%MailTransports);
+#print STDERR Dumper(%MailTransports);
 
     #now we return the result
     return \%MailTransports;
@@ -653,14 +653,16 @@ sub WriteMailTransports {
     # Search hash to find all the Transport Objects
     my %SearchMap       = (
                                'base_dn' => $ldap_map->{'mail_config_dn'},
-                               'filter'  => "ObjectClass=SuSEMailTransport",
-                               'attrs'   => ['SuSEMailTransportDestination']
+                               'filter'  => "objectclass=susemailtransport",
+                               'map'     => 1,
+                               'scope'   => 2,
+                               'attrs'   => ['susemailtransportdestination']
                           );
 
     # First we have to clean the corresponding SaslPasswd entries in the hash
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
-    foreach my $entry (@{$ret}){    
-       write_attribute($SaslPasswd,$entry->{'SuSEMailTransportDestination'},'');
+    foreach my $key (keys %{$ret}){    
+       write_attribute($SaslPasswd,$ret->{$key}->{'susemailtransportdestination'},'');
     }
 
     # Now let's work
@@ -698,13 +700,16 @@ sub WriteMailTransports {
 
     # If there is no ERROR we do the changes
     # First we clean all the transport lists
-    $ret = SCR->Read('.ldap.search',\%SearchMap);
-    foreach my $entry (@{$ret}){    
-       SCR->Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
+    foreach my $key (keys %{$ret}){
+       if(! SCR->Write('.ldap.delete',{'dn'=>$key})){
+          my $ldapERR = SCR->Read(".ldap.error");
+          return $self->SetError(summary     => "LDAP delete failed",
+                                 code        => "SCR_WRITE_FAILED",
+                                 description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+       }
     }
 
     foreach my $dn (keys %Entries){
-print STDERR $dn;
        my $DN  = { 'dn' => $dn };
        my $tmp = { 'Objectclass'                  => [ 'SuSEMailTransport' ],
                    'SuSEMailTransportDestination' => $Entries{$dn}->{'SuSEMailTransportDestination'},
@@ -713,9 +718,9 @@ print STDERR $dn;
                  };
        if(! SCR->Write('.ldap.add',$DN,$tmp)){
           my $ldapERR = SCR->Read(".ldap.error");
-          return $self->SetError(summary => "LDAP add failed",
-                               code => "SCR_EXECUTE_FAILED",
-                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+          return $self->SetError(summary     => "LDAP add failed",
+                                 code        => "SCR_WRITE_FAILED",
+                                 description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
        }
     }
     SCR->Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
@@ -1344,7 +1349,7 @@ sub ReadLDAPDefaults {
                                     code => "HOST_NOT_FOUND");
         }
     }
-print STDERR Dumper([$ldapMap]);
+#print STDERR Dumper([$ldapMap]);
 
     if (! SCR->Execute(".ldap", {"hostname" => $ldapMap->{'ldap_server'},
                                  "port"     => $ldapMap->{'ldap_port'}})) {
