@@ -785,11 +785,8 @@ use MailServer;
         foreach(@{$MailPrevention->{RBLList}}) {
           print "Used RBL Server: $_\n";
         }
-        foreach(@{$MailPrevention->{AcceptedSenderList}}) {
-          print "E-Mails are accepted from: $_\n";
-        }
-        foreach(@{$MailPrevention->{RejectedSenderList}}) {
-          print "E-Mails are rejected from: $_\n";
+        foreach(@{$MailPrevention->{AccessList}}) {
+          print "Access for  $_{MailClient} is $_{MailAction}\n";
         }
         if($MailPrevention->{VirusScanning}){
           print "Virus scanning is activated\n";
@@ -888,6 +885,8 @@ sub ReadMailPrevention {
 BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
 sub WriteMailPrevention {
     my $self            = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
     my $MailPrevention  = shift;
 
     if(! $MailPrevention->{'Changed'}){
@@ -990,22 +989,122 @@ sub WriteMailPrevention {
     check_ldap_configuration('access');
 }
 
-##
- # Dump the mail-server server side relay settings to a single hash
- # @return hash Dumped settings (later acceptable by WriteMailRelaying ())
- #
+=item *
+C<$MailRelaying = ReadMailRelaying($admindn,$adminpwd)>
+
+ Dump the mail-server server side relay settings to a single hash
+ @return hash Dumped settings (later acceptable by WriteMailRelaying ())
+
+ $MailRelaying is a pointer to a hash containing the mail server
+ relay settings. This hash has following structure:
+
+ %MailRelaying    = (
+           'Changed'               => 0,
+             Shows if the hash was changed. Possible values are 0 (no) or 1 (yes).
+
+           'TrustedNetworks' => [''],
+             An array of trusted networks/hosts addresses
+
+           'RequireSASL'     => 1,
+             Show if SASL authotentication is required for sending external eMails.
+ 
+           'SMTPDTLSMode'    => 'use',
+             Shows how TLS will be used for smtpd connection.
+             Avaiable values are:
+             'none'      : no TLS will be used.
+             'use'       : TLS will be used if the client wants.
+             'enfoce'    : TLS must be used.
+             'auth_only' : TLS will be used only for SASL authentication.
+
+           'UserRestriction' => 0
+             If UserRestriction is set, there is possible to make user/group based 
+             restrictions for sending and getting eMails. Strickt authotentication
+             is requiered. To do so an 2nd interface for sending eMails for internal
+             clients will be set up. The system administrator have to care that the
+             other interface (external interface) can not be accessed from the internal
+             clients
+                          );
+
+  
+
+=cut
+
 BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any"  ]; }
 sub ReadMailRelaying {
     my $self            = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
     my %MailRelaying    = (
-                                'TrustedNetworks' => ['127.0.0.0/8'],
+                                'Changed'         => 0,
+                                'TrustedNetworks' => [''],
                                 'RequireSASL'     => 1,
-                                'RequireTSL'      => 1,
-                                'changed'         => 0
+                                'SMTPDTLSMode'    => 'use',
+                                'UserRestriction' => 0
                           );
 
+    # Make LDAP Connection 
+    my $ErrorSummary = read_ldap_settings();
+    if( $ErrorSummary  ne '' ) {
+         return $self->SetError( summary => $ErrorSummary,
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    if($AdminDN) {
+        $admin_bind->{'binddn'} = $AdminDN;
+    }
+    if($AdminPassword) {
+        $admin_bind->{'bindpw'} = $AdminPassword;
+    }
+    if(! SCR::Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
 
+    # First we read the main.cf
+    my $MainCf             = SCR::Read('.mail.postfix.main.table');
 
+    # Now we look if there are manual inclued mynetworks entries
+    my $TrustedNetworks    = read_attributes($MainCf,'mynetworks');
+    foreach(split /, |,/, $TrustedNetworks) { 
+       if(! /ldapmynetworks/) {
+          push @{$MailRelaying{'TrustedNetworks'}}, $_;
+       }
+    }
+
+    #Now we have a look on the mynetworks ldaptable
+    my %SearchMap = (
+                   'base_dn' => $mail_basedn,
+                   'filter'  => "ObjectClass=SuSEMailMyNetorks"
+                   'attrs'   => ['SuSEMailClient']
+                 );
+    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+
+    foreach my $entry (@{$ret}){
+        foreach(@{$entry->{'SuSEMailClient'}}) {
+          push @{$MailRelaying{'TrustedNetworks'}}, $_;
+        }
+    }
+
+    my $smtpd_recipient_restrictions = read_attributes($MainCf,'smtpd_recipient_restrictions');
+    my $smtpd_sasl_auth_enable       = read_attributes($MainCf,'smtpd_sasl_auth_enable');
+    my $smtpd_use_tls                = read_attributes($MainCf,'smtpd_use_tls');
+    my $smtpd_enforce_tls            = read_attributes($MainCf,'smtpd_enforce_tls');
+    my $smtpd_tls_auth_only          = read_attributes($MainCf,'smtpd_tls_auth_only');
+    if($smtpd_use_tls eq 'no') {
+       $MailRelaying{'SMTPDTLSMode'} = 'none';
+    }
+    if($smtpd_enforce_tls eq 'on') {
+       $MailRelaying{'SMTPDTLSMode'} = 'enfoce';
+    }
+    if($smtpd_tls_auth_only eq 'on') {
+       $MailRelaying{'SMTPDTLSMode'} = 'auth_only';
+    } 
+    if($smtpd_sasl_auth_enable eq 'on') {
+       $MailRelaying{'RequireSASL'}  = 1;
+    }
 }
 
 ##
@@ -1013,8 +1112,10 @@ sub ReadMailRelaying {
  #
 BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
 sub WriteMailRelaying {
-    my $self          = shift;
-    my $MailRelaying  = shift;
+    my $self            = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
+    my $MailRelaying    = shift;
 
 }
 
@@ -1116,16 +1217,19 @@ sub check_ldap_configuration {
                         'transport' => '(&(objectclass=SuSEMailTransport)(SuSEMailTransportDestination=%s))',
                         'peertls'   => '(&(objectclass=SuSEMailTransport)(SuSEMailTransportDestination=%s))',
                         'access'    => '(&(objectclass=SuSEMailAccess)(SuSEMailClient=%s))'
+                        'mynetworks'=> '(&(objectclass=SuSEMailMyNetworks)(SuSEMailClient=%s))'
                        );
     my %result_attribute = (
                         'transport' => 'SuSEMailTransportNexthop',
                         'peertls'   => 'SuSEMailTransportTLS',
                         'access'    => 'SuSEMailAction'
+                        'mynetworks'=> 'SuSEMailClient'
                        );
     my %scope            = (
                         'transport' => 'one',
                         'peertls'   => 'one',
                         'access'    => 'one'
+                        'mynetworks'=> 'one'
                        );
 
     #First we read the whool main.cf configuration
