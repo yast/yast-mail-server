@@ -188,7 +188,11 @@ sub ReadGlobalSettings {
 
     my $MainCf    = SCR::Read('.mail.postfix.main.table');
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
-    
+    if( ! SCR::Read('.mail.postfix.master') ) {
+	# TODO for VaRkoLLY
+	SetErORRR();
+    }
+
     # Reading maximal size of transported messages
     $GlobalSettings{'MaximumMailSize'}           = read_attribute($MainCf,'message_size_limit');
 
@@ -210,7 +214,10 @@ sub ReadGlobalSettings {
         }
     } else {
         #TODO Looking if smtp service is started
-        if(!WASAUCHIMMER) {
+	my $smtpsrv = SCR::Execute('.mail.postfix.master.findService',
+		{ 'service' => 'smtp',
+		  'command' => 'smtp' });
+        if( defined $smtpsrv ) {
             $GlobalSettings{'SendingMail'}{'Type'} = 'DNS';
 	} else {   
             $GlobalSettings{'SendingMail'}{'Type'} = 'NONE';
