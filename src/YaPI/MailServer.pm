@@ -972,11 +972,11 @@ C<$MailRelaying = ReadMailRelaying($AdminUser,$adminpwd)>
            'Changed'               => 0,
              Shows if the hash was changed. Possible values are 0 (no) or 1 (yes).
 
-           'TrustedNetworks' => [''],
+           'TrustedNetworks' => [],
              An array of trusted networks/hosts addresses
 
            'RequireSASL'     => 1,
-             Show if SASL authotentication is required for sending external eMails.
+             Show if SASL authentication is required for sending external eMails.
  
            'SMTPDTLSMode'    => 'use',
              Shows how TLS will be used for smtpd connection.
@@ -1006,7 +1006,7 @@ sub ReadMailRelaying {
     my $AdminPassword   = shift;
     my %MailRelaying    = (
                                 'Changed'         => 0,
-                                'TrustedNetworks' => [''],
+                                'TrustedNetworks' => [],
                                 'RequireSASL'     => 1,
                                 'SMTPDTLSMode'    => 'use',
                                 'UserRestriction' => 0
@@ -1024,9 +1024,13 @@ sub ReadMailRelaying {
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     # Now we look if there are manual inclued mynetworks entries
-    my $TrustedNetworks    = read_attribute($MainCf,'mynetworks');
-    foreach(split /, |,/, $TrustedNetworks) { 
-       if(! /ldapmynetworks/) {
+    # my $TrustedNetworks    = read_attribute($MainCf,'mynetworks');
+    my $TrustedNetworks = `postconf mynetworks`;
+    $TrustedNetworks =~ /mynetworks = (.*)/;
+    $TrustedNetworks = $1;
+    chomp $TrustedNetworks;
+    foreach(split /, |,| /, $TrustedNetworks) { 
+       if(! /ldapmynetworks/ && /\w+/) {
           push @{$MailRelaying{'TrustedNetworks'}}, $_;
        }
     }

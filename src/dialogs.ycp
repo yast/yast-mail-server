@@ -56,11 +56,6 @@ define any AuthorizingDialog () {
 			Popup::Error(_("Unable to authorize the Administrator User"));
 			continue;
 		}
-                y2milestone("mail_config_dn %1",MailServer::LDAPDefaults["mail_config_dn"]:"");
-                y2milestone("user_config_dn %1",MailServer::LDAPDefaults["user_config_dn"]:"");
-                y2milestone("DNS_config_dn %1",MailServer::LDAPDefaults["DNS_config_dn"]:"");
-                y2milestone("binddn %1",MailServer::LDAPDefaults["bind_dn"]:"");
-                y2milestone("bindpw %1",MailServer::LDAPDefaults["bind_pw"]:"");
                 return ret;
 	} else {
             y2error("unexpected retcode: %1", ret);
@@ -82,17 +77,210 @@ list<map> GenerateTree(list<map> Tree, string parent, list<list> input) {
                 Tree = GenerateTree(Tree, title, children);
             }
     });
-y2milestone("Tree=%1", Tree);
     return Tree;
 }
 
 term GlobalSettingsDialog() {
-  term content = `Frame("GlobalSettingsDialog",
-                     `VBox (
-                                `TextEntry(`id(`MaximumMailSize),  _("Maximum Mail Size"),(string)MailServer::GlobalSettings["MaximumMailSize"]:""),
-                                `TextEntry(`id(`Banner),           _("Banner"),(string)MailServer::GlobalSettings["Banner"]:"SuSE Linux Mail Server")
-                           )
-                       );
+  boolean limit     = ((string)MailServer::GlobalSettings["MaximumMailSize"]:"0" != "0");
+  boolean is_DNS    = ((string)MailServer::GlobalSettings["SendingMail","Type"]:"" == "DNS");
+  boolean is_NONE   = ((string)MailServer::GlobalSettings["SendingMail","Type"]:"" == "NONE");
+  boolean is_RELAY  = ((string)MailServer::GlobalSettings["SendingMail","Type"]:"" == "relayhost");
+  boolean TLS_NONE  = ((string)MailServer::GlobalSettings["SendingMail","TLS"]:""  == "NONE");
+  boolean TLS_MAY   = ((string)MailServer::GlobalSettings["SendingMail","TLS"]:""  == "MAY");
+  boolean TLS_MUST  = ((string)MailServer::GlobalSettings["SendingMail","TLS"]:""  == "MUST");
+  boolean TLS_MUSTN = ((string)MailServer::GlobalSettings["SendingMail","TLS"]:""  == "MUST_NOPEERMATCH");
+  boolean auth      = ((string)MailServer::GlobalSettings["SendingMail","RelayHost","Auth"]:"0" == "1");
+  string  hostname  = (string)MailServer::GlobalSettings["SendingMail","RelayHost","Name"]:"";
+  string  account   = (string)MailServer::GlobalSettings["SendingMail","RelayHost","Account"]:"";
+  string  password  = (string)MailServer::GlobalSettings["SendingMail","RelayHost","Password"]:"";
+
+  // I don't know if it hase a sence to use MUST_NOPEERMATCH.
+  if(TLS_MUSTN){ TLS_MUST = TLS_MUSTN; }
+
+
+  term  relayhost =  `VBox(
+                    `TextEntry(`id(`RelayHostName), _("Hostname / IP"), hostname),
+                    `CheckBox(`id(`RelayHostAuth), `opt (`notify),  _("Relay host need Authentication"), auth),
+                    `Frame("",
+                      `VBox(
+                        `TextEntry(`id(`RelayHostAccount),  _("Account"), account),
+                        `Password(`id(`Password1),  _("Password"), password),
+                        `Password(`id(`Password2),  _("Confirm Passowrd"), password)
+                       )
+                     )
+                   );
+  if( is_RELAY && ! auth) {
+       relayhost =  `VBox(
+                    `TextEntry(`id(`RelayHostName), _("Hostname / IP"), hostname),
+                    `CheckBox(`id(`RelayHostAuth),  `opt (`notify), _("Relay host need Authentication"), auth),
+                    `Frame("",
+                      `VBox(
+                        `TextEntry(`id(`RelayHostAccount),  `opt(`disabled), _("Account"), account),
+                        `Password(`id(`Password1), `opt(`disabled), _("Password"), password),
+                        `Password(`id(`Password2), `opt(`disabled), _("Confirm Passowrd"), password)
+                       )
+                     )
+                   );
+  } else if( ! is_RELAY ) {
+       relayhost =  `VBox(
+                    `TextEntry(`id(`RelayHostName), `opt(`disabled), _("Hostname / IP"), hostname),
+                    `CheckBox(`id(`RelayHostAuth),      `opt(`disabled), _("Relay host need Authentication"), auth),
+                    `Frame("",
+                      `VBox(
+                        `TextEntry(`id(`RelayHostAccount),  `opt(`disabled), _("Account"), account),
+                        `Password(`id(`Password1), `opt(`disabled), _("Password"), password),
+                        `Password(`id(`Password2), `opt(`disabled), _("Confirm Passowrd"), password)
+                       )
+                     )
+                   );
+  }
+
+  term MaximumMailSize = `TextEntry(`id(`MaximumMailSize), "",(string)MailServer::GlobalSettings["MaximumMailSize"]:"");
+  if(!limit) {
+    MaximumMailSize = `TextEntry(`id(`MaximumMailSize), `opt(`disabled),"",(string)MailServer::GlobalSettings["MaximumMailSize"]:"");
+  }
+
+  term content = `VBox (
+       `Frame(_("Message Size"),
+         `RadioButtonGroup(`id(`MailSize),
+           `HBox(
+             `RadioButton(`id("MailSizeNoLimit"), `opt (`notify), _("No Limit"), !limit),
+             `RadioButton(`id("MailSizeLimit"), `opt (`notify), _("Maximum Mail Size"), limit),
+             MaximumMailSize,
+             `Label("KByte")
+            )
+          )
+        ),
+       `VStretch(),
+       `Frame(_("Server Identification"),
+            `TextEntry(`id(`Banner), "" ,(string)MailServer::GlobalSettings["Banner"]:"SuSE Linux Mail Server")
+        ),
+       `VStretch(),
+       `Frame(_("Outgoing Mails"),
+         `HBox(
+           `HWeight(1,
+              `VBox(
+                `VStretch(),
+                `RadioButtonGroup(`id(`SendingMailType),
+                  `VBox(
+                    `Left(`RadioButton(`id("relayhost"), `opt (`notify), _("Use Relay Host"), is_RELAY)),
+                    `Left(`RadioButton(`id("DNS"),       `opt (`notify), _("Direct Delivery (DNS)"), is_DNS)),
+                    `Left(`RadioButton(`id("NONE"),      `opt (`notify), _("No Outgoing Mail"), is_NONE))
+                   )
+                 ),
+                `VStretch(),
+                `RadioButtonGroup(`id(`SendingMailTLS),
+                   `HBox(
+                      `Frame(_("Security"),
+                        `VBox(
+                           `Left(`RadioButton(`id("NONE"),             _("Do not use TLS"), TLS_NONE)),
+                           `Left(`RadioButton(`id("MAY"),              _("Use TLS if Possible"), TLS_MAY)),
+                           `Left(`RadioButton(`id("MUST"),             _("Enforce TLS"), TLS_MUST))
+      //                  ,`Left(`RadioButton(`id("MUST_NOPEERMATCH"), _("Use Relay Host"), TLS_MUSTN))
+                         )
+                      ),
+                      `HStretch()
+                   )
+                 ),
+                `VStretch()
+               )
+            ),
+           `HWeight(1,
+              `VBox(
+                `Frame(_("Relay Host Settings"),relayhost
+                 )
+               )
+            )
+          )
+        )
+   );
+
+  return content;
+}
+
+term MailTransportsDialog() {
+  term content = `VBox (
+   );
+  return content;
+}
+
+term MailPreventionDialog() {
+  term content = `VBox (
+   );
+  return content;
+}
+
+term MailRelayingDialog() {
+  boolean UserRestriction = ((string)MailServer::MailRelaying["UserRestriction"]:"0" == "1");
+  boolean RequireSASL     = ((string)MailServer::MailRelaying["RequireSASL"]:"0" == "1");
+  boolean SMTPDTLSnone    = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "none");
+  boolean SMTPDTLSuse     = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "use");
+  boolean SMTPDTLSenforce = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "enforce");
+  boolean SMTPDTLSauth_only    = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "auth_only");
+  list  networks          = (list) MailServer::MailRelaying["TrustedNetworks"]:[];
+  list  network_items     = [];
+  integer networkid       = 0;
+
+  foreach(`network,networks, ``{
+    term my_item = `item( `id("LocalNetwork"+networkid), network);
+    network_items = add(network_items,my_item);
+    networkid = networkid+1;
+  });
+
+  term content = `VBox (
+     `Frame(_("Trusted Local Networks"),
+       `VBox(
+         `Frame(_("New Network"),
+           `HBox(
+               `TextEntry(`id(`NewNetwork),     "", ""),
+               `PushButton(`id(`AddNewNetwork), _("Add"))
+            )
+          ),
+         `Frame("",
+           `HBox(
+             `Table(`id(`TrustedNetworks), `header(_("Network")),network_items),
+             `PushButton(`id(`DeleteNetwork), _("Delete"))
+            )
+          )
+       )
+     ),
+    `Frame(_("Security Settings for Sending Mail via the Server"),
+      `HBox(
+        `VBox(
+          `Left(`CheckBox(`id(`UserRestriction),`opt (`notify),_("Use User/Group Based Restrictions"),UserRestriction)),
+          `Left(`CheckBox(`id(`RequireSASL),_("Require SASL Authentication"),RequireSASL))
+         ),
+        `Frame(_("TLS Mode for the SMTPD Daemon"),
+          `RadioButtonGroup(`id(`SMTPDTLSMode),
+             `VBox(
+                `Left(`RadioButton(`id(`SMTPDTLSnone),     _("No TLS"),SMTPDTLSnone)),
+                `Left(`RadioButton(`id(`SMTPDTLSuse),      _("Use TLS"),SMTPDTLSuse)),
+                `Left(`RadioButton(`id(`SMTPDTLSenforce),  _("Enforce TLS"),SMTPDTLSenforce)),
+                `Left(`RadioButton(`id(`SMTPDTLSauth_only),_("Use TLS only for SASL authentication"),SMTPDTLSauth_only))
+              )
+           )
+         )
+      )
+    )
+   );
+  return content;
+}
+
+term MailLocalDeliveryDialog() {
+  term content = `VBox (
+   );
+  return content;
+}
+
+term FetchingMailDialog() {
+  term content = `VBox (
+   );
+  return content;
+}
+
+term MailLocalDomainsDialog() {
+  term content = `VBox (
+   );
   return content;
 }
 
@@ -104,18 +292,105 @@ any ComplexDialog() {
 
    string helptext = "Bla Bla Bla";
    term content = GlobalSettingsDialog();
+   string FocusedContent = "GlobalSettings";
 
-   Wizard::SetContents(_("Mail Server Configuration"),
-                        `ReplacePoint(`id(`replace),
-                               content
-                         )
-                      ,helptext, true, true);
+   Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, true, true);
 
-   any ret = nil;
+   any ret       = nil;
+   any EventType = nil;
    while(ret != `cancel && ret != `abort && ret != `next )
    {
+        boolean focus_changed     = false;
+        string  OldFocusedContent = FocusedContent;
         map event = UI::WaitForEvent();
-        ret = event["ID"]:nil;
+        ret       = event["ID"]:nil;
+        EventType = event["EventType"]:nil;
+
+        //If anithing happenend we save the changes into the global maps
+        if(FocusedContent == "GlobalSettings") {
+           MailServer::GlobalSettings["Changed"]            = true;
+           if(UI::QueryWidget(`id(`MailSize), `CurrentButton) == "MailSizeLimit") {
+             MailServer::GlobalSettings["MaximumMailSize"]    = UI::QueryWidget(`id(`MaximumMailSize), `Value);
+             if(UI::QueryWidget(`id(`MaximumMailSize), `Value) == "0" ) {
+               MailServer::GlobalSettings["MaximumMailSize"]    = "1";
+             }
+           } else {
+             MailServer::GlobalSettings["MaximumMailSize"]    = "0";
+           }
+           MailServer::GlobalSettings["Banner"]             = UI::QueryWidget(`id(`Banner), `Value);
+           MailServer::GlobalSettings["SendingMail","Type"] = UI::QueryWidget(`id(`SendingMailType), `CurrentButton);
+           MailServer::GlobalSettings["SendingMail","TLS"]  = UI::QueryWidget(`id(`SendingMailTLS), `CurrentButton);
+           MailServer::GlobalSettings["SendingMail","RelayHost","Name"]     = "";
+           MailServer::GlobalSettings["SendingMail","RelayHost","Auth"]     = "0";
+           MailServer::GlobalSettings["SendingMail","RelayHost","Account"]  = "";
+           MailServer::GlobalSettings["SendingMail","RelayHost","Password"] = "";
+
+           if(MailServer::GlobalSettings["SendingMail","Type"]:"relayhost" == "relayhost"){
+              MailServer::GlobalSettings["SendingMail","RelayHost","Name"] = UI::QueryWidget(`id(`RelayHostName), `Value);
+              if((boolean)UI::QueryWidget(`id(`RelayHostAuth), `Value)){
+                string password1 = (string)UI::QueryWidget(`id(`Password1), `Value);
+                string password2 = (string)UI::QueryWidget(`id(`Password2), `Value);
+                if( password1 != password2) {
+                    Report::Error(_("The passwords are not identical."));
+                    continue;
+                }
+                MailServer::GlobalSettings["SendingMail","RelayHost","Auth"]     = "1";
+                MailServer::GlobalSettings["SendingMail","RelayHost","Account"]  = UI::QueryWidget(`id(`RelayHostAccount), `Value);
+                MailServer::GlobalSettings["SendingMail","RelayHost","Password"] = password1;
+              }
+           }
+           content        = GlobalSettingsDialog();
+           helptext       = HELPS["GlobalSettings"]:"Bla Bla Bla";
+        } else if(FocusedContent == "MailRelaying") {
+          MailServer::MailRelaying["Changed"]            = true;
+          list<list> Networks = (list<list>)UI::QueryWidget(`id(`TrustedNetworks), `Items);
+          string ci    =  (string)UI::QueryWidget(`id(`TrustedNetworks), `CurrentItem);
+y2milestone("Networks %1",Networks);
+y2milestone("ci %1",ci);
+        }
+        if(ret == "GlobalSettings" && FocusedContent != "GlobalSettings") {
+           content        = GlobalSettingsDialog();
+           helptext       = HELPS["GlobalSettings"]:"Bla Bla Bla";
+           focus_changed  = true;
+           FocusedContent ="GlobalSettings";
+        } else if(ret == "MailTransports" && FocusedContent != "MailTransports") {
+           content        = MailTransportsDialog();
+           helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
+           focus_changed  = true;
+           FocusedContent ="MailTransports";
+        } else if(ret == "MailPrevention" && FocusedContent != "MailPrevention") {
+           content        = MailPreventionDialog();
+           helptext       = HELPS["MailPrevention"]:"Bla Bla Bla";
+           focus_changed  = true;
+           FocusedContent ="MailPrevention";
+        } else if(ret == "MailRelaying" && FocusedContent != "MailRelaying") {
+           content        = MailRelayingDialog();
+           helptext       = HELPS["MailRelaying"]:"Bla Bla Bla";
+           focus_changed  = true;
+           FocusedContent ="MailRelaying";
+        } else if(ret == "MailLocalDelivery" && FocusedContent != "MailLocalDelivery") {
+           content        = MailLocalDeliveryDialog();
+           helptext       = HELPS["MailLocalDelivery"]:"Bla Bla Bla";
+           focus_changed  = true;
+           FocusedContent ="MailLocalDelivery";
+        } else if(ret == "FetchingMail" && FocusedContent != "FetchingMail") {
+           content        = FetchingMailDialog();
+           helptext       = HELPS["FetchingMail"]:"Bla Bla Bla";
+           focus_changed  = true;
+           FocusedContent ="FetchingMail";
+        } else if(ret == "MailLocalDomains" && FocusedContent != "MailLocalDomains") {
+           content        = MailLocalDomainsDialog();
+           helptext       = HELPS["MailLocalDomains"]:"Bla Bla Bla";
+           focus_changed  = true;
+           FocusedContent ="MailLocalDomains";
+        }
+y2milestone("event %1",event);
+y2milestone("event %1",ret);
+y2milestone("FocusedContent %1",FocusedContent);
+//        if(focus_changed) {
+          Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, true, true);
+//          continue;
+//        }
    }
 
    return ret;
