@@ -3,8 +3,8 @@
 #
 package MasterCFParser;
 use strict;
-
-*logger = myLOG();
+use Data::Dumper;
+no warnings 'redefine';
 
 ######################################################################################
 # external (public functions/methods)
@@ -12,7 +12,12 @@ use strict;
 
 sub new {
     my $this  = shift;
-    my $path  = shift  || "/etc/postfix";
+    my $path   = shift  || "/etc/postfix";
+    my $logref = shift;
+
+    if( defined $logref && $logref ne "" ) {
+	*logger = $logref;
+    }
 
     my $class = ref($this) || $this;
     my $self = {};
@@ -30,7 +35,7 @@ sub readMasterCF {
     
     if( ! open($fd, $cf) ) {
 	logger("unable to open $cf\n");
-	return;
+	return 1;
     }
     
     my @CFA = <$fd>;
@@ -42,7 +47,7 @@ sub readMasterCF {
 	my $line;
 	if( $CFA[$c] =~ /^\s+/ ) {
 	    logger("Syntax error in $cf, line ".($c+1)."\n");
-	    return;
+	    return 1;
 	}
 	$line = $CFA[$c];
 	while( defined $CFA[$c+1] && $CFA[$c+1] =~ /^\s+/ ) {
@@ -52,6 +57,7 @@ sub readMasterCF {
 	push @$cfa, line2service($line);
     }
     $this->{MCF} = $cfa;
+    return 0;
 }
 
 sub writeMasterCF {
@@ -176,7 +182,7 @@ sub getRAWCF {
 # internal (private functions/methods)
 ######################################################################################
 
-sub myLOG {
+sub logger {
     my $line = shift || "";
     print STDERR "$line";
 }
