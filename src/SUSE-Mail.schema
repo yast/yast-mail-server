@@ -20,19 +20,25 @@ attributetype ( MailAT:1 NAME ( 'SuSEMailAcceptAddress' )
         SUBSTR caseIgnoreIA5SubstringsMatch
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
 
-attributetype ( MailAT:2 NAME ( 'SuSEVirtualAddress' )
+attributetype ( MailAT:2 NAME ( 'SuSEMailRejectAddress' )
+        DESC 'RFC 822 email address'
+        EQUALITY caseIgnoreIA5Match 
+        SUBSTR caseIgnoreIA5SubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
+
+attributetype ( MailAT:3 NAME ( 'SuSEVirtualAddress' )
         DESC 'virtual address'
         EQUALITY caseIgnoreIA5Match
         SUBSTR caseIgnoreIA5SubstringsMatch
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
 
-attributetype ( MailAT:3 NAME ( 'SuSEMailAlias' )
+attributetype ( MailAT:4 NAME ( 'SuSEMailAlias' )
         DESC 'email alias'
         EQUALITY caseIgnoreIA5Match
         SUBSTR caseIgnoreIA5SubstringsMatch
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
 
-attributetype ( MailAT:4 NAME ( 'SuSEMailCommand' )
+attributetype ( MailAT:5 NAME ( 'SuSEMailCommand' )
         DESC 'for aliases which must be expanded to a command'
         EQUALITY caseIgnoreIA5Match
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} SINGLE-VALUE )
@@ -53,15 +59,19 @@ attributetype ( MailAT:8 NAME ( 'SuSEMailTransportDestination' )
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
 
 attributetype ( MailAT:9 NAME ( 'SuSEMailTransportNexthop' )
-	DESC 'The to be connected in the transport table
-	      Containing port & [] resp'
+	DESC 'The server to be connected in the transport table Containing port & [] resp'
         EQUALITY caseIgnoreMatch
         SUBSTR caseIgnoreSubstringsMatch
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
 
 attributetype ( MailAT:10 NAME ( 'SuSEMailTransportTLS' )
-	DESC 'The to be connected in the transport table
-	      Containing port & [] resp'
+	DESC 'Shows how tls will be used: NONE | MAY | MUST | MUST_NOPEERMATCH'
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+attributetype ( MailAT:11 NAME ( 'SuSEMailAction' )
+	DESC 'Is the right hand value of many postmaps'
         EQUALITY caseIgnoreMatch
         SUBSTR caseIgnoreSubstringsMatch
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
@@ -82,4 +92,9 @@ objectclass ( MailOC:3 NAME 'SuSEMailTransportObject' SUP top STRUCTURAL
         DESC 'To build transport maps in LDAP'
         MUST ( SuSEMailTransportDestination $ SuSEMailTransportNexthop  )
         MAY  ( SuSEMailTransportTLS $ description ) )
+
+objectclass ( MailOC:4 NAME 'SuSEMailAccess' SUP top STRUCTURAL
+        DESC 'To build access maps in LDAP'
+        MUST ( mail $ SuSEMailAction  )
+        MAY  ( description ) )
 

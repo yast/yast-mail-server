@@ -700,41 +700,109 @@ sub WriteMailTransports {
     return 1;
 }
 
-##
- # Dump the mail-server prevention to a single hash
- # @return hash Dumped settings (later acceptable by WriteMailPrevention())
- #
-BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any"  ]; }
+=item *
+C<$MailPrevention = ReadMailPrevention($admindn,$adminpwd)>
+
+ Dump the mail-server prevention to a single hash
+ @return hash Dumped settings (later acceptable by WriteMailPrevention())
+
+ Postfix offers a variety of parameters that limit the delivery of 
+ unsolicited commercial email (UCE). 
+
+ By default, the Postfix SMTP server will accept mail only from or to the
+ local network or domain, or to domains that are hosted by Postfix, so that
+ your system can't be used as a mail relay to forward bulk mail from random strangers.
+
+ There is a lot of combination of the postfix configuration parameter 
+ you can set. To make the setup easier we have defined three kind of predefined
+ settings: 
+   off:
+        Accept connections from all clients even if  the client IP address has no 
+        PTR (address to name) record in the DNS. 
+   medium:
+        
+   hard:
+
+ $MailPrevention is a pointer to a hash containing the mail server
+ basic prevention settings. This hash has following structure:
+
+
+ my %MailPrevention      = (
+           'Changed'               => 0,
+             Shows if the hash was changed. Possible values are 0 (no) or 1 (yes).
+
+           'BasicProtection'        => 'hard',
+           'RBLList'               => [],
+           'AcceptedSenderList'    => ['*'],
+           'RejectedSenderList'    => [],
+           'VirusScanning'         => 1
+                          );
+EXAMPLE:
+
+use MailServer;
+
+    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminPassword   = "VerySecure";
+    my $MailPrevention  = [];
+
+    if( $MailPrevention = ReadMailPrevention($AdminDN,$AdminPassword) ) {
+        print "Basic BasicProtection : $MailPrevention->{BasicProtection}\n";
+        foreach(@{$MailPrevention->{RBLList}}) {
+          print "Used RBL Server: $_\n";
+        }
+        foreach(@{$MailPrevention->{AcceptedSenderList}}) {
+          print "E-Mails are accepted from: $_\n";
+        }
+        foreach(@{$MailPrevention->{RejectedSenderList}}) {
+          print "E-Mails are rejected from: $_\n";
+        }
+        if($MailPrevention->{VirusScanning}){
+          print "Virus scanning is activated\n";
+        } else {
+          print "Virus scanning isn't activated\n";
+        }
+    } else {
+        print "ERROR in ReadMailPrevention\n";
+    }
+
+=cut
+
+BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any", "string", "string"  ]; }
 sub ReadMailPrevention {
     my $self            = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
+
     my %MailPrevention      = (
-                               'Changed'               => 0,
-			       'SPAMprotection'        => 'hard',
-			       'RPLList'               => [],
-			       'AcceptedSenderList'    => ['*'],
-			       'RejectedSenderList'    => [],
-			       'VirusScanning'         => 1
+                               'Changed'                    => 0,
+			       'BasicProtection'            => 'hard',
+			       'RBLList'                    => [],
+			       'AcceptedSenderAddressList'  => ['*'],
+			       'RejectedSenderAddressList'  => [],
+			       'AcceptedSenderDomainList'   => ['*'],
+			       'RejectedSenderDomainList'   => [],
+			       'VirusScanning'              => 1
                           );
     # First we read the main.cf
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
 
-    # We ar looking for the SPAM Basic Prevention
+    # We ar looking for the BasicProtection Basic Prevention
     my $smtpd_helo_restrictions = read_attribute($MainCf,'smtpd_helo_restrictions');
     if( $smtpd_helo_restrictions !~ /reject_invalid_hostname/ ) {
        my $smtpd_helo_required  = read_attribute($MainCf,'smtpd_helo_required');
        if( $smtpd_helo_required =~ /no/ ) {
-         $MailPrevention{'SPAMprotection'} =  'off';    
+         $MailPrevention{'BasicProtection'} =  'off';    
        } else {
-         $MailPrevention{'SPAMprotection'} =  'medium';
+         $MailPrevention{'BasicProtection'} =  'medium';
        }
     }
 
-    # If the SPAM Basic Prevention is not off we collect the list of the RPL hosts
-    if($MailPrevention{'SPAMprotection'} ne 'off') {
+    # If the BasicProtection Basic Prevention is not off we collect the list of the RBL hosts
+    if($MailPrevention{'BasicProtection'} ne 'off') {
        my $smtpd_client_restrictions = read_attribute($MainCf,'smtpd_client_restrictions');
        foreach(split /, |,/, $smtpd_client_restrictions){
           if(/reject_rbl_client (\w+)/){
-	    push @{$MailPrevention{RPLList}}, $_;
+	    push @{$MailPrevention{RBLList}}, $_;
 	  }
        }
     }
@@ -757,9 +825,9 @@ sub WriteMailPrevention {
     # First we read the main.cf
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
 
-    #Collect the RPL host list
+    #Collect the RBL host list
     my $clnt_restrictions = '';
-    foreach(@{$MailPrevention->{'RPLList'}){
+    foreach(@{$MailPrevention->{'RBLList'}){
       if($clnt_restrictions eq '') {
           $clnt_restrictions="reject_rbl_client $_";
       } else {
@@ -767,7 +835,7 @@ sub WriteMailPrevention {
       }
     }
 
-    if($MailPrevention->{'SPAMprotection'} eq 'hard') {
+    if($MailPrevention->{'BasicProtection'} eq 'hard') {
       #Write hard settings 
        write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access, reject_unknown_sender_domain');   
        write_attribute($MainCf,'smtpd_helo_required','yes');   
@@ -779,7 +847,7 @@ sub WriteMailPrevention {
        }  else {
           write_attribute($MainCf,'smtpd_client_restrictions','permit_mynetworks, reject_unknown_client');
        }
-    } elsif($MailPrevention->{'SPAMprotection'} eq 'medium') {
+    } elsif($MailPrevention->{'BasicProtection'} eq 'medium') {
       #Write medium settings  
        write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access, reject_unknown_sender_domain');   
        write_attribute($MainCf,'smtpd_helo_required','yes');   
@@ -791,7 +859,7 @@ sub WriteMailPrevention {
        }  else {
           write_attribute($MainCf,'smtpd_client_restrictions','');
        }
-    } elsif($MailPrevention->{'SPAMprotection'} eq 'off') {
+    } elsif($MailPrevention->{'BasicProtection'} eq 'off') {
       # Write off settings  
        write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access');   
        write_attribute($MainCf,'smtpd_helo_required','no');   
@@ -801,7 +869,7 @@ sub WriteMailPrevention {
        write_attribute($MainCf,'smtpd_client_restrictions','');
     } else {
       # Error no such value
-         return $self->SetError( summary =>_("Unknown SPAMprotection mode. Allowed values are: hard, medium, off"),
+         return $self->SetError( summary =>_("Unknown BasicProtection mode. Allowed values are: hard, medium, off"),
                                  code    => "PARAM_CHECK_FAILED" );
     }
 }
