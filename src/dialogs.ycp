@@ -225,7 +225,7 @@ term MailTransportsDialog(integer CurrentItem) {
   string    Server          = "";
   boolean   NOMX            = true;
   string    TLS             = "";
-  boolean   Auth            = false;
+  boolean   Auth            = true;
   string    Account         = "";
   string    Password        = "";
   boolean   TransportTLSnone    = false;
@@ -334,17 +334,51 @@ term MailRelayingDialog() {
   boolean SMTPDTLSnone    = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "none");
   boolean SMTPDTLSuse     = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "use");
   boolean SMTPDTLSenforce = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "enforce");
-  boolean SMTPDTLSauth_only    = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "auth_only");
-  list    Networks        = (list) MailServer::MailRelaying["TrustedNetworks"]:[];
-  list    Network_items   = [];
-  integer NetworkID       = 1;
+  boolean SMTPDTLSauth_only = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "auth_only");
+  list<string> Networks     = (list<string>) MailServer::MailRelaying["TrustedNetworks"]:[];
+  list    Network_items     = [];
+  integer NetworkID         = 1;
 
-  foreach(`Network,Networks, ``{
+  foreach(string Network, Networks, ``{
     term my_item = `item( `id(NetworkID), Network);
     Network_items = add(Network_items,my_item);
     NetworkID = NetworkID+1;
   });
 
+   term security = `HBox(
+        `VBox(
+          `Left(`CheckBox(`id(`UserRestriction),`opt (`notify),_("Use User/Group Based Restrictions"),UserRestriction)),
+          `Left(`CheckBox(`id(`RequireSASL),_("Require SASL Authentication"),RequireSASL))
+         ),
+        `Frame(_("TLS Mode for the SMTPD Daemon"),
+          `RadioButtonGroup(`id(`SMTPDTLSMode),
+             `VBox(
+                `Left(`RadioButton(`id("none"),     _("No TLS"),SMTPDTLSnone)),
+                `Left(`RadioButton(`id("use"),      _("Use TLS"),SMTPDTLSuse)),
+                `Left(`RadioButton(`id("enforce"),  _("Enforce TLS"),SMTPDTLSenforce)),
+                `Left(`RadioButton(`id("auth_only"),_("Use TLS only for SASL authentication"),SMTPDTLSauth_only))
+              )
+           )
+         )
+      );
+  if(UserRestriction){
+    security = `HBox(
+        `VBox(
+          `Left(`CheckBox(`id(`UserRestriction),`opt (`notify), _("Use User/Group Based Restrictions"),true)),
+          `Left(`CheckBox(`id(`RequireSASL),    `opt(`disabled),_("Require SASL Authentication"),true))
+         ),
+        `Frame(_("TLS Mode for the SMTPD Daemon"),
+          `RadioButtonGroup(`id(`SMTPDTLSMode),
+             `VBox(
+                `Left(`RadioButton(`id("none"),     `opt(`disabled), _("No TLS"),     false)),
+                `Left(`RadioButton(`id("use"),      `opt(`disabled), _("Use TLS"),    false)),
+                `Left(`RadioButton(`id("enforce"),  _("Enforce TLS"),SMTPDTLSenforce)),
+                `Left(`RadioButton(`id("auth_only"),_("Use TLS only for SASL authentication"),SMTPDTLSauth_only))
+              )
+           )
+         )
+      );
+  }
   term content = `VBox (
      `Frame(_("Trusted Local Networks"),
        `VBox(
@@ -354,32 +388,16 @@ term MailRelayingDialog() {
                `PushButton(`id(`AddNewNetwork), _("Add"))
             )
           ),
-         `Frame("",
+         `Frame(_("Defined Trusted Networks"),
            `HBox(
-             `Table(`id(`TrustedNetworks), `header(_("Network")),Network_items),
+//             `Table(`id(`TrustedNetworks), `header(_("Network")),Network_items),
+             `SelectionBox(`id(`TrustedNetworks), "",Networks),
              `PushButton(`id(`DeleteNetwork), _("Delete"))
             )
           )
        )
      ),
-    `Frame(_("Security Settings for Sending Mail via the Server"),
-      `HBox(
-        `VBox(
-          `Left(`CheckBox(`id(`UserRestriction),`opt (`notify),_("Use User/Group Based Restrictions"),UserRestriction)),
-          `Left(`CheckBox(`id(`RequireSASL),_("Require SASL Authentication"),RequireSASL))
-         ),
-        `Frame(_("TLS Mode for the SMTPD Daemon"),
-          `RadioButtonGroup(`id(`SMTPDTLSMode),
-             `VBox(
-                `Left(`RadioButton(`id(`SMTPDTLSnone),     _("No TLS"),SMTPDTLSnone)),
-                `Left(`RadioButton(`id(`SMTPDTLSuse),      _("Use TLS"),SMTPDTLSuse)),
-                `Left(`RadioButton(`id(`SMTPDTLSenforce),  _("Enforce TLS"),SMTPDTLSenforce)),
-                `Left(`RadioButton(`id(`SMTPDTLSauth_only),_("Use TLS only for SASL authentication"),SMTPDTLSauth_only))
-              )
-           )
-         )
-      )
-    )
+    `Frame(_("Security Settings for Sending Mail via the Server"),security)
    );
   return content;
 }
@@ -413,6 +431,8 @@ any ComplexDialog() {
    string FocusedContent = "GlobalSettings";
 
    Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, true, true);
+   UI::WizardCommand(`SetBackButtonLabel( "" ) );
+   UI::WizardCommand(`SetNextButtonLabel( _("Save") ) );
 
    any ret       = nil;
    any EventType = nil;
@@ -460,13 +480,34 @@ any ComplexDialog() {
            content        = GlobalSettingsDialog();
            helptext       = HELPS["GlobalSettings"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailRelaying") {
-          MailServer::MailRelaying["Changed"]            = true;
-          list<list> Networks = (list<list>)UI::QueryWidget(`id(`TrustedNetworks), `Items);
-          integer ci          = (integer) UI::QueryWidget(`id(`TrustedNetworks), `CurrentItem);
-          string Network      = (string)  select((list) UI::QueryWidget(`id(`TrustedNetworks), `Item(ci)),1,1);
-y2milestone("Networks %1",Networks);
-y2milestone("Network %1",Network);
-y2milestone("ci %1",ci);
+           MailServer::MailRelaying["Changed"]            = true;
+	   string SMTPDTLSMode = (string)UI::QueryWidget(`id(`SMTPDTLSMode), `CurrentButton);
+           if(ret == `AddNewNetwork) {
+             string NewNetwork = (string)UI::QueryWidget(`id(`NewNetwork), `Value);
+             //TODO Checking if network is a real network
+             MailServer::MailRelaying["TrustedNetworks"] = add((list<string>)MailServer::MailRelaying["TrustedNetworks"]:[],NewNetwork);
+           }
+	   if(ret == `DeleteNetwork){
+	     string CurrentNetwork = (string)UI::QueryWidget(`id(`TrustedNetworks), `CurrentItem);
+	     MailServer::MailRelaying["TrustedNetworks"] = filter(string network, MailServer::MailRelaying["TrustedNetworks"]:[],
+	                                                          {return network != CurrentNetwork;});
+	   }
+           MailServer::MailRelaying["SMTPDTLSMode"]  = SMTPDTLSMode;
+           if((boolean)UI::QueryWidget(`id(`RequireSASL), `Value)){
+             MailServer::MailRelaying["RequireSASL"] = "1";
+           } else {
+             MailServer::MailRelaying["RequireSASL"] = "0";
+           }
+           if((boolean)UI::QueryWidget(`id(`UserRestriction), `Value)){
+	     //TODO It must be fixed!!!!
+             MailServer::MailRelaying["UserRestriction"] = "1";
+             MailServer::MailRelaying["RequireSASL"]     = "1";
+	     if(SMTPDTLSMode != "enforce" && SMTPDTLSMode != "auth_only") {
+	        MailServer::MailRelaying["SMTPDTLSMode"]    = "enforce";
+             }
+           } else {
+             MailServer::MailRelaying["UserRestriction"] = "0";
+           }
            content        = MailRelayingDialog();
            helptext       = HELPS["MailRelaying"]:"Bla Bla Bla";
         }
@@ -509,10 +550,11 @@ y2milestone("ci %1",ci);
 y2milestone("event %1",event);
 y2milestone("event %1",ret);
 y2milestone("FocusedContent %1",FocusedContent);
-//        if(focus_changed) {
-          Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, true, true);
-//          continue;
-//        }
+        if(ret != `cancel && ret != `abort && ret != `next ) {
+          Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, false, true);
+          UI::WizardCommand(`SetBackButtonLabel( "" ) );
+          UI::WizardCommand(`SetNextButtonLabel( _("Save") ) );
+        }
    }
 
    return ret;
