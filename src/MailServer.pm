@@ -201,17 +201,19 @@ sub ReadMailRouting {
 			   'Password' => ''
     			 );
     my %SearchMap      = (
-    			   'base_dn' => $basedn,
+			   # FIXME: where should $basedn come from???
+    			   # 'base_dn' => $basedn,
+    			   'base_dn' => 'dc=suse,dc=de',
 			   'filter'  => "ObjectClass=SuSEMailTransport"
     			 );
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
     			 
     # Anonymous bind 
-    SCR::Execute(.ldap);
-    SCR::Execute(.ldap.bind);
+    SCR::Execute('.ldap');
+    SCR::Execute('.ldap.bind');
 
     # Searching all the transport lists
-    my $ret = SCR::Read(.ldap.search,\%SearchMap);
+    my $ret = SCR::Read('.ldap.search',\%SearchMap);
 
     # filling up our array
     foreach(@{$ret}){
@@ -223,9 +225,9 @@ sub ReadMailRouting {
       $Route{'Auth'}     = $_->{'Auth'};
       my $tmp = read_attribute($SaslPaswd,$Route{'Goal'});
       if($tmp) {
-	      ($Route{'Account'},$Route{'Password'}) = split /:/ $tmp;
+	      ($Route{'Account'},$Route{'Password'}) = split /:/, $tmp;
       }
-      push @{%MailRouting{'Routes'}}, %Route;
+      push @{$MailRouting{'Routes'}}, %Route;
     }
     
 
@@ -242,10 +244,10 @@ sub WriteMailRouting {
     my $MailRouting    = shift;
 
     # Anonymous bind 
-    SCR::Execute(.ldap);
-    SCR::Execute(.ldap.bind);
+    SCR::Execute('.ldap');
+    SCR::Execute('.ldap.bind');
 
-    foreach(@{%MailRouting{'Routes'}}){
+    foreach(@{$MailRouting->{'Routes'}}){
     }
 }
 
