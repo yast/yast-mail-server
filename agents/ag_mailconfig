@@ -71,10 +71,11 @@ sub parse_line ($)
 	if ($line =~ /^(.*?)$separator(.*)$/s)
 	{
 	    my $tmp = $1;
-	    chomp $tmp
+	    chomp $tmp;
 	    push (@table, { "comment" => $line_comment,
 			    "key" => $tmp,
-			    "value" => $2 });
+			    "value" => $2 }
+                  );
 	}
 	else
 	{
@@ -243,7 +244,7 @@ sub OtherCommand ()
 my $class = shift;
 my ($symbol, $config, @rest) = @_;
 
-if ($symbol ne "Mailtable")
+if ($symbol ne "Mailconfig")
 {
     y2error ("The first command must be the configuration.(Seen '$_')");
 }

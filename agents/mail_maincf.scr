@@ -27,7 +27,7 @@
     "continue_escaped_newline" : false,
     "continue_leading_blanks"  : true,
     "write_empty_value"        : true,
-    "separator"                : "\s*=\s*",
+    "separator"                : "\\s*=\\s*",
     "oseparator"               : "=",
     "is_postmap"               : false,
   ])
