@@ -1,4 +1,4 @@
-#! /usr/bin/perl -w -T
+#! /usr/bin/perl -w
 
 package ag_postfix_mastercf;
 # FIXME: How should that be handled?
