@@ -171,6 +171,32 @@ sub addService {
     return 0;
 }
 
+sub modifyService {
+    my $this  = shift;
+    my $srv   = shift;
+
+    if( ! defined $this->{MCF} ) {
+	logger("you have to call readMasterCF() first\n");
+	return 1;
+    }
+
+    return 1 if ref($srv) ne "HASH";
+    return 1 if not ( defined $srv->{service} && defined $srv->{command} );
+    return 1 if not $this->serviceExists($srv);
+
+    foreach my $s ( @{$this->{MCF}} ) {
+	next if ! defined $s->{service};
+	if( $s->{service} eq $srv->{service} &&
+	    $s->{command} eq $srv->{command} ) {
+	    foreach my $k ( keys %$srv ) {
+		$s->{$k} = $srv->{$k};
+	    }
+	}
+    }
+
+    return 0;
+}
+
 sub getRAWCF {
     my $this = shift;
 
@@ -222,7 +248,6 @@ sub serviceExists {
 	next if ! defined $s->{service};
 	if( $s->{service} eq $srv->{service} &&
 	    $s->{command} eq $srv->{command} ) {
-	    logger("service already exists in master.cf:\n".service2line($srv)."\n");
 	    return 1;
 	}
     }
@@ -248,7 +273,15 @@ sub service2line {
 		    $srv->{maxproc},
 		    $srv->{command}
 		    );
-	$line .= "\n  ".$srv->{options} if defined $srv->{options} && $srv->{options} ne "";
+	if( defined $srv->{options} ) {
+	    if( $srv->{command} eq "pipe" ) {
+		$line .= "\n  ".$srv->{options};
+	    } else {
+		foreach my $key ( keys %{$srv->{options}} ) {
+		    $line .= "\n  -o $key=$srv->{options}->{$key}";
+		}
+	    }
+	}
     }
     return $line;
 }
@@ -263,10 +296,22 @@ sub line2service {
 	my ($service,$type,$private,$unpriv,$chroot,$wakeup,$maxproc,$command) =
 	    $line =~ /^(.*?)\s+(.*?)\s+(.*?)\s+(.*?)\s+(.*?)\s+(.*?)\s+(.*?)\s+(.*)/;
 	
-	my $options = "";
+	my $options;
 	# command has additional options?
 	if( $command =~ /\s/ ) {
-	    ($command,$options) = $command =~ /^(.*?)\s+(.*)/;
+	    my $opts;
+	    ($command,$opts) = $command =~ /^(.*?)\s+(.*)/;
+	    if( defined $opts && $opts ne "" ) {
+		if( $command ne "pipe" ) {
+		    foreach my $opt ( split(/\s*-o\s*/,$opts) ) {
+			next if $opt eq "";
+			my ($key, $val) = $opt =~ /^(.*?)=(.*)/;
+			$options->{$key} = $val;
+		    }
+		} else {
+		    $options = $opts;
+		}
+	    }
 	}
 	
 	return { 'service' => $service,
