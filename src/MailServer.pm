@@ -32,12 +32,15 @@ our %TYPEINFO;
 YaST::YCP::Import ("Progress");
 YaST::YCP::Import ("Report");
 YaST::YCP::Import ("Summary");
+YaST::YCP::Import ("SCR");
+YaST::YCP::Import ("Service");
 
 
-##
- # Data was modified?
- #
-my $modified = 0;
+###
+# # Data was modified?
+# # We don't have a global modified variable.
+#my $modified = 0;
+#
 
 ##
  #
@@ -234,6 +237,27 @@ sub Import {
  # @return map Dumped settings (later acceptable by Import ())
  #
 BEGIN { $TYPEINFO{Export}  =["function", [ "map", "any", "any" ] ]; }
+sub Export {
+    # TODO FIXME: your code here (return the above mentioned variables)...
+    return {};
+}
+
+##
+ # Dump the mail-server Global Settings to a single map
+ # @return map Dumped settings (later acceptable by WriteGlobalSettings ())
+ #
+BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", [ "map", "any", "any" ] ]; }
+sub ReadGlobalSettings {
+    # TODO FIXME: your code here (return the above mentioned variables)...
+    return {};
+}
+
+##
+ # Write the mail-server Global Settings from a single map
+ # @param settings The YCP structure to be imported.
+ # @return boolean True on success
+ #
+BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean", [ "map", "any", "any" ] ]; }
 sub Export {
     # TODO FIXME: your code here (return the above mentioned variables)...
     return {};
