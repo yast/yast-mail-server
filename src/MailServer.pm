@@ -1048,7 +1048,7 @@ C<$MailRelaying = ReadMailRelaying($admindn,$adminpwd)>
 
 =cut
 
-BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any"  ]; }
+BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any", "string", "string"  ]; }
 sub ReadMailRelaying {
     my $self            = shift;
     my $AdminDN         = shift;
@@ -1214,16 +1214,132 @@ sub WriteMailRelaying {
 }
 
 ##
+BEGIN { $TYPEINFO{ReadMailLocalDelivery}  =["function", "any", "string", "string"  ]; }
+sub ReadMailLocalDelivery {
+    my $self            = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
+    my %MailLocalDelivery = (
+                                'Changed'         => 0,
+                                'Type'            => '',
+                                'MailboxSize'     => '',
+                                'FallBackUser'    => '',
+                                'SpoolDirectory'  => '',
+                                'QuotaLimit'      => '',
+                                'HardQuotaLimit'  => '',
+                                'ImapIdleTime'    => '',
+                                'PopIdleTime'     => '',
+                                'AlternativNameSpace'  => ''
+                            );
 
-    $GlobalSettings{'MaximumMailboxSize'}        = read_attribute($MainCf,'mailbox_size_limit');
+    # Make LDAP Connection 
+    my $ErrorSummary = read_ldap_settings();
+    if( $ErrorSummary  ne '' ) {
+         return $self->SetError( summary => $ErrorSummary,
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    if($AdminDN) {
+        $admin_bind->{'binddn'} = $AdminDN;
+    }
+    if($AdminPassword) {
+        $admin_bind->{'bindpw'} = $AdminPassword;
+    }
+    if(! SCR::Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
 
-    my $MaximumMailboxSize = $GlobalSettings->{'MaximumMailboxSize'};
+    # First we read the main.cf
+    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+
+    my $MailboxCommand     = read_attribute($MainCf,'mailbox_command');
+    my $MailboxTransport   = read_attribute($MainCf,'mailbox_transport');
+    my $MailboxSizeLimit   = read_attribute($MainCf,'mailbox_size_limit');
+    my $HomeMailbox        = read_attribute($MainCf,'home_mailbox');
+    my $MailSpoolDirectory = read_attribute($MainCf,'mail_spool_directory');
+    my $MaximumMailboxSize = read_attribute($MainCf,'mailbox_size_limit');
+    my $LocalTransport     = read_attribute($MainCf,'local_transport');
+
+    if($MailboxCommand eq '' && $MailboxTransport '' ) {
+        $MailLocalDelivery{'Type'}      = 'local';
+        if( $MailboxSizeLimit ~= /\d+/ ) {
+            $MailLocalDelivery{'MailboxSize'}  = $MailboxSizeLimit;
+        } 
+       if( $HomeMailbox ne '' ) {
+           $MailLocalDelivery{'SpoolDirectory'} = '$HOME/'.$HomeMailbox;
+       } elsif () {
+           $MailLocalDelivery{'SpoolDirectory'} = $HomeMailbox;
+       } else {
+           $MailLocalDelivery{'SpoolDirectory'} = 'default';
+       }
+    } elsif($MailboxCommand ~= /\/usr\/bin\/procmail/) {
+        $MailLocalDelivery{'Type'} = 'procmail';
+    } elsif($MailboxTransport ~= /lmtp:unix:\/var\/lib\/imap\/socket\/lmtp/) {
+        $MailLocalDelivery{'Type'} = 'cyrus';
+        $MailLocalDelivery{'MailboxSizeLimit'}         = SCR::Read('.etc.imapd_conf.autocreatequota');
+        $MailLocalDelivery{'QuotaLimit'}               = SCR::Read('.etc.imapd_conf.quotawarn');
+        $MailLocalDelivery{'ImapIdleTime'}             = SCR::Read('.etc.imapd_conf.timeout');
+        $MailLocalDelivery{'PopIdleTime'}              = SCR::Read('.etc.imapd_conf.poptimeout');
+        $MailLocalDelivery{'AlternateNameSpace'}       = SCR::Read('.etc.imapd_conf.altnamespace');
+        if(  SCR::Read('.etc.imapd_conf.lmtp_overquota_perm_failure') eq 'yes' ) {
+            $MailLocalDelivery{'HardQuotaLimit'}       = 1; 
+        } else {
+            $MailLocalDelivery{'HardQuotaLimit'}       = 0; 
+        }
+    }
+    return \%MailLocalDelivery;
+}
+
+
+BEGIN { $TYPEINFO{WriteMailLocalDelivery}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
+sub WriteMailLocalDelivery {
+    my $self              = shift;
+    my $AdminDN           = shift;
+    my $AdminPassword     = shift;
+    my $MailLocalDelivery = shift;
+
+    #If nothing to do we don't do antithing
+    if(! $MailLocalDelivery->{'Changed'}){
+         return $self->SetError( summary =>_("Nothing to do"),
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    
+    # Make LDAP Connection 
+    my $ErrorSummary = read_ldap_settings();
+    if( $ErrorSummary  ne '' ) {
+         return $self->SetError( summary => $ErrorSummary,
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    if($AdminDN) {
+        $admin_bind->{'binddn'} = $AdminDN;
+    }
+    if($AdminPassword) {
+        $admin_bind->{'bindpw'} = $AdminPassword;
+    }
+    if(! SCR::Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+
+    # First we read the main.cf
+    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+
+    my $MaximumMailboxSize = $MailLocalDelivery->{'MaximumMailboxSize'};
     if($MaximumMailboxSize =~ /[^\d+]/) {
          return $self->SetError( summary =>_("Maximum Mailbox Size value may only contain decimal number in byte"),
                                  code    => "PARAM_CHECK_FAILED" );
     }
     write_attribute($MainCf,'mailbox_size_limit',$MaximumMailboxSize);
 
+}    
 
 ##
  # Create a textual summary and a list of unconfigured cards
