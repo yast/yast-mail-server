@@ -21,3 +21,4 @@ Exec=/sbin/yast2 mail-server
 
 Name=Mail Server
 GenericName=Configure mail server
+X-KDE-SubstituteUID=true
