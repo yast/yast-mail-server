@@ -94,87 +94,85 @@ Edit each attribute using <b>Edit</b>. Some attributes
 could be required, as defined in the user template in the <b>LDAP Client Module</b>.</p>
 ");
 
-        list items			= [];
+        term items			= nil;
         list used_attributes	= [];
         list new_attributes		= [];
         boolean modified		= false;
+	string eaddrs        = "";
+
+	if( is(data["susemailacceptaddress"]:(any)"", string) ) {
+	    eaddrs = data["susemailacceptaddress"]:"";
+	} else if ( is(data["susemailacceptaddress"]:(any)[], list) ) {
+	    eaddrs = mergestring(data["susemailacceptaddress"]:[], "\n");
+	}
+	
 
 	term contents = `HBox(`HSpacing (1.5), `VBox(
-	    `VSpacing(0.5),
-	    `TextEntry(`id(`mailaddress), _("EMail address"), data["susemailacceptaddress"]:"" ),
-	    `VSpacing (0.5)
-	    ),
-	    `HSpacing (1.5)
-	);
+				  `VSpacing(0.5),
+				  `MultiLineEdit(`id(`eaddrs),_("Mail addresses"),eaddrs),
+				  `VSpacing (0.5)
+				  ),
+			      `HSpacing (1.5)
+	    );
 
 	Wizard::CreateDialog ();
         Wizard::SetDesktopIcon("users");
 
 	// dialog caption
-	Wizard::SetContentsButtons(_("Additional LDAP Settings"),
-	    contents, help_text, Label::BackButton(), Label::NextButton());
+	Wizard::SetContentsButtons(_("Mail Settings"),
+				   contents, help_text, Label::BackButton(), Label::NextButton());
 
 	Wizard::HideAbortButton ();
 
 	ret = `next;
-        UI::SetFocus (`id(`table));
+        // UI::SetFocus (`id(`table));
 	repeat
 	{
 	    ret = UI::UserInput();
-	    if ( ret == `edit || ret == `table)
-	    {
-		string attr		=
-		    (string) UI::QueryWidget (`id(`table), `CurrentItem);
-		list<string> value	= tmp_data [attr]:data[attr]:[];
-		value			= LdapPopup::EditAttribute (
-		    attr, value, [], Ldap::SingleValued (attr), []);
-		if (value == tmp_data [attr]:data[attr]:[])
-		{
-		    ret = `notnext;
-		    continue;
-		}
-		UI::ChangeWidget (`id(`table),`Item(attr,1),
-		    mergestring(value,","));
-		tmp_data [attr] = value;
-	    }
 	    if ( ret == `next )
 	    {
 		string err = UsersPluginMail::Check (
 		    config,
 		    (map<string,any>) union (data, tmp_data));
-
+		
 		if (err != "")
 		{
 		    Report::Error (err);
 		    ret = `notnext;
 		    continue;
 		}
+		
+                // if this plugin wasn't in default set, we must save its name
+                 if (!contains (data["plugins"]:[], "UsersPluginMail"))
+		 {
+		     data["plugins"] = add (data["plugins"]:[],
+					    "UsersPluginMail");
+		 }
 
-		if (tmp_data == $[])
-		{
-		    break;
-		}
-		// if this plugin wasn't in default set, we must save its name
-		if (!contains (data["plugins"]:[], "UsersPluginMail"))
-		{
-		    tmp_data["plugins"] = add (tmp_data["plugins"]:[],
-			"UsersPluginMail");
-		}
+		 list uiaddrs = splitstring((string) UI::QueryWidget(`id(`eaddrs), `Value), "\n");
+		 if( size(uiaddrs) > 1 ) {
+		     data["susemailacceptaddress"] = uiaddrs;
+		 } else if( size(uiaddrs) == 0 ) {
+		     remove(data,"susemailacceptaddress");
+		 } else {
+		     data["susemailacceptaddress"] = uiaddrs[0]:"";
+		 }
+
 		if (data["what"]:"" == "edit_user")
 		{
-		    Users::EditUser (tmp_data);
+		    Users::EditUser (data);
 		}
 		else if (data["what"]:"" == "add_user")
 		{
-		    Users::AddUser (tmp_data);
+		    Users::AddUser (data);
 		}
 		else if (data["what"]:"" == "edit_group")
 		{
-		    Users::EditGroup (tmp_data);
+		    Users::EditGroup (data);
 		}
 		else if (data["what"]:"" == "add_group")
 		{
-		    Users::AddGroup (tmp_data);
+		    Users::AddGroup (data);
 		}
 	    }
 	} until (is(ret,symbol) &&
