@@ -19,6 +19,7 @@ use YaST::YCP;
 
 use Locale::gettext;
 use POSIX;     # Needed for setlocale()
+use Data::Dumper;
 
 setlocale(LC_MESSAGES, "");
 textdomain("mail-server");
@@ -127,6 +128,30 @@ sub ReadGlobalSettings {
 }
 
 ##
+ # Dump the mail-server Global Settings to a single map
+ # @return map Dumped settings (later acceptable by WriteGlobalSettings ())
+ #
+BEGIN { $TYPEINFO{ReadMasterCF}  =["function", "any"  ]; }
+sub ReadMasterCF {
+    my $MasterCf  = SCR::Read('.mail.postfix.mastercf');
+
+    return $MasterCf;
+}
+
+##
+ # Dump the mail-server Global Settings to a single map
+ # @return map Dumped settings (later acceptable by WriteGlobalSettings ())
+ #
+BEGIN { $TYPEINFO{findService}  =["function", "any"  ]; }
+sub findService {
+    my ($service, $command ) = @_;
+
+    my $services  = SCR::Read('.mail.postfix.mastercf.findService', $service, $command);
+
+    return $services;
+}
+
+##
  # Write the mail-server Global Settings from a single map
  # @param settings The YCP structure to be imported.
  # @return boolean True on success
@@ -175,7 +200,6 @@ sub WriteGlobalSettings {
     SCR::Write('.mail.postfix.main.table',$MainCf);
     SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
 
-    Service::Reload('postfix');
     return 1;
 }
 
