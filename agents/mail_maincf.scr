@@ -17,9 +17,9 @@
  *  that is, comments have the leading '#' stripped but not the newline.
  *
  * Example:
- *   Read (.mail.postfix.virtual.table)
+ *   Read (.mail.postfix.main)
  */
-.mail.postfix.main.cf
+.mail.postfix.main
 
 `ag_mailconfig (
   `Mailconfig ($[
