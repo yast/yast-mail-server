@@ -191,9 +191,11 @@ sub parse_file ()
 sub write_comment ($)
 {
     my $comment = shift;
-    foreach my $line (split /\n/, $comment)
-    {
-	print FILE "\#$line\n";
+    if($comment) {
+	    foreach my $line (split /\n/, $comment)
+	    {
+		print FILE "\#$line\n";
+	    }
     }
 }
 #
@@ -224,6 +226,7 @@ sub write_file ()
     rename "$filename.YaST2.new", $filename or return log_error ("Moving temp file: $!");
     if($is_postmap) {
         system("postmap $filename");
+        system("chmod 600 $filename*");
     }
 
     $YaST::SCRAgent::modified = 0;
