@@ -499,39 +499,96 @@ term MailLocalDeliveryDialog() {
   boolean TypePROCMAIL = ((string)MailServer::MailLocalDelivery["Type"]:"" == "procmail");
   boolean TypeLOCAL    = ((string)MailServer::MailLocalDelivery["Type"]:"" == "local");
   boolean TypeNONE     = ((string)MailServer::MailLocalDelivery["Type"]:"" == "none");
+  boolean limit        = ((string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0" != "0");
 
   term settings = `HBox();
   if(TypeCYRUS){
+    integer MailboxSizeLimit = tointeger((string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
+    integer QuotaLimit       = tointeger((string)MailServer::MailLocalDelivery["QuotaLimit"]:"0");
+    integer ImapIdleTime     = tointeger((string)MailServer::MailLocalDelivery["ImapIdleTime"]:"0");
+    integer PopIdleTime      = tointeger((string)MailServer::MailLocalDelivery["PopIdleTime"]:"0");
+    integer MAXINT           = 10000000000000;
+    boolean HardQuotaLimit   = ((string)MailServer::MailLocalDelivery["HardQuotaLimit"]:"0" == "1");
+    boolean AlternativNameSpace   = ((string)MailServer::MailLocalDelivery["AlternativNameSpace"]:"0" == "1");
+    string  FallBackUser     = (string)MailServer::MailLocalDelivery["FallBackUser"]:"root";
+    string  Security         = (string)MailServer::MailLocalDelivery["Security"]:"TLS";
+    boolean PLAIN            = (Security == "PLAIN");
+    boolean SSL              = (Security == "SSL");
+    boolean TLS              = (Security == "TLS");
+    settings = `Frame(_("IMAP Settings"),
+      `VBox(
+        `Frame(_("Security"),
+	  `RadioButtonGroup(`id(`Security),
+	    `HBox(
+	      `RadioButton(`id("PLAIN"), _("Plain"),  PLAIN),
+	      `HStretch(),
+	      `RadioButton(`id("SSL"), _("SSL (imaps)"),  SSL),
+	      `HStretch(),
+	      `RadioButton(`id("TLS"), _("TLS (imaps via imap)"),  TLS)
+	    )
+	  )
+	),
+	`HBox(
+	  `VBox(
+	     `HBox(`Label(_("Default Mailbox Size")),`IntField(`id(`MailboxSizeLimit),"KB",0,MAXINT,MailboxSizeLimit)),
+	     `HBox(`Label(_("Quota Warning Limit")), `IntField(`id(`QuotaLimit),      "%",0,100,QuotaLimit)),
+	     `HBox(`Label(_("IMAP Idle Time")),      `IntField(`id(`ImapIdleTime),    "Min",30,100,ImapIdleTime)),
+	     `HBox(`Label(_("IMAP Idle Time")),      `IntField(`id(`PopIdleTime),     "Min",10,100,PopIdleTime))
+	   ),
+	  `VBox(
+	     `Left(`CheckBox(`id(`HardQuotaLimit),     _("Hard Quota Limit"),HardQuotaLimit)),
+	     `Left(`CheckBox(`id(`AlternativNameSpace),_("Use Alternate Name Space"),AlternativNameSpace)),
+	     `Left(`TextEntry(`id(`FallBackUser),      _("Fall Back User"), FallBackUser))
+	  )
+	)
+      )
+    );
   } else if(TypeLOCAL){
-    boolean mbox     = true;
-    boolean mdir     = false;
-    boolean varspool = false;
-    boolean homedir  = true;
-    boolean custom   = false;
+    string  SpoolDirectory = (string)MailServer::MailLocalDelivery["SpoolDirectory"]:"";
+    boolean mdir     = regexpmatch(SpoolDirectory,"/$");
+    boolean varspool = regexpmatch(SpoolDirectory,"var");
+    boolean homedir  = regexpmatch(SpoolDirectory,"HOME/Mail");
+//    boolean custom   = (regexpmatch(SpoolDirectory,"HOME") && !homedir);
+    term MailboxSizeTerm = `TextEntry(`id(`MailboxSizeLimit), "", (string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
+    if(!limit) {
+         MailboxSizeTerm = `TextEntry(`id(`MailboxSizeLimit), `opt(`disabled),"", (string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
+    }
 
     settings = `Frame(_("Mailbox Settings"),
-       `HBox(
-	 `HStretch(),
+       `VBox(
 	 `Frame(_("Type"),
 	   `RadioButtonGroup(`id(`MailboxType),
 	     `HBox(
-		`RadioButton(`id("mbox"), _("Maibox"),  mbox),
-		`RadioButton(`id("mdir"), _("Maildir"), mdir)
+		`RadioButton(`id("mbox"), _("Maibox"),  !mdir),
+	        `HStretch(),
+		`RadioButton(`id("mdir"), _("Maildir"), mdir),
+	        `HStretch()
 	      )
 	    )
 	  ),
-	 `HStretch(),
          `Frame(_("Repository"),
 	   `RadioButtonGroup(`id(`Repository),
-	     `VBox(
+	     `HBox(
 	        `Left(`RadioButton(`id("varspool"), "/var/spool/mail/$USER",  varspool)),
-	        `Left(`RadioButton(`id("homedir"),  "$HOME/Mail",             homedir)),
-		`HBox(`Left(`RadioButton(`id("custom"),   "$HOME/",             custom)),
-		      `Left(`TextEntry(`id(`customdir),     "", ""))
-		     )
+	        `HStretch(),
+	        `Left(`RadioButton(`id("homedir"),  "$HOME/Mail",              homedir)),
+	        `HStretch()
+//		`HBox(`Left(`RadioButton(`id("custom"),   "$HOME/",             custom)),
+//		      `Left(`TextEntry(`id(`customdir),     "", ""))
+//		     )
 	      )
 	    )
 	  ),
+	 `Frame(_("Mailbox Size"),
+	   `RadioButtonGroup(`id(`MailboxSize),
+	   `HBox(
+	     `RadioButton(`id("NoLimit"), `opt (`notify), _("No Limit"), !limit),
+	     `RadioButton(`id("Limit"), `opt (`notify), _("Mailbox Size"), limit),
+	     MailboxSizeTerm,
+	     `Label("KByte")
+	    )
+	  )
+	),
 	 `HStretch()
         )
     );
@@ -829,6 +886,47 @@ any ComplexDialog() {
            }
            content        = MailRelayingDialog();
            helptext       = HELPS["MailRelaying"]:"Bla Bla Bla";
+        } else if(FocusedContent == "MailLocalDelivery") {
+           MailServer::MailLocalDelivery["Changed"]  = true;
+           MailServer::MailLocalDelivery["Type"] = (string)UI::QueryWidget(`id(`Type), `CurrentButton);
+	   if( UI::WidgetExists(`id(`Repository)) && UI::WidgetExists(`id(`MailboxType)) && UI::WidgetExists(`id(`MailboxSize))) {
+		   if(UI::QueryWidget(`id(`Repository), `CurrentButton) == "varspool") {
+		      MailServer::MailLocalDelivery["SpoolDirectory"] = "/var/spool/mail";
+		   } else {
+		      MailServer::MailLocalDelivery["SpoolDirectory"] = "$HOME/Mail";
+		   }
+		   if(UI::QueryWidget(`id(`MailboxType), `CurrentButton) == "mdir") {
+		      MailServer::MailLocalDelivery["SpoolDirectory"] = MailServer::MailLocalDelivery["SpoolDirectory"]:""+"/";
+		   }
+		   if(UI::QueryWidget(`id(`MailboxSize), `CurrentButton) == "NoLimit") {
+		      MailServer::MailLocalDelivery["MailboxSizeLimit"] = "0";
+		   } else {
+		      MailServer::MailLocalDelivery["MailboxSizeLimit"] = UI::QueryWidget(`id(`MailboxSizeLimit), `Value);
+		      if(MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0" == "0") {
+			 MailServer::MailLocalDelivery["MailboxSizeLimit"] = "1";
+		      }
+		   }
+	   }
+	   if( UI::WidgetExists(`id(`Security)) && UI::WidgetExists(`id(`QuotaLimit)) && UI::WidgetExists(`id(`HardQuotaLimit))) {
+	     MailServer::MailLocalDelivery["MailboxSizeLimit"] = UI::QueryWidget(`id(`MailboxSizeLimit), `Value);
+	     MailServer::MailLocalDelivery["QuotaLimit"]       = UI::QueryWidget(`id(`QuotaLimit), `Value);
+	     MailServer::MailLocalDelivery["ImapIdleTime"]     = UI::QueryWidget(`id(`ImapIdleTime), `Value);
+	     MailServer::MailLocalDelivery["PopIdleTime"]      = UI::QueryWidget(`id(`PopIdleTime), `Value);
+	     MailServer::MailLocalDelivery["FallBackUser"]     = UI::QueryWidget(`id(`FallBackUser), `Value);
+	     MailServer::MailLocalDelivery["Security"]         = UI::QueryWidget(`id(`Security), `CurrentButton);
+	     if((boolean)UI::QueryWidget(`id(`HardQuotaLimit), `Value)) {
+	         MailServer::MailLocalDelivery["HardQuotaLimit"]      = "1";
+	     } else {
+	         MailServer::MailLocalDelivery["HardQuotaLimit"]      = "0";
+	     }
+	     if((boolean)UI::QueryWidget(`id(`AlternativNameSpace), `Value)) {
+	         MailServer::MailLocalDelivery["AlternativNameSpace"]      = "1";
+	     } else {
+	         MailServer::MailLocalDelivery["AlternativNameSpace"]      = "0";
+	     }
+	   }
+           content        = MailLocalDeliveryDialog();
+           helptext       = HELPS["MailLocalDelivery"]:"Bla Bla Bla";
         }
         if(ret == "GlobalSettings" && FocusedContent != "GlobalSettings") {
            content        = GlobalSettingsDialog();
