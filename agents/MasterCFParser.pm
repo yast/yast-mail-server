@@ -1,6 +1,73 @@
 #
 # $Id$
 #
+
+=head1 NAME
+
+MasterCFParser
+
+=head1 PREFACE
+
+This package provides an objectoriented interface to read/write the postfix
+superserver configuration file master.cf.
+
+=head1 SYNOPSIS
+
+  use MasterCFParser;
+
+  my $msc = new MasterCFParser();
+  $msc->readMasterCF();
+
+  if( $msc->addService( { 'service' => 'smtps',
+			  'type'    => 'inet',
+			  'private' => 'n',
+			  'unpriv'  => '-',
+			  'chroot'  => 'n',
+			  'wakeup'  => '-',
+			  'maxproc' => '-',
+			  'command' => 'smtpd',
+		          'options' => { 'smtpd_tls_wrappermode' => 'yes',
+				         'smtpd_sasl_auth_enable' => 'yes' }
+		    }
+		      ) ) {
+    print "ERROR in addService()\n";
+  }
+
+  my $srvs = $msc->getServiceByAttributes( { 'command' => 'pipe',
+				             'maxproc' => '10' } );
+  if( ! defined $srvs ) {
+    print "ERROR in getServiceByAttributes()\n";
+  }
+
+  if( $msc->modifyService( { 'service' => 'cyrus1',
+			     'command' => 'pipe',
+			     'type'    => 'unix' } ) ) {
+    print "ERROR in modifyService()\n";
+  }
+
+=head1 DESCRIPTION
+
+Each commented line of master.cf is internally presented as an hash containing
+only one key/value pair, that is
+
+  comment => "# a commented line"
+
+Every other lines are represented as hash which MUST have the keys
+
+  service,type,private,unpriv,chroot,wakeup,maxproc,command
+
+and if present a key 'options'.
+
+'options' can be either a scalar or a hash reference. A scalar for all so
+called interfaces to non-Postfix software using the 'pipe' command. For all
+other postfix commands, options must be a hash reference.
+
+=head1 METHODS
+
+=over 2
+
+=cut
+
 package MasterCFParser;
 use strict;
 use Data::Dumper;
@@ -10,6 +77,17 @@ no warnings 'redefine';
 # external (public functions/methods)
 ######################################################################################
 
+=item *
+C<new();>
+
+Instantiating a MasterCFParser instance. Optional parameter can be a different
+path to master.cf and a reference to a logging function.
+
+EXAMPLE:
+
+  $_CFINST = new MasterCFParser( $config->{"path"}, \&y2error );
+
+=cut
 sub new {
     my $this  = shift;
     my $path   = shift  || "/etc/postfix";
@@ -26,6 +104,14 @@ sub new {
     bless $self, $class;
     return $self;
 }
+
+=item *
+C<readMasterCF();>
+
+Read and parse master.cf into internal format. This method must be invoked
+before any other method can be invoked.
+
+=cut
 
 sub readMasterCF {
     my $this = shift;
@@ -60,6 +146,13 @@ sub readMasterCF {
     return 0;
 }
 
+=item *
+C<writeMasterCF();>
+
+Write the internal data structure back to master.cf
+
+=cut
+
 sub writeMasterCF {
     my $this = shift;
 
@@ -84,6 +177,19 @@ sub writeMasterCF {
     close($fd);
     return 0;
 }
+
+=item *
+C<deleteService($service);>
+
+Delete service from internal data structure.
+$service must contain keys 'service' and 'command', all other keys are ignored.
+
+EXAMPLE:
+
+    $msc->deleteService( { 'service' => 'smtps',
+			   'command' => 'smtpd' } );
+
+=cut
 
 sub deleteService {
     my $this  = shift;
@@ -110,6 +216,18 @@ sub deleteService {
     }
 }
 
+=item *
+C<$hashref = getServiceByAttributes($service);>
+
+Get all services matching specified attributes.
+
+EXAMPLE:
+
+  my $srvs = $msc->getServiceByAttributes( { 'command' => 'pipe',
+				             'maxproc' => '10' } );
+
+=cut
+
 sub getServiceByAttributes {
     my $this  = shift;
     my $fsrv   = shift;
@@ -134,6 +252,29 @@ sub getServiceByAttributes {
     }
     return $retsrv;
 }
+
+=item *
+C<addService($service);>
+
+Add a new service to internal data structure.
+Every key MUST be given with the only exception of 'options', which is optional.
+
+EXAMPLE:
+
+    $msc->addService( { 'service' => 'smtps',
+			'type'    => 'inet',
+			'private' => 'n',
+			'unpriv'  => '-',
+			'chroot'  => 'n',
+			'wakeup'  => '-',
+			'maxproc' => '-',
+			'command' => 'smtpd',
+			'options' => { 'smtpd_tls_wrappermode' => 'yes',
+				       'smtpd_sasl_auth_enable' => 'yes' }
+		       }
+		    );
+
+=cut
 
 sub addService {
     my $this  = shift;
@@ -170,6 +311,23 @@ sub addService {
     }
     return 0;
 }
+
+=item *
+C<modifyService($service);>
+
+Modify an existing service.
+Keys 'service' and 'command' MUST be given.
+
+modifyService replaces all keys of the matching internal service with the
+given keys.
+
+EXAMPLE:
+
+    $msc->modifyService( { 'service' => 'cyrus1',
+			   'command' => 'pipe',
+			   'type'    => 'unix' } );
+
+=cut
 
 sub modifyService {
     my $this  = shift;
