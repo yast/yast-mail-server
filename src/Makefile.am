@@ -1,5 +1,7 @@
 # Makefile.am for mail-server/src
 
+SUBDIRS = YaPI
+
 yncludedir = @yncludedir@/mail-server
 schemadir  = /etc/openldap/schema
 
