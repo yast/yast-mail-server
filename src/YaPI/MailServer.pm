@@ -87,7 +87,7 @@ sub findService {
     return $services;
 }
 =item *
-C<$GlobalSettings = ReadGlobalSettings($AdminUser,$AdminPassword)>
+C<$GlobalSettings = ReadGlobalSettings($$AdminPassword)>
 
  Dump the mail-server Global Settings to a single hash
  Return hash Dumped settings (later acceptable by WriteGlobalSettings ())
@@ -162,16 +162,14 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
 
 =cut
 
-BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", ["map", "string", "any" ], "string", "string" ]; }
+BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", ["map", "string", "any" ], "string"]; }
 sub ReadGlobalSettings {
     my $self            = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
     my %GlobalSettings = ( 
@@ -267,7 +265,6 @@ will be accept to deliver, to 10MB.
 
 use MailServer;
 
-    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
     my %GlobalSettings = (
@@ -286,17 +283,16 @@ use MailServer;
                          }
              );
 
-   if( ! WriteGlobalSettings(\%GlobalSettings,$AdminUser,$AdminPassword) ) {
+   if( ! WriteGlobalSettings(\%GlobalSettings,$AdminPassword) ) {
         print "ERROR in WriteGlobalSettings\n";
    }
 
 =cut
 
-BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  ["map", "string", "any" ], "string", "string" ]; }
+BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  ["map", "string", "any" ], "string"]; }
 sub WriteGlobalSettings {
     my $self               = shift;
     my $GlobalSettings     = shift;
-    my $AdminUser          = shift;
     my $AdminPassword      = shift;
 
     if(! $GlobalSettings->{'Changed'}){
@@ -387,7 +383,7 @@ sub WriteGlobalSettings {
 }
 
 =item *
-C<$MailTransports = ReadMailTransports($AdminUser,$AdminPassword)>
+C<$MailTransports = ReadMailTransports($AdminPassword)>
 
   Dump the mail-server Mail Transport to a single hash
   @return hash Dumped settings (later acceptable by WriteMailTransport ())
@@ -491,12 +487,11 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
     my $MailTransorts   = [];
 
-    if (! $MailTransorts = ReadMailTransports($AdminUser,$AdminPassword) ) {
+    if (! $MailTransorts = ReadMailTransports($AdminPassword) ) {
        print "ERROR in ReadMailTransports\n";
     } else {
        foreach my $Transport (@{$MailTransports->{'Transports'}}){
@@ -515,10 +510,9 @@ use MailServer;
 =cut
 
 
-BEGIN { $TYPEINFO{ReadMailTransports}  =["function", ["map", "string", "any"]  , "string", "string" ]; }
+BEGIN { $TYPEINFO{ReadMailTransports}  =["function", ["map", "string", "any"]  , "string"]; }
 sub ReadMailTransports {
     my $self            = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
 
@@ -528,7 +522,7 @@ sub ReadMailTransports {
                           );
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -578,7 +572,7 @@ print STDERR Dumper(%MailTransports);
 }
 
 =item *
-C<boolean = WriteMailTransports($AdminUser,$adminpwd,$MailTransports)>
+C<boolean = WriteMailTransports($adminpwd,$MailTransports)>
 
  Write the mail server Mail Transport from a single hash.
 
@@ -591,7 +585,6 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
     my %MailTransports  = ( 
@@ -623,17 +616,16 @@ use MailServer;
 			);
     push @($MailTransports{Transports}), %Transport; 
 
-    if( ! WriteMailTransports(\%Transports,$AdminUser,$AdminPassword) ) {
+    if( ! WriteMailTransports(\%Transports,$AdminPassword) ) {
         print "ERROR in WriteMailTransport\n";
     }
 
 =cut
 
-BEGIN { $TYPEINFO{WriteMailTransports}  =["function", "boolean", ["map", "string", "any"], "string", "string" ]; }
+BEGIN { $TYPEINFO{WriteMailTransports}  =["function", "boolean", ["map", "string", "any"], "string"]; }
 sub WriteMailTransports {
     my $self            = shift;
     my $MailTransports  = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
    
     # Pointer for Error MAP
@@ -653,7 +645,7 @@ sub WriteMailTransports {
     my $SaslPasswd = SCR->Read('.mail.postfix.saslpasswd.table');
 
     # Make LDAP Connection 
-    $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -732,7 +724,7 @@ print STDERR $dn;
 }
 
 =item *
-C<$MailPrevention = ReadMailPrevention($AdminUser,$adminpwd)>
+C<$MailPrevention = ReadMailPrevention($adminpwd)>
 
  Dump the mail-server prevention to a single hash
  @return hash Dumped settings (later acceptable by WriteMailPrevention())
@@ -786,11 +778,10 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
     my $MailPrevention  = [];
 
-    if( $MailPrevention = ReadMailPrevention($AdminUser,$AdminPassword) ) {
+    if( $MailPrevention = ReadMailPrevention($AdminPassword) ) {
         print "Basic BasicProtection : $MailPrevention->{BasicProtection}\n";
         foreach(@{$MailPrevention->{RBLList}}) {
           print "Used RBL Server: $_\n";
@@ -809,10 +800,9 @@ use MailServer;
 
 =cut
 
-BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any", "string", "string"  ]; }
+BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any", "string" ]; }
 sub ReadMailPrevention {
     my $self            = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
     my %MailPrevention  = (
@@ -831,7 +821,7 @@ sub ReadMailPrevention {
     my $ERROR        = '';
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -879,11 +869,10 @@ sub ReadMailPrevention {
 ##
  # Write the mail-server Mail Prevention from a single hash
  #
-BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", ["map", "string", "any"], "string", "string" ]; }
+BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", ["map", "string", "any"], "string"]; }
 sub WriteMailPrevention {
     my $self            = shift;
     my $MailPrevention  = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
     my $ERROR  = '';
@@ -894,7 +883,7 @@ sub WriteMailPrevention {
     }
    
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -979,7 +968,7 @@ sub WriteMailPrevention {
 }
 
 =item *
-C<$MailRelaying = ReadMailRelaying($AdminUser,$adminpwd)>
+C<$MailRelaying = ReadMailRelaying($adminpwd)>
 
  Dump the mail-server server side relay settings to a single hash
  @return hash Dumped settings (later acceptable by WriteMailRelaying ())
@@ -1018,10 +1007,9 @@ C<$MailRelaying = ReadMailRelaying($AdminUser,$adminpwd)>
 
 =cut
 
-BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any", "string", "string"  ]; }
+BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any", "string" ]; }
 sub ReadMailRelaying {
     my $self            = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
     my %MailRelaying    = (
                                 'Changed'         => 0,
@@ -1034,7 +1022,7 @@ sub ReadMailRelaying {
     my $ERROR  = '';
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -1096,11 +1084,10 @@ sub ReadMailRelaying {
 ##
  # Write the mail-server server side relay settings  from a single hash
  #
-BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
+BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean",["map", "string", "any"], "string"]; }
 sub WriteMailRelaying {
     my $self            = shift;
     my $MailRelaying    = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
    
     my $ERROR = '';
@@ -1112,7 +1099,7 @@ sub WriteMailRelaying {
     }
     
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -1162,10 +1149,9 @@ sub WriteMailRelaying {
 }
 
 ##
-BEGIN { $TYPEINFO{ReadMailLocalDelivery}  =["function", "any", "string", "string"  ]; }
+BEGIN { $TYPEINFO{ReadMailLocalDelivery}  =["function", "any", "string"]; }
 sub ReadMailLocalDelivery {
     my $self            = shift;
-    my $AdminUser       = shift;
     my $AdminPassword   = shift;
     my %MailLocalDelivery = (
                                 'Changed'         => 0,
@@ -1183,7 +1169,7 @@ sub ReadMailLocalDelivery {
     my $ERROR;
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -1234,11 +1220,10 @@ sub ReadMailLocalDelivery {
 }
 
 
-BEGIN { $TYPEINFO{WriteMailLocalDelivery}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
+BEGIN { $TYPEINFO{WriteMailLocalDelivery}  =["function", "boolean",["map", "string", "any"], "string"]; }
 sub WriteMailLocalDelivery {
     my $self              = shift;
     my $MailLocalDelivery = shift;
-    my $AdminUser         = shift;
     my $AdminPassword     = shift;
 
     my $ERROR;
@@ -1250,7 +1235,7 @@ sub WriteMailLocalDelivery {
     }
     
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldap_map ) {
          return undef;
     }
@@ -1316,31 +1301,30 @@ sub WriteMailLocalDelivery {
     return 1;
 }    
 
-BEGIN { $TYPEINFO{ReadFetchingMail}     =["function", "any", "string", "string" ]; }
+BEGIN { $TYPEINFO{ReadFetchingMail}     =["function", "any", "string"]; }
 sub ReadFetchingMail {
     return 1;
 }
 
-BEGIN { $TYPEINFO{WriteFetchingMail}    =["function", "boolean", ["map", "string", "any"], "string", "string"]; }
+BEGIN { $TYPEINFO{WriteFetchingMail}    =["function", "boolean", ["map", "string", "any"], "string"]; }
 sub WriteFetchingMail {
     return 1;
 }
 
-BEGIN { $TYPEINFO{ReadMailLocalDomains}  =["function", "any", "string", "string" ]; }
+BEGIN { $TYPEINFO{ReadMailLocalDomains}  =["function", "any", "string"]; }
 sub ReadMailLocalDomains {
     return 1;
 }
 
-BEGIN { $TYPEINFO{WriteMailLocalDomains} =["function", "boolean", ["map", "string", "any"], "string", "string"]; }
+BEGIN { $TYPEINFO{WriteMailLocalDomains} =["function", "boolean", ["map", "string", "any"], "string"]; }
 sub WriteMailLocalDomains {
     return 1;
 }
 
 
-BEGIN { $TYPEINFO{ReadLDAPDefaults} = ["function", ["map", "string", "any"], "string", "string" ]; }
+BEGIN { $TYPEINFO{ReadLDAPDefaults} = ["function", ["map", "string", "any"], "string"]; }
 sub ReadLDAPDefaults {
     my $self          = shift;
-    my $AdminUser     = shift;
     my $AdminPassword = shift;
 
     my $ldapMap       = {};
@@ -1360,6 +1344,7 @@ sub ReadLDAPDefaults {
                                     code => "HOST_NOT_FOUND");
         }
     }
+print STDERR Dumper([$ldapMap]);
 
     if (! SCR->Execute(".ldap", {"hostname" => $ldapMap->{'ldap_server'},
                                  "port"     => $ldapMap->{'ldap_port'}})) {
@@ -1443,30 +1428,6 @@ sub ReadLDAPDefaults {
     }
     if(@$ldapret > 0) {
         $ldapMap->{'DNS_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
-    }
-    # now we search the admin user DN
-    $ldapret = SCR->Read(".ldap.search", {
-                                          "base_dn"      => $ldapMap->{'base_config_dn'},
-                                          "filter"       => "(& (objectclass=posixaccount) (uid=$AdminUser))",
-                                          "scope"        => 2,
-                                          "map"          => 1,
-                                         });
-    if (! defined $ldapret) {
-        my $ldapERR = SCR->Read(".ldap.error");
-        return $self->SetError(summary     => "LDAP search failed!",
-                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
-                               code        => "LDAP_SEARCH_FAILED");
-    }
-    if(keys(%{$ldapret})> 1 ){
-        return $self->SetError(summary => _("More then one account found for uid=").$AdminUser.'.',
-                               code    => "LDAP_SEARCH_FAILED");
-    }
-    if(keys(%{$ldapret}) == 0 ){
-        return $self->SetError(summary => _("Account not found for uid=").$AdminUser.'.',
-                               code    => "LDAP_SEARCH_FAILED");
-    }
-    foreach(keys(%{$ldapret})){
-        $ldapMap->{'bind_dn'} = $_;
     }
 
     # Now we try to bind to the LDAP

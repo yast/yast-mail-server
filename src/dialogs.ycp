@@ -26,7 +26,6 @@ define any AuthorizingDialog () {
     string caption = _("Mail Server Administrator Authorization.");
     term contents = `HBox(
 			   `VBox(
-                              `TextEntry(`id(`user),   _("Enter Administrator User Name:"), ""),
                               `Password(`id(`password),  _("Enter Administrator Password:"), "")
 			        )
                          );
@@ -41,7 +40,6 @@ define any AuthorizingDialog () {
 
         ret = UI::UserInput();
 
-        MailServer::AdminUser      = (string) UI::QueryWidget(`id(`user), `Value);
         MailServer::AdminPassword  = (string) UI::QueryWidget(`id(`password), `Value);
 
         /* abort? */
@@ -50,7 +48,6 @@ define any AuthorizingDialog () {
             else continue;
         } else if(ret == `next) {
                 MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(
-                                                                MailServer::AdminUser,
                                                                 MailServer::AdminPassword);
                 if (MailServer::LDAPDefaults == nil) {
 			Popup::Error(_("Unable to authorize the Administrator User"));
