@@ -366,28 +366,26 @@ sub WriteGlobalSettings {
                               code    => "PARAM_CHECK_FAILED" );
     }
     #Now we write TLS settings if needed
-    if($SendingMailType ne 'NONE'){
-       if($SendingMailTLS eq 'NONE') {
-         write_attribute($MainCf,'smtp_use_tls','no');
-         write_attribute($MainCf,'smtp_enforce_tls','');
-         write_attribute($MainCf,'smtp_tls_enforce_peername','');
-       } elsif($SendingMailTLS eq 'MAY') {
-         write_attribute($MainCf,'smtp_use_tls','yes');
-         write_attribute($MainCf,'smtp_enforce_tls','no');
-         write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
-       } elsif($SendingMailTLS eq 'MUST') {
-         write_attribute($MainCf,'smtp_use_tls','yes');
-         write_attribute($MainCf,'smtp_enforce_tls','yes');
-         write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
-       } elsif($SendingMailTLS eq 'MUST_NOPEERMATCH') {
-         write_attribute($MainCf,'smtp_use_tls','yes');
-         write_attribute($MainCf,'smtp_enforce_tls','yes');
-         write_attribute($MainCf,'smtp_tls_enforce_peername','no');
-       } else {
-         return $self->SetError( summary =>_("Unknown mail sending TLS type. Allowed values are:").
-	                                     " NONE | MAY | MUST | MUST_NOPEERMATCH",
-                                 code    => "PARAM_CHECK_FAILED" );
-       }
+    if($SendingMailTLS eq 'NONE') {
+      write_attribute($MainCf,'smtp_use_tls','no');
+      write_attribute($MainCf,'smtp_enforce_tls','no');
+      write_attribute($MainCf,'smtp_tls_enforce_peername','no');
+    } elsif($SendingMailTLS eq 'MAY') {
+      write_attribute($MainCf,'smtp_use_tls','yes');
+      write_attribute($MainCf,'smtp_enforce_tls','no');
+      write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
+    } elsif($SendingMailTLS eq 'MUST') {
+      write_attribute($MainCf,'smtp_use_tls','yes');
+      write_attribute($MainCf,'smtp_enforce_tls','yes');
+      write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
+    } elsif($SendingMailTLS eq 'MUST_NOPEERMATCH') {
+      write_attribute($MainCf,'smtp_use_tls','yes');
+      write_attribute($MainCf,'smtp_enforce_tls','yes');
+      write_attribute($MainCf,'smtp_tls_enforce_peername','no');
+    } else {
+      return $self->SetError( summary =>_("Unknown mail sending TLS type. Allowed values are:").
+                                          " NONE | MAY | MUST | MUST_NOPEERMATCH",
+                              code    => "PARAM_CHECK_FAILED" );
     }
 
     write_attribute($MainCf,'message_size_limit',$MaximumMailSize);
