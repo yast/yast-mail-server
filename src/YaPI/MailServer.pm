@@ -1466,7 +1466,8 @@ sub ReadLDAPDefaults {
                                           "base_dn" => $ldapMap->{'ldap_domain'},
                                           "filter" => '(& (objectclass=suseMailServerConfiguration) (cn=default))',
                                           "scope" => 2,
-                                          "not_found_ok" => 1
+                                          "not_found_ok" => 1,
+                                          "attrs" => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1482,7 +1483,8 @@ sub ReadLDAPDefaults {
                                           "base_dn" => $ldapMap->{'ldap_domain'},
                                           "filter" => '(& (objectclass=suseUserConfiguration) (cn=default))',
                                           "scope" => 2,
-                                          "not_found_ok" => 1
+                                          "not_found_ok" => 1,
+                                          "attrs" => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1498,7 +1500,8 @@ sub ReadLDAPDefaults {
                                           "base_dn" => $ldapMap->{'ldap_domain'},
                                           "filter" => '(& (objectclass=suseGroupConfiguration) (cn=default))',
                                           "scope" => 2,
-                                          "not_found_ok" => 1
+                                          "not_found_ok" => 1,
+                                          "attrs" => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1514,7 +1517,8 @@ sub ReadLDAPDefaults {
                                           "base_dn" => $ldapMap->{'ldap_domain'},
                                           "filter" => '(& (objectclass=suseDNSConfiguration) (cn=default))',
                                           "scope" => 2,
-                                          "not_found_ok" => 1
+                                          "not_found_ok" => 1,
+                                          "attrs" => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1530,7 +1534,8 @@ sub ReadLDAPDefaults {
                                           "base_dn" => $ldapMap->{'ldap_domain'},
                                           "filter" => "(& (objectclass=posixaccount) (uid=$AdminUser))",
                                           "scope" => 2,
-                                          "not_found_ok" => 1
+                                          "not_found_ok" => 1,
+                                          "attrs" => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
