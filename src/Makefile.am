@@ -1,6 +1,7 @@
 # Makefile.am for mail-server/src
 
 yncludedir = @yncludedir@/mail-server
+schemadir  = /etc/openldap/scheme
 
 client_DATA =			\
 	mail-server.ycp		\
@@ -20,6 +21,8 @@ module_DATA =			\
 	MailServer.ycp		\
 	MailServer.pm
 
-EXTRA_DIST = $(client_DATA) $(ynclude_DATA) $(module_DATA) $(desktop_DATA)
+schema_DATA = SUSE-Mail.schema
+
+EXTRA_DIST = $(client_DATA) $(ynclude_DATA) $(module_DATA) $(desktop_DATA) $(schema_DATA)
 
 include $(top_srcdir)/Makefile.am.common
