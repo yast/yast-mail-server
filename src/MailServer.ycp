@@ -63,7 +63,6 @@ global define boolean Abort() ``{
     return false;
 }
 
-
 // Settings: Define all variables needed for configuration of mail-server
 /**
  * True if there is server certificate.
@@ -105,7 +104,6 @@ global map<string,any>  FetchingMail = $[];
  */
 global map<string,any>  MailLocalDomains = $[];
 
-
 /**
  * Data was modified?
  * @return true if modified
@@ -118,6 +116,7 @@ global boolean Modified() {
        modified = true;
     }
     y2debug("modified=%1",modified);
+    return modified;
 }
 
 /**
@@ -269,7 +268,6 @@ global boolean Read() {
     sleep(sl);
 
     // We do not set help text here, because it was set outside
-
     Progress::New( caption, "", steps, [
 	    /* Progress stage 0/7 */
 	    _("Read needed packages"),
@@ -289,7 +287,6 @@ global boolean Read() {
 	    _("Read mail server domains")
 
 	], [
-
 	    /* Progress stage 0/7 */
 	    _("Reading packages..."),
 	    /* Progress stage 1/7 */
@@ -311,7 +308,6 @@ global boolean Read() {
 	],
 	""
     );
-
 
     // read  global settings
     if(Abort()) return false;
@@ -335,13 +331,7 @@ global boolean Read() {
       WFM::CallFunction("sw_single", (["postfix"]));
     }
     if( SCR::Read(.target.size, "/var/adm/YaST/yast2-mail-server-used") < 0) {
-      SCR::Write(.sysconfig.mail.MAIL_CREATE_CONFIG,"yes");
-      SCR::Write(.sysconfig.mail,nil);
-      SCR::Execute(.target.bash, "SuSEconfig -module postfix");
       YaPI::MailServer::ResetMailServer(MailServer::AdminPassword,MailServer::LDAPDefaults);
-      SCR::Execute(.target.bash, "touch /var/adm/YaST/yast2-mail-server-used");
-      SCR::Write(.sysconfig.mail.MAIL_CREATE_CONFIG,"no");
-      SCR::Write(.sysconfig.mail,nil);
     }
     if(!sasl_installed) {
       WFM::CallFunction("sw_single", (["cyrus-sasl-plain"]));
@@ -382,7 +372,6 @@ global boolean Read() {
     Progress::NextStage();
     MailPrevention = (map<string,any>) YaPI::MailServer::ReadMailPrevention(AdminPassword);
     /* Error message */
-    if(MailLocalDelivery == nil) Report::Warning(_("Cannot read the mail server local delivery settings."));
     if(MailPrevention == nil) Report::Error(_("Cannot read mail server preventions."));
     sleep(sl);
 
@@ -558,7 +547,7 @@ global boolean Write() {
     if(MailLocalDelivery["Type"]:"none" == "cyrus") {
        if(!cyrus_installed) {
          WFM::CallFunction("sw_single", (["cyrus-imapd"]));
-	 string crypted  = Users::CryptPassword(AdminPassword, "system", "user");
+	 string crypted  = Users::CryptPassword(AdminPassword, "system");
 	 SCR::Write(.target.passwd.cyrus, crypted);
 	 SCR::UnmountAgent(.etc.imapd_conf);
        }

@@ -78,6 +78,7 @@ any MailServerSequence() {
 
     Wizard::CreateDialog();
     Wizard::SetDesktopIcon("mailserver");
+
     any ret = Sequencer::Run(aliases, sequence);
 
     UI::CloseDialog();
