@@ -33,7 +33,7 @@ define any AuthorizingDialog () {
     Wizard::SetContentsButtons(caption, contents, HELPS["c1"]:"",
 	    Label::BackButton(), Label::NextButton());
 
-    UI::SetFocus (`id (`user));
+    UI::SetFocus (`id (`password));
 
     any ret = nil;
     while(true) {
@@ -195,14 +195,13 @@ term GlobalSettingsDialog() {
   return content;
 }
 
-term MailTransportsDialog(integer CurrentItem) {
+term MailTransportsDialog(string CID) {
   list<map<string,string> > Transports      = (list<map<string,string> >) MailServer::MailTransports["Transports"]:[];
   list      Transport_items = [];
-  integer   TransportID     = 1;
+  string    TransportID     = "";
   string    Destination     = "";
   boolean   Subdomains      = true;
   string    Protocol        = "smtp";
-y2milestone("Transport %1",Transports);
   map<string,list<term> > Protocols = $[ "smtp":[ `item(`id("smtp"),  "smtp", true ),
                                           `item(`id("uucp"),  "uucp" ),
                                           `item(`id("slow"),  "slow" ),
@@ -232,14 +231,23 @@ y2milestone("Transport %1",Transports);
 
 
   foreach(map Transport,Transports, ``{
-    TransportID = TransportID+1;
-    if(CurrentItem == TransportID) {
+    TransportID = Transport["Destination"]:"";
+//    term my_item = `item( `id(TransportID), Transport["Destination"]:""+" | "+
+//                                            Transport["Nexthop"]:""+" | "+
+//                                            Transport["Transport"]:""+" | "+
+//					    Transport["TLS"]:"");
+    term my_item = `item( `id(TransportID), Transport["Destination"]:"",
+                                            Transport["Nexthop"]:"",
+                                            Transport["Transport"]:"",
+                                            Transport["TLS"]:"");
+
+    if(CID == TransportID) {
       Destination = Transport["Destination"]:"";
       TLS         = Transport["TLS"]:"";
       Auth        = ((string)Transport["Auth"]:"0" == "1");
       Account     = Transport["Account"]:"";
       Password    = Transport["Password"]:"";
-      if( regexpmatch(Transport["Nexthop"]:"", "\[") ) {
+      if( find(Transport["Nexthop"]:"", "\[") > -1) {
         Server = deletechars(Transport["Nexthop"]:"","[");
         Server = deletechars(Server,"]");
       } else {
@@ -255,12 +263,11 @@ y2milestone("Transport %1",Transports);
 	TransportTLSuse     = false;
 	TransportTLSenforce = true;
       }
+//      my_item = `item( `id(TransportID), Transport["Destination"]:""+" | "+
+//                                         Transport["Nexthop"]:""+" | "+
+//                                         Transport["Transport"]:""+" | "+
+//                                         Transport["TLS"]:"",true);
     }
-y2milestone("Transport %1",Transport);
-    term my_item = `item( `id(TransportID), Transport["Destination"]:"",
-                                            Transport["Nexthop"]:"",
-                                            Transport["Transport"]:"",
-					    Transport["TLS"]:"");
     Transport_items = add(Transport_items,my_item);
   });
 
@@ -314,7 +321,8 @@ y2milestone("Transport %1",Transport);
       ),
      `Frame(_("Defined Mail Transport Routen"),
        `HBox(
-         `Table(`id(`Table), `header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
+         //`SelectionBox(`id(`Table), `opt (`notify),_("Destination | Server | Transport | Security"),Transport_items)
+         `Table(`id(`Table), `opt (`notify),`header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
         )
       )
    );
@@ -429,6 +437,8 @@ any ComplexDialog() {
    term content = GlobalSettingsDialog();
    string FocusedContent = "GlobalSettings";
 
+   string CID = ""; //CurrentItem
+
    Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, true, true);
    UI::WizardCommand(`SetBackButtonLabel( "" ) );
    UI::WizardCommand(`SetNextButtonLabel( _("Save") ) );
@@ -492,48 +502,62 @@ any ComplexDialog() {
 	      continue;
            }
            MailServer::MailTransports["Changed"] = true;
+	   list<map> Transports  = (list<map>) MailServer::MailTransports["Transports"]:[];
+	   if(size ((list) MailServer::MailTransports["Transports"]:[]) > 0) {
+	         CID = (string)(UI::QueryWidget(`id(`Table), `CurrentItem));
+           }
+           //Now we generate the new/edited entry
+           string password1 = (string)UI::QueryWidget(`id(`Password1), `Value);
+           string password2 = (string)UI::QueryWidget(`id(`Password2), `Value);
+	   map NewTransport = $[];
+           NewTransport["Destination"] = (string)UI::QueryWidget(`id(`Destination), `Value);
+           NewTransport["Transport"]   = (string)UI::QueryWidget(`id(`Protocol), `Value);
+           NewTransport["Nexthop"]     = (string)UI::QueryWidget(`id(`Server), `Value);
+           if(NewTransport["Transport"]:"smtp" != "error" ) {
+             NewTransport["TLS"]         = (string)UI::QueryWidget(`id(`TLS), `CurrentButton);
+             if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
+               NewTransport["Auth"]      = "1";
+               NewTransport["Account"]   = (string)UI::QueryWidget(`id(`Account), `Value);
+               NewTransport["Password"]  = password1;
+             }
+             if((boolean)UI::QueryWidget(`id(`NOMX), `Value)){
+               NewTransport["Nexthop"] = "["+NewTransport["Nexthop"]:""+"]";
+             }
+           }
+           if(ret == `Add || ret == `Edit) {
+           //TODO Checking if the attributes are correct & that Destination is unique
+               if(regexpmatch(NewTransport["Destination"]:"","[ öä#+ü]") || NewTransport["Destination"]:"" == ""){
+                    Report::Error(_("The destination is invalid."));
+                    continue;
+               }
+               if(ret == `Add) {
+                  list TR = [];
+                  foreach(map Transport, Transports, ``{
+                    TR = add(TR,Transport["Destination"]:"");
+                  });
+		  if(contains( TR, NewTransport["Destination"]:"")) {
+                     Report::Error(_("There is already a transport defined for this destination."));
+                     continue;
+		  }
+               }
+           }
 	   if(ret == `Add) {
-	      integer CID      = 0;
-	      if(size ((list) MailServer::MailTransports["Transports"]:[]) > 0) {
-	         tointeger(UI::QueryWidget(`id(`Table), `CurrentItem));
-              }
-              string password1 = (string)UI::QueryWidget(`id(`Password1), `Value);
-              string password2 = (string)UI::QueryWidget(`id(`Password2), `Value);
               if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
                 if( password1 != password2) {
                     Report::Error(_("The passwords are not identical."));
                     continue;
                 }
               }
-	      integer N             = 0;
-	      list<map> Transports  = (list<map>) MailServer::MailTransports["Transports"]:[];
 	      MailServer::MailTransports["Transports"] = [];
-              //Now we generate the new entry
-	      map NewTransport = $[];
-              NewTransport["Destination"] = (string)UI::QueryWidget(`id(`Destination), `Value);
-              NewTransport["Transport"] = (string)UI::QueryWidget(`id(`Protocol), `Value);
-              NewTransport["Nexthop"]  = (string)UI::QueryWidget(`id(`Server), `Value);
-              if(NewTransport["Transport"]:"smtp" != "error" ) {
-                NewTransport["TLS"]         = (string)UI::QueryWidget(`id(`TLS), `CurrentButton);
-                if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
-                  NewTransport["Auth"]      = "1";
-                  NewTransport["Account"]   = (string)UI::QueryWidget(`id(`Account), `Value);
-                  NewTransport["Password"]  = password1;
-                }
-                if((boolean)UI::QueryWidget(`id(`NOMX), `Value)){
-                  NewTransport["Nexthop"] = "["+NewTransport["Nexthop"]:""+"]";
-                }
-              }
 	      foreach(map Transport, Transports, ``{
 	        MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
-		if(N == CID) {
+		if(Transport["Destination"]:"" == CID) {
 	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
                   if((boolean)UI::QueryWidget(`id(`Subdomains), `Value)){
                     NewTransport["Destination"] = "."+NewTransport["Destination"]:"";
 	            MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
                   }
 		}
-		N = N+1;
 	      });
 	      if(size ((list) MailServer::MailTransports["Transports"]:[]) == 0) {
 	        MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
@@ -542,8 +566,34 @@ any ComplexDialog() {
 	           MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
                 }
 	      }
-	   }
-	   content        = MailTransportsDialog(0);
+              CID = NewTransport["Destination"]:"";
+	   } else if(ret == `Edit) {
+              if((boolean)UI::QueryWidget(`id(`Auth), `Value)){
+                if( password1 != password2) {
+                    Report::Error(_("The passwords are not identical."));
+                    continue;
+                }
+              }
+	      MailServer::MailTransports["Transports"] = [];
+	      foreach(map Transport, Transports, ``{
+		if(Transport["Destination"]:"" == CID) {
+	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],NewTransport);
+		} else {
+	          MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
+                }
+	      });
+              CID = NewTransport["Destination"]:"";
+	   } else if (ret == `Delete) {
+	      MailServer::MailTransports["Transports"] = [];
+	      foreach(map Transport, Transports, ``{
+		if(Transport["Destination"]:"" != CID) {
+	           MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
+		}
+	      });
+	   } else if (ret == `Clean) {
+               CID = "";
+           }
+	   content        = MailTransportsDialog(CID);
 	   helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailRelaying") {
            MailServer::MailRelaying["Changed"]            = true;
@@ -583,7 +633,7 @@ any ComplexDialog() {
            focus_changed  = true;
            FocusedContent ="GlobalSettings";
         } else if(ret == "MailTransports" && FocusedContent != "MailTransports") {
-           content        = MailTransportsDialog(0);
+           content        = MailTransportsDialog("");
            helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailTransports";
@@ -620,6 +670,9 @@ y2milestone("FocusedContent %1",FocusedContent);
           Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, false, true);
           UI::WizardCommand(`SetBackButtonLabel( "" ) );
           UI::WizardCommand(`SetNextButtonLabel( _("Save") ) );
+          if(FocusedContent == "MailTransports"){
+		UI::ChangeWidget(`id(`Table), `CurrentItem, CID);
+          }
         }
    }
 
