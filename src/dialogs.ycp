@@ -29,9 +29,6 @@ include "mail-server/helps.ycp";
  * @return dialog result
  */
 define any AuthorizingDialog () {
-    string check_postfix = "if [ -z \"$(id postfix | grep -E 'groups=.*mail')\" ]; then
-usermod -G mail postfix
-fi";
 
     string ERROR = "";
     Ldap::Read();
@@ -55,7 +52,7 @@ fi";
     if (modulesUser == nil || modulesGroups == nil ||
         modulesUser == []  || modulesGroups == [] )
     {
-       ERROR = ERROR + _("You must enable \"Create User Configuration Object\" in\n\"Advanced Configuration\" of the \"YaST2 LDAP-Client\" module.\n") ;
+       ERROR = ERROR + _("You must enable \"Create Default Configuration Objects\" in\n\"Advanced Configuration\" of the \"YaST2 LDAP-Client\" module.\n") ;
     }
 
     searchmap["filter"] = "objectclass=suseDnsConfiguration";
@@ -114,80 +111,6 @@ Create the certificate with the YaST2 CA management module.
 			Popup::Error(_("Unable to Authorize the Administrator User"));
 			continue;
 		}
-		UI::BusyCursor();
-		// looking if the ldap server is confiugred good
-		list<string> schemas = YaPI::LdapServer::ReadSchemaIncludeList();
-		if( contains(schemas,"/etc/openldap/schema/yast.schema") && ! contains(schemas,"/etc/openldap/schema/suse-mailserver.schema"))
-		{
-		    schemas = add(schemas,"/etc/openldap/schema/suse-mailserver.schema");
-		    YaPI::LdapServer::WriteSchemaIncludeList(schemas);
-
-		    // Creating indexes in ldap
-		    list<map<string, any> > indices = YaPI::LdapServer::ReadIndex (LDAPSettings["ldap_domain"]:"");
-		    if (indices != nil)
-		    {
-			boolean SuSEMailClient = false;
-			boolean SuSEMailDomainMasquerading = false;
-			boolean suseTLSPerSitePeer = false;
-
-			foreach ( map<string,any> index, indices, ``{
-			    if (index["attr"]:"" == "SuSEMailClient,SUSEMailAcceptAddress,zoneName")
-			    {
-				SuSEMailClient = true;
-			    }
-			    if (index["attr"]:"" == "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType")
-			    {
-				SuSEMailDomainMasquerading = true;
-			    }
-			    if (index["attr"]:"" == "suseTLSPerSitePeer,SuSEMailTransportDestination")
-			    {
-				suseTLSPerSitePeer = true;
-			    }
-			});
-
-			if (!SuSEMailClient)
-			{
-			    y2milestone ("SuSEMailClient,SUSEMailAcceptAddress,zoneName index missing, adding");
-			    YaPI::LdapServer::AddIndex (LDAPSettings["ldap_domain"]:"",
-							$[ "attr" : "SuSEMailClient,SUSEMailAcceptAddress,zoneName",
-							   "param" : "eq" ]);
-			}
-			if (!SuSEMailDomainMasquerading)
-			{
-			    y2milestone ("SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType index missing, adding");
-			    YaPI::LdapServer::AddIndex (LDAPSettings["ldap_domain"]:"",
-							$[ "attr" : "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType",
-							   "param" : "eq" ]);
-			}
-			if (!suseTLSPerSitePeer)
-			{
-			    y2milestone ("suseTLSPerSitePeer,SuSEMailTransportDestination index missing, adding");
-			    YaPI::LdapServer::AddIndex (LDAPSettings["ldap_domain"]:"",
-							$[ "attr" : "suseTLSPerSitePeer,SuSEMailTransportDestination",
-							   "param" : "eq" ]);
-			}
-			YaPI::LdapServer::RecreateIndex (LDAPSettings["ldap_domain"]:"");
-		    }
-		    else
-		    {
-			Service::Restart("ldap");
-	                sleep ( 2000 );
-		    }
-		    MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(
-                                                                MailServer::AdminPassword);
-		    if (MailServer::LDAPDefaults == nil) {
-			Popup::Error(_("Unable to Authorize the Administrator User"));
-			continue;
-		    }
-		}
-
-                SCR::Execute(.target.bash,check_postfix);
-                /* Setting cyrus password if installed */
-                if(Require::AreAllPackagesInstalled (["cyrus-imapd"]))
-                {
-                  string crypted  = Users::CryptPassword(MailServer::AdminPassword, "system", "user");
-                  SCR::Write(.target.passwd.cyrus, crypted);
-                }
                 return ret;
 	} else {
             y2error("unexpected retcode: %1", ret);
@@ -1143,7 +1066,7 @@ term MailLocalDomainsDialog(string CID) {
 
   term content = `VBox (
        `VBox(
-         `Frame(_("Configure Mail Domain"),
+         `Frame(_("Configure Mail Domains"),
            `HBox(
                `TextEntry(`id(`Name), `opt(`disabled),    _("Name"), Name),
 	       `HStretch(),

@@ -19,6 +19,7 @@ our %TYPEINFO;
 use Net::IMAP;
 use Data::Dumper;
 use YaPI::MailServer;
+
 textdomain("MailServer");
 
 ##--------------------------------------
@@ -101,7 +102,7 @@ BEGIN { $TYPEINFO{InternalAttributes} = ["function",
     "any", "any"];
 }
 sub InternalAttributes {
-    return [ "localdeliverytype" ];
+    return [ "localdeliverytype" , "imapquota", "imapquotaused"];
 }
 
 # return plugin name, used for GUI (translated)
@@ -364,12 +365,10 @@ sub Add {
     my $config	= $_[0];
     my $data	= $_[1]; # the whole map of current user/group after Users::Edit
 
-    return $data if $data->{'uid'} eq "" || ! defined $data->{'uid'};
-
     y2internal ("Add Mail called");
-
     y2debug(Dumper($data));
-    return $data if $data->{'uid'} eq "" || ! defined $data->{'uid'};
+    return undef if !defined $data;
+    return $data if !defined $data->{'uid'} || $data->{'uid'} eq "";
    
     if( grep /^UsersPluginMail$/, @{$data->{'plugins_to_remove'}} ) {
         my @updated_oc;
@@ -390,7 +389,7 @@ sub Add {
     # get default domain name from LDAP
     my $domain = getMainDomain();
 
-    return $data if $domain eq "" || ! defined $data->{'uid'};
+    return $data if !defined $domain || !defined $data->{'uid'} || $domain eq "";
 
 
     return addRequiredMailData($data,$domain);
@@ -423,6 +422,7 @@ sub EditBefore {
             $error = __("Run the mail server module first.");
             return undef;
         }
+        $data->{'imapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
 
     # looking for the local delivery type
@@ -472,8 +472,7 @@ sub Edit {
 	# get default domain name from LDAP
 	my $domain = getMainDomain();
 	
-	return $data if $domain eq "" || ! defined $data->{'uid'};
-	
+        return $data if !defined $domain || !defined $data->{'uid'} || $domain eq "";
 	
 	return addRequiredMailData($data,$domain);
     }
@@ -775,87 +774,6 @@ sub cond_IMAP_OP {
     return $data;
 }
 
-sub cond_IMAP_OP {
-    my $uid = shift;
-    my $op  = shift || "add";
-
-    # FIXME: How must Error handling be done here?
-    # FIXME: we need to somehow get this data elsewhere
-    my $imapadm    = "cyrus";
-    my $imaphost   = "localhost";
-
-    # FIXME: we need to ensure, that imapadmpw == rootdnpw!
-    my $imapadmpw  = Ldap->bind_pass();
-
-    #y2internal("imapadmpw = <$imapadmpw>\n");
-
-    my $imap = new Net::IMAP($imaphost, Debug => 0);
-    unless ($imap) {
-        y2internal("can't connect to $imaphost: $!\n");
-        return undef;
-    }
-
-    my $ret = $imap->login($imapadm, $imapadmpw);
-    if($$ret{Status} ne "ok") {
-        y2internal("login failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-        return undef;
-    }
-
-    my $namespace;
-    my $nscb = sub {
-        my $self = shift;
-        $namespace = shift;
-    };
-
-    $imap->set_untagged_callback('namespace', $nscb);
-
-    $ret = $imap->namespace();
-    if($$ret{Status} ne "ok") {
-        y2internal("namespace failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-        return undef;
-    }
-
-    my @users_ns = $namespace->other_users();
-    
-    # UGLY: Access the Namespace-Structure directly, as the access method lowercase the values
-    my $hsep = $namespace->{'Namespaces'}->{'other_users'}->{$users_ns[0]}; 
-
-    # y2internal("hsep = <$hsep>\n");
-   
-    my $fname = "user".$hsep.$uid;
-
-    #y2internal(Dumper(\@users_ns));
-    #y2internal(Dumper($namespace));
-
-    if( $op eq "add" ) {
-	$ret = $imap->create($fname);
-	if($$ret{Status} ne "ok") {
-	    y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-	    #return undef;
-	}
-	
-	$ret = $imap->deleteacl($fname, "anyone");
-	if($$ret{Status} ne "ok") {
-	    y2internal("deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-	    #return undef;
-	}
-	
-	$ret = $imap->setacl($fname, $imapadm, "lrswipcda");
-	if($$ret{Status} ne "ok") {
-	    y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-	    #return undef;
-	}
-    } elsif( $op eq "delete" ) {
-	$ret = $imap->delete($fname);
-	if($$ret{Status} ne "ok") {
-	    y2internal("delete failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-	    #return undef;
-	}
-    }
-
-    $imap->logout();
-}
-
 sub addRequiredMailData {
     my $data   = shift;
     my $domain = shift;
@@ -865,7 +783,8 @@ sub addRequiredMailData {
     }
 
     # FIXME: why are we called several times and sometimes uid is empty???
-    return $data if $data->{'uid'} eq "" || ! defined $data->{'uid'};
+    return undef if !defined $data;
+    return $data if !defined $data->{'uid'} || $data->{'uid'} eq "";
 
     my $mailaddress = $data->{'uid'}."\@".$domain;
     if( defined $data->{susemailacceptaddress} ) {

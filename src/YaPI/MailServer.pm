@@ -50,6 +50,7 @@ YaST::YCP::Import ("SCR");
 YaST::YCP::Import ("Service");
 YaST::YCP::Import ("Ldap");
 YaST::YCP::Import ("NetworkDevices");
+YaST::YCP::Import ("YaPI::LdapServer");
 
 ##
  #
@@ -731,7 +732,6 @@ sub WriteMailTransports {
     write_attribute($MainCf,'transport_maps','ldap:/etc/postfix/ldaptransport.cf');
     check_ldap_configuration('tls_per_site',$ldap_map);
     write_attribute($MainCf,'smtp_tls_per_site','ldap:/etc/postfix/ldapsmtp_tls_per_site.cf');
-    my $MainCf             = SCR->Read('.mail.postfix.main.table');
     if($MailTransports->{'Use'}){
         check_ldap_configuration('transport_maps',$ldap_map);
         write_attribute($MainCf,'transport_maps','ldap:/etc/postfix/ldaptransport_maps.cf');
@@ -1348,16 +1348,16 @@ sub WriteMailRelaying {
 
     my $smtpd_recipient_restrictions = read_attribute($MainCf,'smtpd_recipient_restrictions');      
     if($MailRelaying->{'RequireSASL'}) {
-      write_attribute($MainCf,'smtpd_sasl_auth_enable','yes');
+       write_attribute($MainCf,'smtpd_sasl_auth_enable','yes');
       if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/) {
           $smtpd_recipient_restrictions = 'permit_sasl_authenticated, '.$smtpd_recipient_restrictions;
-          write_attribute($MainCf,'permit_sasl_authenticated',$smtpd_recipient_restrictions);
+          write_attribute($MainCf,'smtpd_recipient_restrictions',$smtpd_recipient_restrictions);
       }
     } else {
       if( $smtpd_recipient_restrictions =~ s/permit_sasl_authenticated//) {
         $smtpd_recipient_restrictions =~ s/,\s*,/,/;
 	$smtpd_recipient_restrictions =~ s/^\s*,\s*//;
-        write_attribute($MainCf,'permit_sasl_authenticated',$smtpd_recipient_restrictions);
+        write_attribute($MainCf,'smtpd_recipient_restrictions',$smtpd_recipient_restrictions);
       }
       write_attribute($MainCf,'smtpd_sasl_auth_enable','no');
     }
@@ -1418,7 +1418,7 @@ sub ReadMailLocalDelivery {
     my %MailLocalDelivery = (
                                 'Changed'         => YaST::YCP::Boolean(0),
                                 'Type'            => '',
-                                'MailboxSize'     => '',
+                                'MailboxSizeLimit'=> '',
                                 'FallBackMailbox' => '',
                                 'SpoolDirectory'  => '',
                                 'QuotaLimit'      => '',
@@ -1451,7 +1451,7 @@ sub ReadMailLocalDelivery {
     }elsif( $MailboxCommand eq '' && $MailboxTransport eq '') {
        $MailLocalDelivery{'Type'}      = 'local';
        if( $MailboxSizeLimit =~ /^\d+$/ ) {
-            $MailLocalDelivery{'MailboxSize'}  = $MailboxSizeLimit;
+            $MailLocalDelivery{'MailboxSizeLimit'}  = $MailboxSizeLimit;
        } 
        if( $HomeMailbox ne '' ) {
            $MailLocalDelivery{'SpoolDirectory'} = '$HOME/'.$HomeMailbox;
@@ -1462,7 +1462,7 @@ sub ReadMailLocalDelivery {
        }
     } elsif($MailboxCommand =~ /\/usr\/bin\/procmail/) {
         $MailLocalDelivery{'Type'} = 'procmail';
-    } elsif($MailboxTransport =~ /lmtp:unix:public\/lmtp/) {
+    } elsif($MailboxTransport =~ /lmtp:unix:\/var\/lib\/imap\/socket\/lmtp/) {
         $MailLocalDelivery{'Type'} = 'cyrus';
         $MailLocalDelivery{'MailboxSizeLimit'}         = SCR->Read('.etc.imapd_conf.autocreatequota') || 0;
         $MailLocalDelivery{'QuotaLimit'}               = SCR->Read('.etc.imapd_conf.quotawarn') || 0;
@@ -1548,6 +1548,7 @@ sub WriteMailLocalDelivery {
 	write_attribute($MainCf,'mailbox_command','/usr/bin/procmail');
 	write_attribute($MainCf,'mailbox_transport','');
     } elsif( $MailLocalDelivery->{'Type'} eq 'cyrus') {
+print STDERR "HERE I AM";
         write_attribute($MainCf,'home_mailbox','');
 	write_attribute($MainCf,'mail_spool_directory','');
 	write_attribute($MainCf,'mailbox_command','');
@@ -2176,8 +2177,74 @@ sub ResetMailServer {
     my $self            = shift;
     my $AdminPassword   = shift;
     my $ldapMap         = shift;
+    my $check_postfix = 'if [ -z "$(id postfix | grep -E \'groups=.*mail\')" ]; then
+usermod -G mail postfix
+fi';
+
+    # Now we setup postfix basicaly
+    SCR->Write(".sysconfig.mail.MAIL_CREATE_CONFIG","yes");
+    SCR->Write(".sysconfig.mail",undef);
+    SCR->Execute(".target.bash", "SuSEconfig -module postfix");
+    SCR->Write(".sysconfig.mail.MAIL_CREATE_CONFIG","no");
+    SCR->Write(".sysconfig.mail",undef);
+
+    # Now we configure the LDAP-Server to be able store the mail server configuration
+    my $schemas = YaPI::LdapServer->ReadSchemaIncludeList();
+    my $SCHEMA  = join "",@{$schemas};
+    if( $SCHEMA !~ /suse-mailserver.schema/ ) {
+	push @{$schemas},'/etc/openldap/schema/suse-mailserver.schema';
+	YaPI::LdapServer->WriteSchemaIncludeList($schemas);
+	my $indices = YaPI::LdapServer->ReadIndex($ldapMap->{ldap_domain});
+	my $SuSEMailClient = 0;
+	my $SuSEMailDomainMasquerading = 0;
+	my $suseTLSPerSitePeer= 0;
+	foreach my $index (@{$indices}) {
+	  if( $index->{attr} eq "SuSEMailClient,SUSEMailAcceptAddress,zoneName")
+	  {
+	    $SuSEMailClient = 1;
+	  }
+	  if( $index->{attr} eq "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType")
+	  {
+	    $SuSEMailDomainMasquerading = 1;
+	  }
+	  if( $index->{attr} eq "suseTLSPerSitePeer,SuSEMailTransportDestination")
+	  {
+	    $suseTLSPerSitePeer = 1;
+	  }
+	}
+	if(!$SuSEMailClient)
+	{
+	   YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
+	   			       { "attr"  => "SuSEMailClient,SUSEMailAcceptAddress,zoneName",
+					 "param" => "eq" }	
+				     );
+	}
+	if(!$SuSEMailDomainMasquerading)
+	{
+	   YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
+	   			       { "attr"  => "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType",
+					 "param" => "eq" }	
+				     );
+	}
+	if(!$SuSEMailClient)
+	{
+	   YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
+	   			       { "attr"  => "suseTLSPerSitePeer,SuSEMailTransportDestination",
+					 "param" => "eq" }	
+				     );
+	}
+        Service->Restart('ldap');
+    }
+
+    #Put user postfix into the group mail
+    system($check_postfix);
 
     #Setup Global Settings;
+    my $TLS = "use";
+    my $size = SCR->Read(".target.size", '/etc/ssl/servercerts/servercert.pem');
+    if ($size <= 0) {
+	$TLS = "none";	
+    }
     my $TMP = $self->ReadGlobalSettings($AdminPassword);
        $TMP->{'Changed'}               = 1;
        $TMP->{'MaximumMailSize'}       = '10240000';
@@ -2192,16 +2259,17 @@ sub ResetMailServer {
        $TMP->{'VirusScanning'}  = 0;
        $self->WriteMailPrevention($TMP,$AdminPassword); 
     #Setup Mail Server Relaying
+
        $TMP = $self->ReadMailRelaying($AdminPassword);
        $TMP->{'Changed'} = 1;
        $TMP->{'RequireSASL'} = '0';
-       $TMP->{'SMTPDTLSMode'} = 'use';
+       $TMP->{'SMTPDTLSMode'} = $TLS;
        $self->WriteMailRelaying($TMP,$AdminPassword); 
     #Setup Local Delivery
        $TMP = $self->ReadMailLocalDelivery($AdminPassword);
        $TMP->{'Changed'} = 1;
        $TMP->{'Type'} = 'local';
-       $TMP->{'MailboxSize'} = '0';
+       $TMP->{'MailboxSizeLimit'} = 0;
        $TMP->{'SpoolDirectory'} = '/var/spool/mail';
        $self->WriteMailLocalDelivery($TMP,$AdminPassword); 
 
@@ -2227,6 +2295,7 @@ sub ResetMailServer {
     check_ldap_configuration('virtual_alias_maps',$ldapMap);
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
+    SCR->Execute(".target.bash", "touch /var/adm/YaST/yast2-mail-server-used");
 
     return 1;
 }
