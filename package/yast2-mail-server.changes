@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Fri Aug 20 15:27:48 CEST 2004 - schubi@suse.de
+
+- Merged SLES9 with head
+
+-------------------------------------------------------------------
 Fri Jul  2 14:23:37 CEST 2004 - varkoly@suse.de
 
 - bugfix for WriteMailTransports:
