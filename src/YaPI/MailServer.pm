@@ -818,11 +818,6 @@ sub ReadMailPrevention {
 			       'VirusScanning'              => 1
                           );
 
-    my %AccessEntry     = (    
-                               'MailClient'  => '',
-                               'MailAction'  => ''
-                          );
-
     my $ERROR        = '';
 
     # Make LDAP Connection 
@@ -849,7 +844,7 @@ sub ReadMailPrevention {
     if($MailPrevention{'BasicProtection'} ne 'off') {
        my $smtpd_client_restrictions = read_attribute($MainCf,'smtpd_client_restrictions');
        foreach(split /, |,/, $smtpd_client_restrictions){
-          if(/reject_rbl_client (\w+)/){
+          if(/reject_rbl_client (.*)/){
 	    push @{$MailPrevention{'RBLList'}}, $1;
 	  }
        }
@@ -859,13 +854,15 @@ sub ReadMailPrevention {
     my %SearchMap = (
                    'base_dn' => $ldap_map->{'mail_config_dn'},
                    'filter'  => "ObjectClass=SuSEMailAccess",
+                   'scope'   => 2,
                    'attrs'   => ['SuSEMailClient','SuSEMailAction']
                  );
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
-    foreach my $entry (@{$ret}){    
-       $AccessEntry{'MailClient'} = $entry->{'SuSEMailClient'};
-       $AccessEntry{'MailAccess'} = $entry->{'SuSEMailAction'};
-       push @{$MailPrevention{'AccessList'}}, %AccessEntry;
+    foreach my $entry (@{$ret}){  
+       my $AccessEntry = {};
+       $AccessEntry->{'MailClient'} = $entry->{'susemailclient'}->[0];
+       $AccessEntry->{'MailAction'} = $entry->{'susemailaction'}->[0];
+       push @{$MailPrevention{'AccessList'}}, $AccessEntry;
     }
     
     return \%MailPrevention;
@@ -947,22 +944,31 @@ sub WriteMailPrevention {
     my %SearchMap = (
                    'base_dn' => $ldap_map->{'mail_config_dn'},
                    'filter'  => "ObjectClass=SuSEMailAccess",
-                   'attrs'   => []
+                   'scope'   => 2,
+                   'map'     => 1
                  );
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
     #First we clean the access table
-    foreach my $entry (@{$ret}){    
-       SCR->Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
+    foreach my $key (keys %{$ret}){
+       if(! SCR->Write('.ldap.delete',{'dn'=>$key})){
+          my $ldapERR = SCR->Read(".ldap.error");
+          return $self->SetError(summary     => "LDAP delete failed",
+                                 code        => "SCR_WRITE_FAILED",
+                                 description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+       }
     }
+
     #Now we write the new table
+print STDERR Dumper([$MailPrevention->{'AccessList'}]);
     foreach my $entry (@{$MailPrevention->{'AccessList'}}) {
-       my $dn  = [ 'dn' => "SuSEMailClient=".$entry->{'SuSEMailClient'}.','. $ldap_map->{'mail_config_dn'}];
-       my $tmp = [ 'SuSEMailClient'   => $entry->{'MailClient'},
-                   'SuSEMailAction'   => $entry->{'SuSEMailAction'}
-                 ];
-       if(! SCR->Execute('.ldap.add',$dn,$tmp)){
+       my $dn  = { 'dn' => "SuSEMailClient=".$entry->{'MailClient'}.','. $ldap_map->{'mail_config_dn'}};
+       my $tmp = { 'SuSEMailClient'   => $entry->{'MailClient'},
+                   'SuSEMailAction'   => $entry->{'MailAction'},
+                   'ObjectClass'      => ['SuSEMailAccess']
+                 };
+       if(! SCR->Write('.ldap.add',$dn,$tmp)){
         my $ldapERR = SCR->Read(".ldap.error");
-        return $self->SetError(summary => "LDAP bind failed",
+        return $self->SetError(summary => "LDAP add failed",
                                code => "SCR_INIT_FAILED",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
        }
@@ -970,6 +976,9 @@ sub WriteMailPrevention {
 
     # now we looks if the ldap entries in the main.cf for the access table are OK.
     check_ldap_configuration('access',$ldap_map);
+    SCR->Write('.mail.postfix.main.table',$MainCf);
+
+    return  1;
 }
 
 =item *
@@ -1220,6 +1229,8 @@ sub ReadMailLocalDelivery {
         } else {
             $MailLocalDelivery{'HardQuotaLimit'}       = 0; 
         }
+    } else {
+        $MailLocalDelivery{'Type'} = 'none';
     }
     return \%MailLocalDelivery;
 }

@@ -322,17 +322,102 @@ term MailTransportsDialog(string CID) {
      `Frame(_("Defined Mail Transport Routen"),
        `HBox(
          //`SelectionBox(`id(`Table), `opt (`notify),_("Destination | Server | Transport | Security"),Transport_items)
-         `Table(`id(`Table), `opt (`notify),`header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
+         `Table(`id(`table), `opt (`notify),`header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
         )
       )
    );
   return content;
 }
 
-term MailPreventionDialog() {
+term MailPreventionDialog(string CID, string CIDRBL) {
+  list<term>     AccessItems= [];
+  list<term>     RBLItems   = [];
+  string  BasicProtection   =  (string)MailServer::MailPrevention["BasicProtection"]:"";
+  list<string> RBLList      = (list<string>) MailServer::MailPrevention["RBLList"]:[];
+  list<map<string,string> > AccessList = (list<map<string,string> >) MailServer::MailPrevention["AccessList"]:[];
+  boolean VirusScanning     = ((string)MailServer::MailPrevention["VirusScanning"]:"0" == "1");
+  boolean BasicProtectionOff    = false;
+  boolean BasicProtectionMedium = false;
+  boolean BasicProtectionHard   = true;
+  if(BasicProtection == "off"){
+     BasicProtectionOff     = true;
+     BasicProtectionHard    = false;
+  } else if(BasicProtection == "medium"){
+     BasicProtectionMedium  = true;
+     BasicProtectionHard    = false;
+  }
+
+  foreach(map<string,string> Access, AccessList, ``{
+    term my_item = `item( `id(Access["MailClient"]:""), Access["MailClient"]:"", 
+                                                        select(splitstring(Access["MailAction"]:""," "),0,""),
+							substring(Access["MailAction"]:"",find(Access["MailAction"]:""," "))
+                        );
+    AccessItems = add(AccessItems,my_item);
+  });
+
+  foreach(string RBLServer, RBLList, ``{
+    term my_item = `item( `id(RBLServer), RBLServer);
+    RBLItems     = add(RBLItems,my_item);
+  });
+
   term content = `VBox (
+	`Frame(_("SPAM Prevention"),
+	  `HBox(
+	    `RadioButtonGroup(`id(`BasicProtection),
+	      `VBox(
+	        `Left(`RadioButton(`id("off"),    `opt(`notify), _("Off"),    BasicProtectionOff)),
+	        `Left(`RadioButton(`id("medium"), `opt(`notify), _("Medium"), BasicProtectionMedium)),
+	        `Left(`RadioButton(`id("hard"),   `opt(`notify), _("Hard"),   BasicProtectionHard))
+	       )
+	     ),
+	      `VBox(`SelectionBox(`id(`RBLList), "Confiugred RBL Server",RBLItems)
+	     ),
+	     `VBox(
+	        `Left(`PushButton(`id(`RBLAdd),   _("Add"))),
+		`Left(`PushButton(`id(`RBLDelete),_("Delete")))
+	     )
+	   )
+         ),
+	`Frame(_("Sender Restrictions"),
+	  `HBox(
+	      `VBox(
+	        `Table(`id(`table), `opt (`notify),`header(_("Sender Address"),_("Action"),_("Option")),AccessItems)
+	       ),
+	      `VBox(
+	        `PushButton(`id(`AccessAdd),   _("Add")),
+		`PushButton(`id(`AccessDelete),_("Delete"))
+	       )
+	   )
+	 ),
+	`Frame(_("Virus Scanning"),
+	  `HBox(
+               `Left(`CheckBox (`id(`VirusScanning), `opt(`notify), _("Start Virus Scanner AMAVIS"), VirusScanning))
+	   )
+	 )
    );
-  return content;
+   return content;
+}
+
+term RBLAdd () {
+   return `Frame(_("Add New RBL Server"),
+            `VBox(
+              `TextEntry(`id(`NewRBLServer),  "",  ""),
+	      `PushButton(`id(`AddNewRBLServer),   _("OK"))
+	     )
+	   );
+}
+
+term AccessAdd () {
+   return `Frame(_("Add New Sender Restriction"),
+            `VBox(
+              `TextEntry(`id(`NewSender),  "Sender Address",  ""),
+	      `ComboBox (`id(`NewSenderAction), _("Action"), [ "REJECT", "DEFER_IF_REJECT","DEFER_IF_PERMIT",
+	                                                       "OK", "DUNNO", "PREPEND", "HOLD", "DISCARD",
+							       "FILTER", "REDIRECT", "" ]),
+              `TextEntry(`id(`NewSenderOption),  "Option",  ""),
+	      `PushButton(`id(`AddNewSender),   _("OK"))
+	     )
+	   );
 }
 
 term MailRelayingDialog() {
@@ -410,7 +495,23 @@ term MailRelayingDialog() {
 }
 
 term MailLocalDeliveryDialog() {
+  boolean TypeCYRUS    = ((string)MailServer::LocalDelivery["Type"]:"" == "cyrus");
+  boolean TypePROCMAIL = ((string)MailServer::LocalDelivery["Type"]:"" == "procmail");
+  boolean TypeLOCAL    = ((string)MailServer::LocalDelivery["Type"]:"" == "local");
+  boolean TypeNONE     = ((string)MailServer::LocalDelivery["Type"]:"" == "none");
+
+  term settings = `HBox();
   term content = `VBox (
+      `Frame(_("Local Delivery Type"),
+         `RadioButtonGroup(`id(`Type),
+            `HBox(
+	        `RadioButton(`id("cyrus"),    `opt(`notify), _("Cyrus IMAP"), TypeCYRUS),
+	        `RadioButton(`id("procmail"), `opt(`notify), _("Procmail"),   TypePROCMAIL),
+	        `RadioButton(`id("local"),    `opt(`notify), _("Filesystem"), TypeLOCAL),
+	        `RadioButton(`id("none"),     `opt(`notify), _("Filesystem"), TypeNONE)
+	     )
+          )
+      )
    );
   return content;
 }
@@ -438,6 +539,7 @@ any ComplexDialog() {
    string FocusedContent = "GlobalSettings";
 
    string CID = ""; //CurrentItem
+   string CIDRBL = ""; //CurrentItem
 
    Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, true, true);
    UI::WizardCommand(`SetBackButtonLabel( "" ) );
@@ -504,7 +606,7 @@ any ComplexDialog() {
            MailServer::MailTransports["Changed"] = true;
 	   list<map> Transports  = (list<map>) MailServer::MailTransports["Transports"]:[];
 	   if(size ((list) MailServer::MailTransports["Transports"]:[]) > 0) {
-	         CID = (string)(UI::QueryWidget(`id(`Table), `CurrentItem));
+	         CID = (string)(UI::QueryWidget(`id(`table), `CurrentItem));
            }
            //Now we generate the new/edited entry
            string password1 = (string)UI::QueryWidget(`id(`Password1), `Value);
@@ -535,6 +637,7 @@ any ComplexDialog() {
                   foreach(map Transport, Transports, ``{
                     TR = add(TR,Transport["Destination"]:"");
                   });
+                  //TODO search for .<domainname to>
 		  if(contains( TR, NewTransport["Destination"]:"")) {
                      Report::Error(_("There is already a transport defined for this destination."));
                      continue;
@@ -587,6 +690,7 @@ any ComplexDialog() {
 	      MailServer::MailTransports["Transports"] = [];
 	      foreach(map Transport, Transports, ``{
 		if(Transport["Destination"]:"" != CID) {
+                  //TODO search for .<domainname to>
 	           MailServer::MailTransports["Transports"] = add(MailServer::MailTransports["Transports"]:[],Transport);
 		}
 	      });
@@ -595,6 +699,64 @@ any ComplexDialog() {
            }
 	   content        = MailTransportsDialog(CID);
 	   helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
+        } else if(FocusedContent == "MailPrevention") {
+	  if(ret == `RBLAdd) {
+	    UI::OpenDialog( RBLAdd());
+	    continue;
+	  }
+	  if(ret == `AccessAdd) {
+	    UI::OpenDialog( AccessAdd());
+	    continue;
+	  }
+	  MailServer::MailPrevention["Changed"] = true;
+	  if(ret == `AddNewRBLServer) {
+	    string NewRLBServer = (string)UI::QueryWidget(`id(`NewRBLServer), `Value);
+	    MailServer::MailPrevention["RBLList"] = add((list<string>)MailServer::MailPrevention["RBLList"]:[],NewRLBServer);
+	    UI::CloseDialog();
+	    CIDRBL = NewRLBServer;
+	  } else if(ret == `AddNewSender) {
+	    string NewSender       = (string)UI::QueryWidget(`id(`NewSender),       `Value);
+	    string NewSenderAction = (string)UI::QueryWidget(`id(`NewSenderAction), `Value);
+	    string NewSenderOption = (string)UI::QueryWidget(`id(`NewSenderOption), `Value);
+	    map SenderRestriction  = $[  "MailClient":NewSender,
+	                                 "MailAction":NewSenderAction + " " + NewSenderOption
+	                              ];
+	    MailServer::MailPrevention["AccessList"] = add((list<map>)MailServer::MailPrevention["AccessList"]:[],SenderRestriction);
+	    UI::CloseDialog();
+	    CID = NewSender;
+	  }else if(ret == `RBLDelete){
+	    string Server = (string)UI::QueryWidget(`id(`RBLList),`CurrentItem);
+	    list<string>  RBLList =  (list<string>)MailServer::MailPrevention["RBLList"]:[];
+	    MailServer::MailPrevention["RBLList"] = [];
+	    foreach(string my_item, RBLList, ``{
+	       if( my_item != Server) {
+	          MailServer::MailPrevention["RBLList"] = add(MailServer::MailPrevention["RBLList"]:[],my_item);
+	       }
+	    });
+	  }else if(ret == `AccessDelete){
+	    string Sender = (string)(UI::QueryWidget(`id(`table), `CurrentItem));
+	    list<map<string,string> > AccessList = (list<map<string,string> >)MailServer::MailPrevention["AccessList"]:[];
+	    MailServer::MailPrevention["AccessList"] = [];
+	    foreach(map<string,string> my_item, AccessList, ``{
+	       if( my_item["MailClient"]:"" != Sender ){
+	         MailServer::MailPrevention["AccessList"] = add(MailServer::MailPrevention["AccessList"]:[],my_item);
+	       }
+	    });
+	  } else if(ret == "off") {
+            MailServer::MailPrevention["BasicProtection"] = "off";
+	  } else if(ret == "medium") {
+            MailServer::MailPrevention["BasicProtection"] = "medium";
+	  } else if(ret == "hard") {
+            MailServer::MailPrevention["BasicProtection"] = "hard";
+	  } else if(ret == `VirusScanning) {
+            if((boolean) UI::QueryWidget(`id(`VirusScanning), `Value)) {
+               MailServer::MailPrevention["VirusScanning"] = "1";
+            } else {
+               MailServer::MailPrevention["VirusScanning"] = "0";
+            }
+          }
+          content        = MailPreventionDialog(CID,CIDRBL);
+          helptext       = HELPS["MailPrevention"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailRelaying") {
            MailServer::MailRelaying["Changed"]            = true;
 	   string SMTPDTLSMode = (string)UI::QueryWidget(`id(`SMTPDTLSMode), `CurrentButton);
@@ -638,7 +800,7 @@ any ComplexDialog() {
            focus_changed  = true;
            FocusedContent ="MailTransports";
         } else if(ret == "MailPrevention" && FocusedContent != "MailPrevention") {
-           content        = MailPreventionDialog();
+           content        = MailPreventionDialog(CID,CIDRBL);
            helptext       = HELPS["MailPrevention"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailPrevention";
@@ -670,9 +832,7 @@ y2milestone("FocusedContent %1",FocusedContent);
           Wizard::SetContents(_("Mail Server Configuration"), content ,helptext, false, true);
           UI::WizardCommand(`SetBackButtonLabel( "" ) );
           UI::WizardCommand(`SetNextButtonLabel( _("Save") ) );
-          if(FocusedContent == "MailTransports"){
-		UI::ChangeWidget(`id(`Table), `CurrentItem, CID);
-          }
+	  UI::ChangeWidget(`id(`table), `CurrentItem, CID);
         }
    }
 
