@@ -1,0 +1,58 @@
+# extended LDIF
+#
+# LDAPv3
+# base <> with scope sub
+# filter: (objectclass=*)
+# requesting: ALL
+#
+
+# suse.de
+dn: dc=suse,dc=de
+objectClass: top
+objectClass: dcObject
+objectClass: domain
+dc: suse
+
+# DNS, suse.de
+dn: ou=DNS,dc=suse,dc=de
+objectClass: organizationalUnit
+ou: DNS
+
+# MAIL, suse.de
+dn: ou=MAIL,dc=suse,dc=de
+objectClass: organizationalUnit
+ou: MAIL
+
+# DHCP, suse.de
+dn: ou=DHCP,dc=suse,dc=de
+objectClass: organizationalUnit
+ou: DHCP
+
+# USER, suse.de
+dn: ou=USERS,dc=suse,dc=de
+objectClass: organizationalUnit
+ou: USERS
+
+# GROUP, suse.de
+dn: ou=GROUPS,dc=suse,dc=de
+objectClass: organizationalUnit
+ou: GROUPS
+
+# uid=admin,ou=USERS,dc=suse,dc=de
+dn: uid=admin,ou=USERS,dc=suse,dc=de
+objectclass: top
+objectclass: person
+objectClass: posixAccount
+userPassword: secret
+uid: admin
+cn: admin
+sn: admin
+uidNumber: 0
+gidNumber: 0
+homeDirectory: /home/mailadmin
+loginshell: /bin/false
+
+dn: cn=de
+
+# numResponses: 7
+# numEntries: 6
