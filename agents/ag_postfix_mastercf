@@ -35,6 +35,10 @@ sub OtherCommand () {
             return $class->SetError(summary => "Can not initialize MasterCFParser",
                                     code => "SCR_INIT_ERR");
         }
+	if( $_CFINST->readMasterCF() ) {
+            return $class->SetError(summary => "Can not read master.cf",
+                                    code => "SCR_INIT_ERR");
+	}
 	# FIXME: Set logging callback here
     }
     
@@ -45,24 +49,28 @@ sub Read {
     my $class         = shift;
     my ($path, @args) = @_;
 
-    return undef if ! $class->check_initialized();
     if( $_CFINST->readMasterCF() ) {
 	# FIXME: How about $class->SetError() ???
 	return undef;
     }
     
-    if( $path eq '.findService' ) {
-	my ($service, $command) = @args;
-	return $_CFINST->getServiceByAttributes( { 'service' => $service,
-						   'command' => $command } );
-    } else {
-	return $_CFINST->getRAWCF();
-    }
-
     return 1;
 }
 
 sub Write { 
+    my $class         = shift;
+    my ($path, @args) = @_;
+
+    return undef if ! $class->check_initialized();
+    if( $_CFINST->writeMasterCF() ) {
+	# FIXME: How about $class->SetError() ???
+	return undef;
+    }
+
+    return 1; 
+}
+
+sub Execute {
     my $class         = shift;
     my ($path, @args) = @_;
 
@@ -74,14 +82,19 @@ sub Write {
 
     if( $path eq '.modifyService' ) {
 	my $service = $args[0];
-	return $_CFINST->modifyService($service);
+	return undef if $_CFINST->modifyService( $service );
+    } elsif ( $path eq '.findService' ) {
+	my $service = $args[0];
+	return $_CFINST->getServiceByAttributes( $service );
+    } elsif ( $path eq '.deleteService' ) {
+	my $service = $args[0];
+	return undef if $_CFINST->deleteService( $service );
+    } elsif ( $path eq '.addService' ) {
+	my $service = $args[0];
+	return undef if $_CFINST->addService($service);
     }
 
-    return 1; 
-}
-
-sub Execute {
-    return 1;
+    return undef; 
 }
   
 
