@@ -107,12 +107,12 @@ Create the certificate with the YaST2 CA management module.
         } else if(ret == `next) {
                 MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(
                                                                 MailServer::AdminPassword);
-	        string crypted  = Users::CryptPassword(AdminPassword, "system");
-                SCR::Write(.target.passwd.cyrus, crypted);
                 if (MailServer::LDAPDefaults == nil) {
 			Popup::Error(_("Unable to Authorize the Administrator User"));
 			continue;
 		}
+                string crypted  = Users::CryptPassword(AdminPassword, "system");
+                SCR::Write(.target.passwd.cyrus, crypted);
                 return ret;
 	} else {
             y2error("unexpected retcode: %1", ret);
