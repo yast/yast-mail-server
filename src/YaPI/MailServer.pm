@@ -1423,13 +1423,16 @@ BEGIN { $TYPEINFO{WriteMailLocalDomains} =["function", "boolean", ["map", "strin
 sub WriteMailLocalDomains {
 }
 
-BEGIN { $TYPEINFO{ReadLDAPExportDefaults} = ["function", ["map", "string", "any"], ["map", "string", "any"] ]; }
-sub ReadLDAPExportDefaults {
-    my $self = shift;
-    my $data = shift;
+BEGIN { $TYPEINFO{ReadLDAPDefaults} = ["function", ["map", "string", "any"], "string", "string" ]; }
+sub ReadLDAPDefaults {
+    my $self          = shift;
+    my $AdminUser     = shift;
+    my $AdminPassword = shift;
 
-    my $ldapMap = {};
-    my $ldapret = undef;
+    my $ldapMap       = {};
+    my $admin_bind    = {};
+    my $ldapret       = undef;
+    my $ERROR; 
 
     if(Ldap->Read()) {
         $ldapMap = Ldap->Export();
@@ -1456,7 +1459,9 @@ sub ReadLDAPExportDefaults {
                                code => "SCR_INIT_FAILED",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
     }
+
     # searching LDAP Bases
+    # First we search mail base
     $ldapret = SCR->Read(".ldap.search", {
                                           "base_dn" => $ldapMap->{'ldap_domain'},
                                           "filter" => '(& (objectclass=suseMailServerConfiguration) (cn=default))',
@@ -1470,8 +1475,82 @@ sub ReadLDAPExportDefaults {
                                code => "LDAP_SEARCH_FAILED");
     }
     if(@$ldapret > 0) {
-        $ldapMap->{'mail_dn'} = $ldapret->[0]->{susedefaultbase};
+        $ldapMap->{'mail_config_dn'} = $ldapret->[0]->{susedefaultbase};
     }
+    # now we search user base
+    $ldapret = SCR->Read(".ldap.search", {
+                                          "base_dn" => $ldapMap->{'ldap_domain'},
+                                          "filter" => '(& (objectclass=suseUserConfiguration) (cn=default))',
+                                          "scope" => 2,
+                                          "not_found_ok" => 1
+                                         });
+    if (! defined $ldapret) {
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP search failed!",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
+                               code => "LDAP_SEARCH_FAILED");
+    }
+    if(@$ldapret > 0) {
+        $ldapMap->{'user_config_dn'} = $ldapret->[0]->{susedefaultbase};
+    }
+    # now we search group base
+    $ldapret = SCR->Read(".ldap.search", {
+                                          "base_dn" => $ldapMap->{'ldap_domain'},
+                                          "filter" => '(& (objectclass=suseGroupConfiguration) (cn=default))',
+                                          "scope" => 2,
+                                          "not_found_ok" => 1
+                                         });
+    if (! defined $ldapret) {
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP search failed!",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
+                               code => "LDAP_SEARCH_FAILED");
+    }
+    if(@$ldapret > 0) {
+        $ldapMap->{'group_config_dn'} = $ldapret->[0]->{susedefaultbase};
+    }
+    # now we search DNS base
+    $ldapret = SCR->Read(".ldap.search", {
+                                          "base_dn" => $ldapMap->{'ldap_domain'},
+                                          "filter" => '(& (objectclass=suseDNSConfiguration) (cn=default))',
+                                          "scope" => 2,
+                                          "not_found_ok" => 1
+                                         });
+    if (! defined $ldapret) {
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP search failed!",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
+                               code => "LDAP_SEARCH_FAILED");
+    }
+    if(@$ldapret > 0) {
+        $ldapMap->{'DNS_config_dn'} = $ldapret->[0]->{susedefaultbase};
+    }
+    # now we search the admin user DN
+    $ldapret = SCR->Read(".ldap.search", {
+                                          "base_dn" => $ldapMap->{'ldap_domain'},
+                                          "filter" => "(& (objectclass=posixaccount) (uid=$AdminUser))",
+                                          "scope" => 2,
+                                          "not_found_ok" => 1
+                                         });
+    if (! defined $ldapret) {
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP search failed!",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
+                               code => "LDAP_SEARCH_FAILED");
+    }
+    if(@$ldapret > 0) {
+        $ldapMap->{'binddn'} = $ldapret->[0]->{'dn'};
+    }
+
+    # Now we try to bind to the LDAP
+    $admin_bind->{'binddn'} = $ldapMap->{'binddn'};
+    $admin_bind->{'bindpw'} = $AdminPassword;
+    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR->Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+    
+    $ldapMap->{'bindpw'} = $AdminPassword;
 
     return $ldapMap;
 }

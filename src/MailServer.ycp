@@ -116,7 +116,7 @@ global string AdminPasswd = "";
  * Read all mail-server settings
  * @return true on success
  */
-global boolean Read() {
+global symbol Read() {
 
     /* MailServer read dialog caption */
     string caption = _("Reading the Mail Server Settings");
@@ -167,7 +167,7 @@ global boolean Read() {
     );
 
     // read  global settings
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStage();
     LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(AdminUser,AdminPasswd);
     /* Error message */
@@ -178,7 +178,7 @@ global boolean Read() {
     sleep(sl);
 
     // read  global settings
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStage();
     GlobalSettings = (map<string,any>) YaPI::MailServer::ReadGlobalSettings(AdminDN,AdminPasswd);
     /* Error message */
@@ -186,7 +186,7 @@ global boolean Read() {
     sleep(sl);
 
     // read mail transports
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStep();
     MailTransports = (map<string,any>) YaPI::MailServer::ReadMailTransports(AdminDN,AdminPasswd);
     /* Error message */
@@ -194,7 +194,7 @@ global boolean Read() {
     sleep(sl);
 
     // read mail preventions
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStage();
     MailPrevention = (map<string,any>) YaPI::MailServer::ReadMailPrevention(AdminDN,AdminPasswd);
     /* Error message */
@@ -202,7 +202,7 @@ global boolean Read() {
     sleep(sl);
 
     // read mail realaying
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStage();
     MailRelaying = (map<string,any>) YaPI::MailServer::ReadMailRelaying(AdminDN,AdminPasswd);
     /* Error message */
@@ -210,7 +210,7 @@ global boolean Read() {
     sleep(sl);
 
     // read mail local delivery
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStage();
     MailLocalDelivery = (map<string,any>) YaPI::MailServer::ReadMailLocalDelivery(AdminDN,AdminPasswd);
     /* Error message */
@@ -218,7 +218,7 @@ global boolean Read() {
     sleep(sl);
 
     // read mail server fetching jobs
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStage();
     FetchingMail = (map<string,any>) YaPI::MailServer::ReadFetchingMail(AdminDN,AdminPasswd);
     /* Error message */
@@ -226,20 +226,20 @@ global boolean Read() {
     sleep(sl);
 
     // read mail server local domains
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     Progress::NextStage();
     MailLocalDomains = (map<string,any>) YaPI::MailServer::ReadMailLocalDomains(AdminDN,AdminPasswd);
     /* Error message */
     if(MailLocalDomains == nil) Report::Warning(_("Cannot read the mail server domains."));
     sleep(sl);
 
-    if(Abort()) return false;
+    if(Abort()) return `abort;
     /* Progress finished */
     Progress::NextStage();
     sleep(sl);
 
-    if(Abort()) return false;
-    return true;
+    if(Abort()) return `abort;
+    return `next;
 }
 
 /**

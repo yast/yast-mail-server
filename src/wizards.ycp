@@ -103,13 +103,19 @@ any MailServerSequence() {
 
     map aliases = $[
 	"read"	: [ ``( ReadDialog() ), true ],
+	"auth"	: [ ``( AuthorizingDialog() ), true ],
 	"main"	:   ``( MainSequence() ),
 	"write"	: [ ``( WriteDialog() ), true ]
     ];
 
     map sequence = $[
-	"ws_start" : "read",
+	"ws_start" : "auth",
+        "auth" : $[
+	    `abort	: `abort,
+	    `next	: "read"
+        ],
 	"read" : $[
+	    `back	: "auth",
 	    `abort	: `abort,
 	    `next	: "main"
 	],
@@ -125,7 +131,7 @@ any MailServerSequence() {
 
     Wizard::CreateDialog();
     Wizard::SetDesktopIcon("mail-server");
-    
+
     any ret = Sequencer::Run(aliases, sequence);
 
     UI::CloseDialog();
