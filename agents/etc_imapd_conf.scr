@@ -25,7 +25,7 @@
             "options"   : [ "global_values", "flat" ],
             "comments"  : [ "^#.*", "^[ \t]*$" ],
             "params"    : [
-                $[ "match" : [ "([^:]+):(.*[^ \t])[ \t]*$", "%s" ] ]
+                $[ "match" : [ "(.*): (.*)[ \t]*$", "%s: %s" ] ]
             ]
         ]
 ))

@@ -15,11 +15,17 @@
 module "MailServer";
 textdomain "MailServer";
 
+import "Ldap";
+import "Label";
+import "Popup";
 import "Progress";
 import "Report";
 import "Summary";
 import "YaPI::MailServer";
 import "Require";
+import "NetworkDevices";
+import "Service";
+import "Users";
 
 /**
  * Prototypes
@@ -57,7 +63,13 @@ global define boolean Abort() ``{
     return false;
 }
 
+
 // Settings: Define all variables needed for configuration of mail-server
+/**
+ * True if there is server certificate.
+ */
+global boolean CertExist = false;
+
 /**
  * Map of the mail server global settings.
  */
@@ -93,6 +105,7 @@ global map<string,any>  FetchingMail = $[];
  */
 global map<string,any>  MailLocalDomains = $[];
 
+
 /**
  * Data was modified?
  * @return true if modified
@@ -113,6 +126,11 @@ global boolean Modified() {
 global map<string,any>  LDAPDefaults = $[];
 
 /**
+ * List of the PPP devices
+ */
+global list<string> PPPCards = [];
+
+/**
  * Some additional parameter needed for the configuration.
  */
 global string AdminPassword = "";
@@ -120,13 +138,13 @@ global string AdminPassword = "";
 /**
  * List of the Configuration Modules
  */
-global list<list>  ModulesTreeContent = [ ["GlobalSettings"],
-					  ["MailTransports"],
-					  ["MailPrevention"],
-					  ["MailRelaying"],
-					  ["MailLocalDelivery"],
-					  ["FetchingMail"],
-					  ["MailLocalDomains"],
+global list<list>  ModulesTreeContent = [ [_("Global Settings"),"GlobalSettings"],
+					  [_("Local Delivery"),"MailLocalDelivery"],
+					  [_("Mail Transports"),"MailTransports"],
+					  [_("Mailserver Prevention"),"MailPrevention"],
+					  [_("Mailserver Relaying"),"MailRelaying"],
+					  [_("Fetching Mail"),"FetchingMail"],
+					  [_("Mailserver Domains"),"MailLocalDomains"],
 				       ];
 /**
  * Is a package installed?
@@ -135,6 +153,105 @@ global list<list>  ModulesTreeContent = [ ["GlobalSettings"],
  */
 define boolean Installed (string package) ``{
     return Require::AreAllPackagesInstalled ([package]);
+}
+
+global boolean procmail_installed  = false;
+global boolean amavis_installed    = false;
+global boolean ldap_installed      = false;
+global boolean cyrus_installed     = false;
+global boolean postfix_installed   = false;
+global boolean fetchmail_installed = false;
+global boolean sasl_installed      = false;
+
+/*
+ * Help funktion to check the DNS Settings
+ */
+
+boolean Check_Mail_Domain() {
+        map LDAPSettings = Ldap::Export();
+        term ERROR = `RichText(_("There is no main mail domain defined. Please fix it!") +
+_("<p>Note: You can create and set up the domains with the YaST2 
+DNS server module. In this module, you only can set the properties
+concerning the mail server.
+</p>
+"));
+        SCR::Execute (.ldap.bind);
+        /* looking if a mail domain exist */
+        map searchmap = $[
+                        "base_dn"     :  LDAPSettings["base_config_dn"]:"",
+                        "filter"      :   "objectclass=suseDnsConfiguration",
+                        "attrs"       :    ["suseDefaultBase"],
+                        "not_found_ok": false,
+                        "scope"       :    2
+                     ];
+        list modulesDns = (list)SCR::Read (.ldap.search, searchmap);
+        string dns_base = (string)modulesDns[0,"susedefaultbase",0]:"";
+
+        searchmap = $[
+                "base_dn"       :  dns_base,
+                "filter"        :  "(&(objectclass=dNSZone)(relativeDomainName=@))",
+                "not_found_ok"  : false,
+                "map"           : true,
+                "scope"         :    2
+             ];
+        integer counter = 0;
+        map<string,map> domains = (map<string,map>)SCR::Read (.ldap.search, searchmap);
+
+        if(domains == nil || domains == $[])
+        {
+                Popup::LongText(Label::ErrorMsg(),ERROR,60,12);
+                return false;
+        }
+        boolean is_main_domain = false;
+        foreach(string dn, map domain, (map<string,map>) domains,  ``{
+                if(domain["susemaildomaintype",0]:"" == "main" )
+                {
+                   is_main_domain = true;
+                   break;
+                }
+        });
+        if(! is_main_domain )
+        {
+                y2milestone("no main mail domain");
+                LDAPSettings["bind_pw"] = MailServer::AdminPassword;
+                SCR::Execute (.ldap.bind,LDAPSettings);
+                integer counter = 0;
+                map lastDomain = $[];
+                string lastDn = "";
+                // evaluate if there is ONE domain with not containing
+                // ".in-addr.arpa" inf the zone Name
+                foreach(string dn, map domain, (map<string,map>) domains,  ``{
+                    if (size (((list)domain["zonename"]:[])[0]:"") < size (".in-addr.arpa")
+                        || substring (((list)domain["zonename"]:[])[0]:"",
+                                      size (((list)domain["zonename"]:[])[0]:"") - size (".in-addr.arpa")) != ".in-addr.arpa")
+                    {
+                        domain["objectclass"] = add(domain["objectclass"]:[], "suseMailDomain");
+                        domain["suseMailDomainType"] = ["main"];
+                        domain["suseMailDomainMasquerading"] = ["yes"];
+                        lastDomain = domain;
+                        lastDn = dn;
+                        counter = counter + 1;
+                    }
+                });
+                if (counter == 1)
+                {
+                    // set the ONE to main domain
+                    y2milestone ("Setting main mail domain: %1; %2",
+                                 lastDn, lastDomain);
+                    SCR::Write(.ldap.modify, $["dn":lastDn], lastDomain);
+                }
+                else
+                {
+                    // user has to decide
+                    Report::Error(_("There is no main mail domain defined. Please fix it!"));
+                    if (counter == 0)
+                    {
+                        // cannot decide cause there is no one available
+                        return false;
+                    }
+                }
+        }
+        return true;
 }
 
 global boolean procmail_installed  = false;
@@ -156,46 +273,49 @@ global boolean Read() {
     sleep(sl);
 
     // We do not set help text here, because it was set outside
+
     Progress::New( caption, "", steps, [
 	    /* Progress stage 0/7 */
-	    _("Read Needed Packages"),
+	    _("Read needed packages"),
 	    /* Progress stage 1/7 */
-	    _("Read Mail Server Global Settings"),
+	    _("Read mail server global settings"),
 	    /* Progress stage 2/7 */
-	    _("Read Mail Server Transports"),
+	    _("Read mail server transports"),
 	    /* Progress stage 3/7 */
-	    _("Read Mail Server Prevention Settings"),
+	    _("Read mail server prevention settings"),
 	    /* Progress stage 4/7 */
-	    _("Read Mail Server Relaying Settings"),
+	    _("Read mail server relaying settings"),
 	    /* Progress stage 5/7 */
-	    _("Read Mail Server Local Delivery Settings"),
+	    _("Read mail server local delivery settings"),
 	    /* Progress stage 6/3 */
-	    _("Read Mail Fetching Jobs"),
+	    _("Read mail fetching jobs"),
 	    /* Progress stage 7/7 */
-	    _("Read Mail Server Domains")
+	    _("Read mail server domains")
 
 	], [
+
 	    /* Progress stage 0/7 */
-	    _("Reading Packages"),
+	    _("Reading packages..."),
 	    /* Progress stage 1/7 */
-	    _("Reading Mail Server Global Settings"),
+	    _("Reading mail server global settings..."),
 	    /* Progress stage 2/7 */
-	    _("Reading Mail Server Transports"),
+	    _("Reading mail server transports..."),
 	    /* Progress stage 3/7 */
-	    _("Reading Mail Server Prevention Settings"),
+	    _("Reading mail server prevention settings..."),
 	    /* Progress stage 4/7 */
-	    _("Reading Mail Server Relaying Settings"),
+	    _("Reading mail server relaying settings..."),
 	    /* Progress stage 5/7 */
-	    _("Reading Mail Server Local Delivery Settings"),
+	    _("Reading mail server local delivery settings..."),
 	    /* Progress stage 6/3 */
-	    _("Reading Mail Fetching Jobs"),
+	    _("Reading mail fetching jobs..."),
 	    /* Progress stage 7/7 */
-	    _("Reading Mail Server Domains"),
+	    _("Reading mail server domains..."),
 	    /* Progress finished */
 	    _("Finished")
 	],
 	""
     );
+
 
     // read  global settings
     if(Abort()) return false;
@@ -204,6 +324,47 @@ global boolean Read() {
     cyrus_installed     = Installed("cyrus-imapd");
     postfix_installed   = Installed("postfix");
     fetchmail_installed = Installed("fetchmail");
+    ldap_installed      = Installed("yast2-ldap-client");
+    amavis_installed    = Installed("amavisd-new");
+    sasl_installed      = Installed("cyrus-sasl-plain");
+
+    if(!ldap_installed) {
+       Report::Error(_("You have not installed all needed packages.") +
+		     "\n" +
+		     _("You must configure LDAP to use the mail server."));
+       return false;
+    }
+
+    if(!postfix_installed) {
+      WFM::CallFunction("sw_single", (["postfix"]));
+    }
+    if( SCR::Read(.target.size, "/var/adm/YaST/yast2-mail-server-used") < 0) {
+      SCR::Write(.sysconfig.mail.MAIL_CREATE_CONFIG,"yes");
+      SCR::Write(.sysconfig.mail,nil);
+      SCR::Execute(.target.bash, "SuSEconfig -module postfix");
+      YaPI::MailServer::ResetMailServer(MailServer::AdminPassword,MailServer::LDAPDefaults);
+      SCR::Execute(.target.bash, "touch /var/adm/YaST/yast2-mail-server-used");
+      SCR::Write(.sysconfig.mail.MAIL_CREATE_CONFIG,"no");
+      SCR::Write(.sysconfig.mail,nil);
+    }
+    if(!sasl_installed) {
+      WFM::CallFunction("sw_single", (["cyrus-sasl-plain"]));
+    }
+
+    NetworkDevices::Read();
+    map<string,map> TMP = NetworkDevices::Export("modem");
+    foreach(string k, map v, (map<string,map>)TMP["ppp"]:$[], {
+       PPPCards = add(PPPCards, "ppp"+k);
+    });
+    TMP = NetworkDevices::Export("isdn");
+    foreach(string k, map v, (map<string,map>)TMP["ipp"]:$[], {
+       PPPCards = add(PPPCards, "ipp"+k);
+    });
+    TMP = NetworkDevices::Export("dsl");
+    foreach(string k, map v, (map<string,map>)TMP["dsl"]:$[], {
+       PPPCards = add(PPPCards, "dsl"+k);
+    });
+
     // read  global settings
     if(Abort()) return false;
     Progress::NextStage();
@@ -225,6 +386,7 @@ global boolean Read() {
     Progress::NextStage();
     MailPrevention = (map<string,any>) YaPI::MailServer::ReadMailPrevention(AdminPassword);
     /* Error message */
+    if(MailLocalDelivery == nil) Report::Warning(_("Cannot read the mail server local delivery settings."));
     if(MailPrevention == nil) Report::Error(_("Cannot read mail server preventions."));
     sleep(sl);
 
@@ -242,6 +404,11 @@ global boolean Read() {
     MailLocalDelivery = (map<string,any>) YaPI::MailServer::ReadMailLocalDelivery(AdminPassword);
     /* Error message */
     if(MailLocalDelivery == nil) Report::Warning(_("Cannot read the mail server local delivery settings."));
+    if(MailLocalDelivery["Type"]:"" != "none") {
+       if(! Check_Mail_Domain()) {
+         return false;
+       }
+    }
     sleep(sl);
 
     // read mail server fetching jobs
@@ -286,39 +453,43 @@ global boolean Write() {
     // We do not set help text here, because it was set outside
     Progress::New(caption, " ", steps, [
 	    /* Progress stage 1/7 */
-	    _("Write Mail Server Global Settings"),
+	    _("Write mail server global settings"),
 	    /* Progress stage 2/7 */
-	    _("Write Mail Server Transports"),
+	    _("Write mail server transports"),
 	    /* Progress stage 3/7 */
-	    _("Write Mail Server Prevention Settings"),
+	    _("Write mail server prevention settings"),
 	    /* Progress stage 4/7 */
-	    _("Write Mail Server Relaying Settings"),
+	    _("Write mail server relaying settings"),
 	    /* Progress stage 5/7 */
-	    _("Write Mail Server Local Delivery Settings"),
+	    _("Write mail server local delivery settings"),
 	    /* Progress stage 6/3 */
-	    _("Write Mail Fetching Jobs"),
+	    _("Write mail fetching jobs"),
 	    /* Progress stage 7/7 */
-	    _("Write Mail Server Domains")
+	    _("Write mail server domains")
 	], [
 	    /* Progress stage 1/7 */
-	    _("Writing Mail Server Global Settings"),
+	    _("Writing mail server global settings..."),
 	    /* Progress stage 2/7 */
-	    _("Writing Mail Server Transports"),
+	    _("Writing mail server transports..."),
 	    /* Progress stage 3/7 */
-	    _("Writing Mail Server Prevention Settings"),
+	    _("Writing mail server prevention settings..."),
 	    /* Progress stage 4/7 */
-	    _("Writing Mail Server Relaying Settings"),
+	    _("Writing mail server relaying settings..."),
 	    /* Progress stage 5/7 */
-	    _("Writing Mail Server Local Delivery Settings"),
+	    _("Writing mail server local delivery settings..."),
 	    /* Progress stage 6/3 */
-	    _("Writing Mail Fetching Jobs"),
+	    _("Writing mail fetching jobs..."),
 	    /* Progress stage 7/7 */
-	    _("Writing Mail Server Domains"),
+	    _("Writing mail server domains..."),
 	    /* Progress finished */
 	    _("Finished")
 	],
 	""
     );
+
+    // write
+    SCR::Write(.sysconfig.mail.MAIL_CREATE_CONFIG,"no");
+    SCR::Write(.sysconfig.mail,nil);
 
     // write  global settings
     if(Abort()) return false;
@@ -334,6 +505,7 @@ global boolean Write() {
     if(Abort()) return false;
     Progress::NextStep();
     if( (boolean)MailTransports["Changed"]:false ) {
+      // First we have to clean up TLS Sites
       if( ! YaPI::MailServer::WriteMailTransports(MailTransports,AdminPassword) ) {
          Report::Error(_("Cannot write mail server transports."));
       }
@@ -343,9 +515,23 @@ global boolean Write() {
     // write mail preventions
     if(Abort()) return false;
     Progress::NextStage();
+    if((boolean)MailPrevention["VirusScanning"]:false) {
+      if(! amavis_installed) {
+         WFM::CallFunction("sw_single", (["clamav","amavisd-new"]));
+         Service::Start("amavis");
+         Service::Start("clamd");
+         y2milestone("Installing amavis");
+      }
+      Service::Enable("amavis");
+      Service::Enable("clamd");
+    }
     if( (boolean)MailPrevention["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteMailPrevention(MailPrevention,AdminPassword) ) {
          Report::Error(_("Cannot write mail server preventions."));
+      }
+      if((boolean)MailPrevention["VirusScanning"]:false) {
+	 Service::Restart("clamd");
+	 Service::Restart("amavis");
       }
     }
     sleep(sl);
@@ -361,22 +547,72 @@ global boolean Write() {
     sleep(sl);
 
     // write mail local delivery
+    // first we looking for if all the needed packages are installed
+    if(MailLocalDelivery["Type"]:"none" == "procmail"){
+       if(! procmail_installed) {
+          WFM::CallFunction("sw_single", (["procmail"]));
+       }
+    }
+
+    if(Service::Status("saslauthd") > 0) {
+       Service::Start("saslauthd");
+       Service::Enable("saslauthd");
+    }
+
+    if(MailLocalDelivery["Type"]:"none" == "cyrus") {
+       if(!cyrus_installed) {
+         WFM::CallFunction("sw_single", (["cyrus-imapd"]));
+	 string crypted  = Users::CryptPassword(AdminPassword, "system");
+	 SCR::Write(.target.passwd.cyrus, crypted);
+	 SCR::UnmountAgent(.etc.imapd_conf);
+       }
+      list Values = SCR::Dir(.etc.imapd_conf);
+      if(!contains(Values,"unixhierarchysep")) {
+	SCR::Write(.etc.imapd_conf.unixhierarchysep,"yes");
+	SCR::Write(.etc.imapd_conf,nil);
+      }
+      if(!contains(Values,"allowplainwithouttls")) {
+	SCR::Write(.etc.imapd_conf.allowplainwithouttls,"yes");
+	SCR::Write(.etc.imapd_conf,nil);
+      }
+      if(Service::Status("cyrus") > 0) {
+         Service::Start("cyrus");
+         Service::Enable("cyrus");
+       }
+    } else {
+       if(cyrus_installed) {
+          Service::Stop("cyrus");
+          Service::Disable("cyrus");
+       }
+    }
     if(Abort()) return false;
     Progress::NextStage();
     if( (boolean)MailLocalDelivery["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteMailLocalDelivery(MailLocalDelivery,AdminPassword) ) {
         Report::Warning(_("Cannot write the mail server local delivery settings."));
       }
+      if(MailLocalDelivery["Type"]:"none" == "cyrus") {
+          Service::Reload("cyrus");
+      }
     }
     sleep(sl);
 
     // write mail server fetching jobs
     if(Abort()) return false;
+    if(FetchingMail["Items"]:[] != []){
+       Service::Enable("fetchmail");
+       if(! fetchmail_installed){
+         WFM::CallFunction("sw_single", (["fetchmail"]));
+       }
+    } else {
+       if(fetchmail_installed) Service::Disable("fetchmail");
+    }
     Progress::NextStage();
     if( (boolean)FetchingMail["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteFetchingMail(FetchingMail,AdminPassword) ) {
         Report::Warning(_("Cannot write the mail server fetching jobs."));
       }
+      Service::Restart("fetchmail");
     }
     sleep(sl);
 
@@ -385,10 +621,12 @@ global boolean Write() {
     Progress::NextStage();
     if( MailLocalDomains["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteMailLocalDomains(MailLocalDomains,AdminPassword) ) {
-         Report::Warning(_("Cannot write the mail server domains.")); 
+         Report::Warning(_("Cannot write the mail server domains."));
       }
     }
     sleep(sl);
+
+    if(Modified()) Service::Restart("postfix");
 
     if(Abort()) return false;
     return true;

@@ -201,7 +201,7 @@ sub write_comment ($)
 #
 sub write_file ()
 {
-    return 1 if (! $YaST::SCRAgent::modified);
+#    return 1 if (! $YaST::SCRAgent::modified);
 
     open (FILE, ">$filename.YaST2.new") or return log_error ("Creating file: $!");
     if ($leading_comment)
@@ -229,7 +229,7 @@ sub write_file ()
         system("chmod 600 $filename*");
     }
 
-    $YaST::SCRAgent::modified = 0;
+#    $YaST::SCRAgent::modified = 0;
     return 1;
 }
 

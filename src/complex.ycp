@@ -64,7 +64,7 @@ symbol WriteDialog() {
 any SummaryDialog() {
 
     /* MailServer summary dialog caption */
-    string caption = _("MailServer Configuration");
+    string caption = _("Mail Server Configuration");
 
     /* FIXME */
     list summary = MailServer::Summary();
@@ -72,7 +72,7 @@ any SummaryDialog() {
     string configured = summary[0]:"";
 
     /* Frame label */
-    term contents = Wizard_hw::DetectedContent(_("MailServer to Configure"),
+    term contents = Wizard_hw::DetectedContent(_("Mail Server to Configure"),
 	    unconfigured, false, configured);
 
     Wizard::SetContentsButtons(caption, contents, HELPS["summary"]:"",
@@ -124,14 +124,14 @@ any SummaryDialog() {
 any OverviewDialog() {
 
     /* MailServer overview dialog caption */
-    string caption = _("MailServer Overview");
+    string caption = _("Mail Server Overview");
 
     list overview = MailServer::Overview();
 
     /* FIXME table header */
     term contents = Wizard_hw::ConfiguredContent(
 	/* Table header */
-	`header(_("Number"), _("MailServer")),
+	`header(_("Number"), _("Mail Server")),
 	overview, nil, nil, nil, nil );
 
     contents = Wizard_hw::SpacingAround(contents, 1.5, 1.5, 1.0, 1.0);
