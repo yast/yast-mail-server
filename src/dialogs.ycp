@@ -32,7 +32,7 @@ define any AuthorizingDialog () {
 
     Wizard::SetContentsButtons(caption, contents, HELPS["c1"]:"",
 	    Label::BackButton(), Label::NextButton());
-
+    UI::WizardCommand(`SetBackButtonLabel( "" ) );
     UI::SetFocus (`id (`password));
 
     any ret = nil;
@@ -204,19 +204,12 @@ term MailTransportsDialog(string CID) {
   string    Protocol        = "smtp";
   map<string,list<term> > Protocols = $[ "smtp":[ `item(`id("smtp"),  "smtp", true ),
                                           `item(`id("uucp"),  "uucp" ),
-                                          `item(`id("slow"),  "slow" ),
                                           `item(`id("error"), "error" ) ],
 				 "uucp":[ `item(`id("smtp"),  "smtp" ),
                                           `item(`id("uucp"),  "uucp", true ),
-                                          `item(`id("slow"),  "slow" ),
-                                          `item(`id("error"), "error" ) ],
-				 "slow":[ `item(`id("smtp"),  "smtp" ),
-                                          `item(`id("uucp"),  "uucp" ),
-                                          `item(`id("slow"),  "slow", true ),
                                           `item(`id("error"), "error" ) ],
 				 "error":[`item(`id("smtp"),  "smtp" ),
                                           `item(`id("uucp"),  "uucp" ),
-                                          `item(`id("slow"),  "slow" ),
                                           `item(`id("error"), "error", true ) ]
 			      ];
   string    Server          = "";
@@ -322,7 +315,7 @@ term MailTransportsDialog(string CID) {
      `Frame(_("Defined Mail Transport Routen"),
        `HBox(
          //`SelectionBox(`id(`Table), `opt (`notify),_("Destination | Server | Transport | Security"),Transport_items)
-         `Table(`id(`table), `opt (`notify),`header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
+         `Table(`id(`table), `opt(`immediate,`keepSorting,`notify),`header(_("Destination"),_("Server"),_("Transport"),_("Security")),Transport_items)
         )
       )
    );
@@ -381,7 +374,7 @@ term MailPreventionDialog(string CID, string CIDRBL) {
 	`Frame(_("Sender Restrictions"),
 	  `HBox(
 	      `VBox(
-	        `Table(`id(`table), `opt (`notify),`header(_("Sender Address"),_("Action"),_("Option")),AccessItems)
+	        `Table(`id(`table), `opt(`immediate,`keepSorting,`notify),`header(_("Sender Address"),_("Action"),_("Option")),AccessItems)
 	       ),
 	      `VBox(
 	        `PushButton(`id(`AccessAdd),   _("Add")),
@@ -398,26 +391,63 @@ term MailPreventionDialog(string CID, string CIDRBL) {
    return content;
 }
 
-term RBLAdd () {
-   return `Frame(_("Add New RBL Server"),
+string RBLAdd () {
+    UI::OpenDialog(`opt(`decorated ), `Frame(_("Add New RBL Server"),
             `VBox(
-              `TextEntry(`id(`NewRBLServer),  "",  ""),
-	      `PushButton(`id(`AddNewRBLServer),   _("OK"))
+              `TextEntry(`id(`server),  "",  ""),
+              `HBox(
+	         `PushButton(`id(`cancel),   _("Cancel")),
+	         `PushButton(`id(`ok),   _("OK"))
+               )
 	     )
-	   );
+	   )
+    );
+    any    ret       = nil;
+    string server    = "";
+    while(ret != `cancel && ret != `ok )
+    {
+        map event = UI::WaitForEvent();
+        ret       = event["ID"]:nil;
+	if( ret == `ok) {
+	   server = (string)UI::QueryWidget(`id(`server), `Value);
+	}
+    }
+    UI::CloseDialog();
+    return server;
 }
 
-term AccessAdd () {
-   return `Frame(_("Add New Sender Restriction"),
+map AccessAdd () {
+   UI::OpenDialog(`opt(`decorated ),  `Frame(_("Add New Sender Restriction"),
             `VBox(
               `TextEntry(`id(`NewSender),  "Sender Address",  ""),
 	      `ComboBox (`id(`NewSenderAction), _("Action"), [ "REJECT", "DEFER_IF_REJECT","DEFER_IF_PERMIT",
 	                                                       "OK", "DUNNO", "PREPEND", "HOLD", "DISCARD",
 							       "FILTER", "REDIRECT", "" ]),
               `TextEntry(`id(`NewSenderOption),  "Option",  ""),
-	      `PushButton(`id(`AddNewSender),   _("OK"))
+              `HBox(
+	         `PushButton(`id(`cancel),   _("Cancel")),
+	         `PushButton(`id(`ok),   _("OK"))
+               )
 	     )
-	   );
+	   )
+    );
+    any    ret               = nil;
+    map    SenderRestriction = $[];
+    while(ret != `cancel && ret != `ok )
+    {
+        map event = UI::WaitForEvent();
+        ret       = event["ID"]:nil;
+	if( ret == `ok) {
+	    string NewSender       = (string)UI::QueryWidget(`id(`NewSender),       `Value);
+	    string NewSenderAction = (string)UI::QueryWidget(`id(`NewSenderAction), `Value);
+	    string NewSenderOption = (string)UI::QueryWidget(`id(`NewSenderOption), `Value);
+	        SenderRestriction  = $[  "MailClient":NewSender,
+	                                 "MailAction":NewSenderAction + " " + NewSenderOption
+	                              ];
+        }
+    }
+    UI::CloseDialog();
+    return SenderRestriction;
 }
 
 term MailRelayingDialog() {
@@ -509,8 +539,8 @@ term MailLocalDeliveryDialog() {
     integer PopIdleTime      = tointeger((string)MailServer::MailLocalDelivery["PopIdleTime"]:"0");
     integer MAXINT           = 10000000000000;
     boolean HardQuotaLimit   = ((string)MailServer::MailLocalDelivery["HardQuotaLimit"]:"0" == "1");
-    boolean AlternativNameSpace   = ((string)MailServer::MailLocalDelivery["AlternativNameSpace"]:"0" == "1");
-    string  FallBackUser     = (string)MailServer::MailLocalDelivery["FallBackUser"]:"root";
+    boolean AlternateNameSpace   = ((string)MailServer::MailLocalDelivery["AlternateNameSpace"]:"0" == "1");
+    string  FallBackMailbox  = (string)MailServer::MailLocalDelivery["FallBackMailbox"]:"root";
     string  Security         = (string)MailServer::MailLocalDelivery["Security"]:"TLS";
     boolean PLAIN            = (Security == "PLAIN");
     boolean SSL              = (Security == "SSL");
@@ -536,9 +566,9 @@ term MailLocalDeliveryDialog() {
 	     `HBox(`Label(_("IMAP Idle Time")),      `IntField(`id(`PopIdleTime),     "Min",10,100,PopIdleTime))
 	   ),
 	  `VBox(
-	     `Left(`CheckBox(`id(`HardQuotaLimit),     _("Hard Quota Limit"),HardQuotaLimit)),
-	     `Left(`CheckBox(`id(`AlternativNameSpace),_("Use Alternate Name Space"),AlternativNameSpace)),
-	     `Left(`TextEntry(`id(`FallBackUser),      _("Fall Back User"), FallBackUser))
+	     `Left(`CheckBox(`id(`HardQuotaLimit),    _("Hard Quota Limit"),HardQuotaLimit)),
+	     `Left(`CheckBox(`id(`AlternateNameSpace),_("Use Alternate Name Space"),AlternateNameSpace)),
+	     `Left(`TextEntry(`id(`FallBackMailbox),  _("Fall Back Mailbox"), FallBackMailbox))
 	  )
 	)
       )
@@ -615,13 +645,147 @@ term MailLocalDeliveryDialog() {
 }
 
 term FetchingMailDialog() {
-  term content = `VBox (
+  list<term>   table_items  = [];
+  integer      IID          = 0;
+  list<map<string,string> > entries = (list<map<string,string> >) MailServer::FetchingMail["Items"]:[];
+  boolean      FetchByDialIn   = ((string) MailServer::FetchingMail["FetchByDialIn"]:""   == "1");
+  boolean      FetchMailSteady = ((string) MailServer::FetchingMail["FetchMailSteady"]:"" == "1");
+  //boolean      FetchByDialIn   = (boolean)MailServer::FetchingMail["FetchByDialIn"]:false;
+  //boolean      FetchMailSteady = (boolean)MailServer::FetchingMail["FetchMailSteady"]:false;
+  integer      FetchingInterval= tointeger((string) MailServer::FetchingMail["FetchingInterval"]:"");
+
+  foreach( map<string,string> entry, entries, ``{
+    term item = `item(`id(IID), entry["server"]:"", entry["protocol"]:"",entry["remote_user"]:"",entry["local_user"]:"");
+    table_items = add(table_items,item);
+    IID = IID+1;
+  });
+
+  term FetchingIntervalTerm = `HBox(
+                `CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Steady"),FetchMailSteady),
+		`Label(_("Fetching Intervall")),
+                `IntField(`id(`FetchingInterval), "Min",10,120,FetchingInterval),
+                `HStretch()
+       );
+  if(!FetchMailSteady) {
+         FetchingIntervalTerm = `HBox(
+	        `CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Steady"),FetchMailSteady),
+                `Label(`opt(`disabled),_("Fetching Intervall")),
+                `IntField(`id(`FetchingInterval), `opt(`disabled),"Min",10,120,FetchingInterval),
+                `HStretch()
+         );
+  }
+
+  term content = `VBox(
+	   `Frame(_("Mail Fetching Scheudler"),
+	     `VBox(
+	       `Left(`CheckBox(`id(`FetchByDialIn),  `opt(`notify),_("Fetch Mail by Connecting Internet."),FetchByDialIn)),
+	       `Left(FetchingIntervalTerm)
+	     )
+           ),
+           `HBox(
+	     `Frame(_("Defined  Fetchmail Jobs"),
+	       `Table(`id(`table), `opt(`keepSorting),`header(_("Server"),_("Protocol"),_("User"),_("Local User")),table_items)
+	     ),
+	     `VBox(
+	       `PushButton(`id(`Add),   _("Add")),
+//	       `PushButton(`id(`Edit),  _("Edit")),
+	       `PushButton(`id(`Delete),_("Delete"))
+	     )
+	   )
    );
+/*  term FetchingIntervalTerm = `HBox(`Label(_("Fetching Intervall")), `IntField(`id(`FetchingInterval), "Min",10,120,FetchingInterval));
+  if(!FetchMailSteady) {
+    FetchingIntervalTerm = `HBox(`Label(`opt(`disabled),_("Fetching Intervall")), `IntField(`id(`FetchingInterval), `opt(`disabled),"Min",10,120,FetchingInterval));
+  }
+
+  term content = `HBox(
+	   `HWeight(2,`VBox(
+	     `Frame(_("Defined  Fetchmail Jobs"),
+	       `Table(`id(`table), `header(_("Server"),_("Protocol"),_("User"),_("Local User")),table_items)
+	     ),
+	     `HBox(
+	       `PushButton(`id(`Add),   _("Add")),
+	       `PushButton(`id(`Edit),  _("Edit")),
+	       `PushButton(`id(`Delete),_("Delete"))
+	     )
+	   )),
+	   `HWeight(1,`Frame(_("Mail Fetching Scheudler"),
+	     `VBox(
+	       `Left(`CheckBox(`id(`FetchByDialIn),  `opt(`notify),_("Fetch Mail by Connecting Internet."),FetchByDialIn)),
+	       `Left(`CheckBox(`id(`FetchMailSteady),`opt(`notify),_("Fetch Mail Steady"),FetchMailSteady)),
+	       `Left(FetchingIntervalTerm),
+               `VStretch()
+	     )
+	   ))
+   );*/
   return content;
 }
 
+map FetchmailAddItem(){
+   UI::OpenDialog(`opt(`decorated ),  `Frame(_("Add New Fetchmail Job"),
+            `VBox(
+              `TextEntry(`id(`server),       "Server Address",  ""),
+	      `ComboBox (`id(`protocol),     _("Protocol"), [ "AUTO", "POP2", "POP3", "IMAP", "APOP", "KPOP", "SDPS", "ETRN", "ODMR", ]),
+              `TextEntry(`id(`remote_user),  "Remote User",  ""),
+              `TextEntry(`id(`password),     "Remote User's Password",  ""),
+              `TextEntry(`id(`local_user),   "Local User",  ""),
+              `HBox(
+	         `PushButton(`id(`cancel),   _("Cancel")),
+	         `PushButton(`id(`ok),   _("OK"))
+               )
+	     )
+	   )
+    );
+    any ret       = nil;
+    map Job       = $[];
+    while(ret != `cancel && ret != `ok )
+    {
+        map event = UI::WaitForEvent();
+        ret       = event["ID"]:nil;
+	if( ret == `ok) {
+	       Job["server"]      = UI::QueryWidget(`id(`server), `Value);
+	       Job["protocol"]    = UI::QueryWidget(`id(`protocol), `Value);
+	       Job["remote_user"] = UI::QueryWidget(`id(`remote_user), `Value);
+	       Job["password"]    = UI::QueryWidget(`id(`password), `Value);
+	       Job["local_user"]  = UI::QueryWidget(`id(`local_user), `Value);
+               Job["other_server_options"] = "";
+               Job["other_user_options"] = "";
+               Job["enabled"] = true;
+	}
+    }
+    UI::CloseDialog();
+    return Job;
+
+}
+
 term MailLocalDomainsDialog() {
+  list<term> Domains = [];
+  foreach(map Domain, MailServer::MailLocalDomains["Domains"]:[], ``{
+      Domains = add( Domains, `item(`id(Domain["Name"]:""),
+                                     Domain["Name"]:"",
+				     Domain["Type"]:"",
+				     Domain["Masquerading"]:""
+                   ));
+  });
+y2milestone("Domains %1", Domains);
   term content = `VBox (
+       `VBox(
+         `Frame(_("Define New My Domain"),
+           `HBox(
+               `TextEntry(`id(`Name),     "Name", ""),
+	       `HStretch(),
+	       `ComboBox (`id(`Type), _("Type"), ["virtual","local"]),
+	       `CheckBox(`id(`Masquerading),_("Masquerading"),true),
+               `PushButton(`id(`Add), _("Add"))
+            )
+          ),
+         `Frame(_("Defined My Domains"),
+           `HBox(
+             `Table(`id(`table), `header(_("Domain"), _("Type"), _("Masquerading")),Domains),
+             `PushButton(`id(`Delete), _("Delete"))
+            )
+          )
+       )
    );
   return content;
 }
@@ -645,7 +809,7 @@ any ComplexDialog() {
 
    any ret       = nil;
    any EventType = nil;
-   while(ret != `cancel && ret != `abort && ret != `next )
+   while(ret != `next )
    {
         boolean focus_changed     = false;
         string  OldFocusedContent = FocusedContent;
@@ -653,6 +817,10 @@ any ComplexDialog() {
         ret       = event["ID"]:nil;
         EventType = event["EventType"]:nil;
 
+        if(ret == `cancel || ret == `abort ) {
+            if(ReallyAbort()) break;
+            else continue;
+        }
         //If anithing happenend we save the changes into the global maps
         if(FocusedContent == "GlobalSettings") {
            MailServer::GlobalSettings["Changed"]            = true;
@@ -798,30 +966,24 @@ any ComplexDialog() {
 	   content        = MailTransportsDialog(CID);
 	   helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
         } else if(FocusedContent == "MailPrevention") {
+	  if(ret == `VirusScanning || ret == "off" || ret == "medium" || ret == "hard") {
+	    MailServer::MailPrevention["Changed"] = true;
+            continue;
+          }
 	  if(ret == `RBLAdd) {
-	    UI::OpenDialog( RBLAdd());
-	    continue;
+	    string NewRLBServer = RBLAdd();
+	    if( NewRLBServer != "") {
+	      MailServer::MailPrevention["RBLList"] = add((list<string>)MailServer::MailPrevention["RBLList"]:[],NewRLBServer);
+	      CIDRBL = NewRLBServer;
+	      MailServer::MailPrevention["Changed"] = true;
+	    }
 	  }
 	  if(ret == `AccessAdd) {
-	    UI::OpenDialog( AccessAdd());
-	    continue;
-	  }
-	  MailServer::MailPrevention["Changed"] = true;
-	  if(ret == `AddNewRBLServer) {
-	    string NewRLBServer = (string)UI::QueryWidget(`id(`NewRBLServer), `Value);
-	    MailServer::MailPrevention["RBLList"] = add((list<string>)MailServer::MailPrevention["RBLList"]:[],NewRLBServer);
-	    UI::CloseDialog();
-	    CIDRBL = NewRLBServer;
-	  } else if(ret == `AddNewSender) {
-	    string NewSender       = (string)UI::QueryWidget(`id(`NewSender),       `Value);
-	    string NewSenderAction = (string)UI::QueryWidget(`id(`NewSenderAction), `Value);
-	    string NewSenderOption = (string)UI::QueryWidget(`id(`NewSenderOption), `Value);
-	    map SenderRestriction  = $[  "MailClient":NewSender,
-	                                 "MailAction":NewSenderAction + " " + NewSenderOption
-	                              ];
-	    MailServer::MailPrevention["AccessList"] = add((list<map>)MailServer::MailPrevention["AccessList"]:[],SenderRestriction);
-	    UI::CloseDialog();
-	    CID = NewSender;
+	    map SenderRestriction = AccessAdd();
+	    if( SenderRestriction["MailClient"]:"" != "" && SenderRestriction["MailAction"]:"" != "" ) {
+	       MailServer::MailPrevention["AccessList"] = add((list<map>)MailServer::MailPrevention["AccessList"]:[],SenderRestriction);
+	    }
+	    CID = SenderRestriction["MailClient"]:"";
 	  }else if(ret == `RBLDelete){
 	    string Server = (string)UI::QueryWidget(`id(`RBLList),`CurrentItem);
 	    list<string>  RBLList =  (list<string>)MailServer::MailPrevention["RBLList"]:[];
@@ -840,18 +1002,12 @@ any ComplexDialog() {
 	         MailServer::MailPrevention["AccessList"] = add(MailServer::MailPrevention["AccessList"]:[],my_item);
 	       }
 	    });
-	  } else if(ret == "off") {
-            MailServer::MailPrevention["BasicProtection"] = "off";
-	  } else if(ret == "medium") {
-            MailServer::MailPrevention["BasicProtection"] = "medium";
-	  } else if(ret == "hard") {
-            MailServer::MailPrevention["BasicProtection"] = "hard";
-	  } else if(ret == `VirusScanning) {
-            if((boolean) UI::QueryWidget(`id(`VirusScanning), `Value)) {
-               MailServer::MailPrevention["VirusScanning"] = "1";
-            } else {
-               MailServer::MailPrevention["VirusScanning"] = "0";
-            }
+	  }
+          MailServer::MailPrevention["BasicProtection"] = (string)UI::QueryWidget(`id(`BasicProtection), `CurrentButton);
+          if((boolean) UI::QueryWidget(`id(`VirusScanning), `Value)) {
+             MailServer::MailPrevention["VirusScanning"] = "1";
+          } else {
+             MailServer::MailPrevention["VirusScanning"] = "0";
           }
           content        = MailPreventionDialog(CID,CIDRBL);
           helptext       = HELPS["MailPrevention"]:"Bla Bla Bla";
@@ -908,25 +1064,87 @@ any ComplexDialog() {
 		   }
 	   }
 	   if( UI::WidgetExists(`id(`Security)) && UI::WidgetExists(`id(`QuotaLimit)) && UI::WidgetExists(`id(`HardQuotaLimit))) {
-	     MailServer::MailLocalDelivery["MailboxSizeLimit"] = UI::QueryWidget(`id(`MailboxSizeLimit), `Value);
-	     MailServer::MailLocalDelivery["QuotaLimit"]       = UI::QueryWidget(`id(`QuotaLimit), `Value);
-	     MailServer::MailLocalDelivery["ImapIdleTime"]     = UI::QueryWidget(`id(`ImapIdleTime), `Value);
-	     MailServer::MailLocalDelivery["PopIdleTime"]      = UI::QueryWidget(`id(`PopIdleTime), `Value);
-	     MailServer::MailLocalDelivery["FallBackUser"]     = UI::QueryWidget(`id(`FallBackUser), `Value);
+	     MailServer::MailLocalDelivery["MailboxSizeLimit"] = tostring(UI::QueryWidget(`id(`MailboxSizeLimit), `Value));
+	     MailServer::MailLocalDelivery["QuotaLimit"]       = tostring(UI::QueryWidget(`id(`QuotaLimit), `Value));
+	     MailServer::MailLocalDelivery["ImapIdleTime"]     = tostring(UI::QueryWidget(`id(`ImapIdleTime), `Value));
+	     MailServer::MailLocalDelivery["PopIdleTime"]      = tostring(UI::QueryWidget(`id(`PopIdleTime), `Value));
+	     MailServer::MailLocalDelivery["FallBackMailbox"]  = UI::QueryWidget(`id(`FallBackMailbox), `Value);
 	     MailServer::MailLocalDelivery["Security"]         = UI::QueryWidget(`id(`Security), `CurrentButton);
 	     if((boolean)UI::QueryWidget(`id(`HardQuotaLimit), `Value)) {
 	         MailServer::MailLocalDelivery["HardQuotaLimit"]      = "1";
 	     } else {
 	         MailServer::MailLocalDelivery["HardQuotaLimit"]      = "0";
 	     }
-	     if((boolean)UI::QueryWidget(`id(`AlternativNameSpace), `Value)) {
-	         MailServer::MailLocalDelivery["AlternativNameSpace"]      = "1";
+	     if((boolean)UI::QueryWidget(`id(`AlternateNameSpace), `Value)) {
+	         MailServer::MailLocalDelivery["AlternateNameSpace"]      = "1";
 	     } else {
-	         MailServer::MailLocalDelivery["AlternativNameSpace"]      = "0";
+	         MailServer::MailLocalDelivery["AlternateNameSpace"]      = "0";
 	     }
 	   }
            content        = MailLocalDeliveryDialog();
            helptext       = HELPS["MailLocalDelivery"]:"Bla Bla Bla";
+        } else if(FocusedContent == "FetchingMail") {
+           MailServer::FetchingMail["Changed"]  = true;
+	   if(ret == `Add) {
+	     map Job = FetchmailAddItem();
+	     if(Job["server"]:"" != "" && Job["password"]:"" != "" && Job["remote_user"]:"" != "" && Job["local_user"]:"" != "") {
+	         MailServer::FetchingMail["Items"] = add((list<map>) MailServer::FetchingMail["Items"]:[],Job);
+	     }
+	   } else if(ret == `Delete) {
+             integer IID    = (integer)(UI::QueryWidget(`id(`table), `CurrentItem));
+             integer my_id  = 0;
+             list<map> Jobs = (list<map>) MailServer::FetchingMail["Items"]:[];
+             MailServer::FetchingMail["Items"] = [];
+	     foreach( map Job, Jobs, ``{
+	       if(my_id != IID) {
+	         MailServer::FetchingMail["Items"] = add(MailServer::FetchingMail["Items"]:[],Job);
+	       }
+               my_id = my_id+1;
+	     });
+	   } else if(ret == `FetchByDialIn ){
+             if((boolean)UI::QueryWidget(`id(`FetchByDialIn), `Value)){
+                MailServer::FetchingMail["FetchByDialIn"] = "1";
+             } else {
+                MailServer::FetchingMail["FetchByDialIn"] = "0";
+             }
+	   } else if(ret == `FetchMailSteady ){
+             if((boolean)UI::QueryWidget(`id(`FetchMailSteady), `Value)){
+                MailServer::FetchingMail["FetchMailSteady"] = "1";
+             } else {
+                MailServer::FetchingMail["FetchMailSteady"] = "0";
+             }
+           }
+           if(UI::WidgetExists(`id(`FetchingInterval))) {
+             MailServer::FetchingMail["FetchingInterval"] = tostring(UI::QueryWidget(`id(`FetchingInterval), `Value));
+           }
+           content        = FetchingMailDialog();
+           helptext       = HELPS["FetchingMail"]:"Bla Bla Bla";
+        } else if(FocusedContent == "MailLocalDomains") {
+	   MailServer::MailLocalDomains["Changed"] = true;
+	   if(ret == `Delete) {
+	     list<map> Domains = (list<map>)  MailServer::MailLocalDomains["Domains"]:[];
+             CID   = (string)UI::QueryWidget(`id(`table), `CurrentItem);
+	     MailServer::MailLocalDomains["Domains"] = [];
+             foreach(map Domain, Domains, ``{
+	        if( CID != Domain["Name"]:"" ) {
+                  MailServer::MailLocalDomains["Domains"] = add( MailServer::MailLocalDomains["Domains"]:[], Domain);
+		}
+              });
+           } else if(ret == `Add) {
+	      string Name         = (string)UI::QueryWidget(`id(`Name), `Value);
+	      string Type         = (string)UI::QueryWidget(`id(`Type), `Value);
+	      string Masquerading = "no"; 
+	      if((boolean)UI::QueryWidget(`id(`Masquerading), `Value)) {
+	        Masquerading = "yes";
+	      }
+              MailServer::MailLocalDomains["Domains"] = add (MailServer::MailLocalDomains["Domains"]:[],
+                                         $[ "Name"         : Name,
+					    "Type"         : Type,
+					    "Masquerading" : Masquerading
+                                          ]);
+           }
+           content        = MailLocalDomainsDialog();
+           helptext       = HELPS["MailLocalDomains"]:"Bla Bla Bla";
         }
         if(ret == "GlobalSettings" && FocusedContent != "GlobalSettings") {
            content        = GlobalSettingsDialog();
