@@ -676,10 +676,10 @@ sub WriteMailTransports {
        my %entry = ();
        if( $Transport->{'Destination'} =~ /[^\w\*\.\@]/ ) {
             $ERROR->{'summary'} = _("Wrong Value for Mail Transport Destination. ")
-	                          _("This field mai contain only the charaters [a-zA-Z.*@]");
+	                          _('This field may contain only the charaters [a-zA-Z.*@]');
             $ERROR->{'code'}    = "PARAM_CHECK_FAILED";
             return $self->SetError( $ERROR );
-       }
+	       }
        $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$mail_basedn;
        $entry{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
        $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
@@ -760,12 +760,18 @@ C<$MailPrevention = ReadMailPrevention($admindn,$adminpwd)>
            'Changed'               => 0,
              Shows if the hash was changed. Possible values are 0 (no) or 1 (yes).
 
-           'BasicProtection'        => 'hard',
+           'BasicProtection'       => 'hard',
            'RBLList'               => [],
-           'AcceptedSenderList'    => ['*'],
-           'RejectedSenderList'    => [],
+           'AccessList'            => [],
            'VirusScanning'         => 1
                           );
+
+   AccessList is a pointer to an array of %AccessEntry hashes.
+
+ my %AccessEntry         = (  'ClientAddress' => '',
+                              'ClientAccess'  => ''
+			   );
+
 EXAMPLE:
 
 use MailServer;
@@ -802,16 +808,40 @@ sub ReadMailPrevention {
     my $AdminDN         = shift;
     my $AdminPassword   = shift;
 
-    my %MailPrevention      = (
+    my %MailPrevention  = (
                                'Changed'                    => 0,
 			       'BasicProtection'            => 'hard',
 			       'RBLList'                    => [],
-			       'AcceptedSenderAddressList'  => ['*'],
-			       'RejectedSenderAddressList'  => [],
-			       'AcceptedSenderDomainList'   => ['*'],
-			       'RejectedSenderDomainList'   => [],
+			       'AccessList'                 => [],
 			       'VirusScanning'              => 1
                           );
+
+    my %AccessEntry     = (    
+                               'MailClient'  => '',
+                               'MailAction'  => ''
+                          );
+
+    # Make LDAP Connection 
+    my $ErrorSummary = read_ldap_settings();
+    if( $ErrorSummary  ne '' ) {
+         return $self->SetError( summary => $ErrorSummary,
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    if($AdminDN) {
+        $admin_bind->{'binddn'} = $AdminDN;
+    }
+    if($AdminPassword) {
+        $admin_bind->{'bindpw'} = $AdminPassword;
+    }
+    if(! SCR::Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+
     # First we read the main.cf
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
 
@@ -831,10 +861,24 @@ sub ReadMailPrevention {
        my $smtpd_client_restrictions = read_attribute($MainCf,'smtpd_client_restrictions');
        foreach(split /, |,/, $smtpd_client_restrictions){
           if(/reject_rbl_client (\w+)/){
-	    push @{$MailPrevention{RBLList}}, $_;
+	    push @{$MailPrevention{'RBLList'}}, $1;
 	  }
        }
     }
+
+    #Now we read the access table
+    %SearchMap = (
+                   'base_dn' => $mail_basedn,
+                   'filter'  => "ObjectClass=SuSEMailAccess"
+                   'attrs'   => ['SuSEMailClient','SuSEMailAction']
+                 );
+    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+    foreach my $entry (@{$ret}){    
+       $AccessEntry{'MailClient'} = $entry->{'SuSEMailClient'};
+       $AccessEntry{'MailAccess'} = $entry->{'SuSEMailAction'};
+       push @{$MailPrevention{'AccessList'}}, $AccessEntry;
+    }
+    
     return \%MailPrevention;
 }
 
@@ -851,6 +895,27 @@ sub WriteMailPrevention {
                                  code    => "PARAM_CHECK_FAILED" );
     }
    
+    # Make LDAP Connection 
+    my $ErrorSummary = read_ldap_settings();
+    if( $ErrorSummary  ne '' ) {
+         return $self->SetError( summary => $ErrorSummary,
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    if($AdminDN) {
+        $admin_bind->{'binddn'} = $AdminDN;
+    }
+    if($AdminPassword) {
+        $admin_bind->{'bindpw'} = $AdminPassword;
+    }
+    if(! SCR::Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+
     # First we read the main.cf
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
 
@@ -866,7 +931,7 @@ sub WriteMailPrevention {
 
     if($MailPrevention->{'BasicProtection'} eq 'hard') {
       #Write hard settings 
-       write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access, reject_unknown_sender_domain');   
+       write_attribute($MainCf,'smtpd_sender_restrictions','ldap:ldapacess, reject_unknown_sender_domain');   
        write_attribute($MainCf,'smtpd_helo_required','yes');   
        write_attribute($MainCf,'smtpd_helo_restrictions','permit_mynetworks, reject_invalid_hostname');   
        write_attribute($MainCf,'strict_rfc821_envelopes','yes');   
@@ -878,7 +943,7 @@ sub WriteMailPrevention {
        }
     } elsif($MailPrevention->{'BasicProtection'} eq 'medium') {
       #Write medium settings  
-       write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access, reject_unknown_sender_domain');   
+       write_attribute($MainCf,'smtpd_sender_restrictions','ldap:ldapacess, reject_unknown_sender_domain');   
        write_attribute($MainCf,'smtpd_helo_required','yes');   
        write_attribute($MainCf,'smtpd_helo_restrictions','');   
        write_attribute($MainCf,'strict_rfc821_envelopes','no');   
@@ -890,7 +955,7 @@ sub WriteMailPrevention {
        }
     } elsif($MailPrevention->{'BasicProtection'} eq 'off') {
       # Write off settings  
-       write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access');   
+       write_attribute($MainCf,'smtpd_sender_restrictions','ldap:ldapacess');   
        write_attribute($MainCf,'smtpd_helo_required','no');   
        write_attribute($MainCf,'smtpd_helo_restrictions','');   
        write_attribute($MainCf,'strict_rfc821_envelopes','no');   
@@ -901,6 +966,28 @@ sub WriteMailPrevention {
          return $self->SetError( summary =>_("Unknown BasicProtection mode. Allowed values are: hard, medium, off"),
                                  code    => "PARAM_CHECK_FAILED" );
     }
+    #Now we have a look on the access table
+    %SearchMap = (
+                   'base_dn' => $mail_basedn,
+                   'filter'  => "ObjectClass=SuSEMailAccess"
+                   'attrs'   => []
+                 );
+    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+    #First we clean the access table
+    foreach my $entry (@{$ret}){    
+       SCR::Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
+    }
+    #Now we write the new table
+    foreach my $entry (@{$MailPrevention{'AccessList'}}) {
+       my $dn  = [ 'dn' => "SuSEMailClient=".$entry{'SuSEMailClient'}.','. $mail_basedn];
+       my $tmp = [ 'SuSEMailClient'   => $entry{'MailClient'},
+                   'SuSEMailAction'   => $entry{'SuSEMailAction'}
+                 ];
+       SCR::Execute('.ldap.add',$dn,$tmp);
+    }
+
+    # now we looks if the ldap entries in the main.cf for the access table are OK.
+    check_ldap_configuration('access');
 }
 
 ##
@@ -1020,16 +1107,31 @@ sub write_attribute {
     return 1;
 }
 
+# Internal helper Funktion to check if a needed ldap table is correctly defined
+# in the main.cf. If not so the neccesary entries will be created.
 sub check_ldap_configuration {
     my $config    = shift;
     my $changes   = 0;
-    my %query_filter = (
-                        'transport' => '(&(objectclass=SuSEMailTransportObject)(SuSEMailTransportDestination=%s))',
-                        'peertls'   => '(&(objectclass=SuSEMailTransportObject)(SuSEMailTransportDestination=%s))',
+    my %query_filter     = (
+                        'transport' => '(&(objectclass=SuSEMailTransport)(SuSEMailTransportDestination=%s))',
+                        'peertls'   => '(&(objectclass=SuSEMailTransport)(SuSEMailTransportDestination=%s))',
+                        'access'    => '(&(objectclass=SuSEMailAccess)(SuSEMailClient=%s))'
+                       );
+    my %result_attribute = (
+                        'transport' => 'SuSEMailTransportNexthop',
+                        'peertls'   => 'SuSEMailTransportTLS',
+                        'access'    => 'SuSEMailAction'
+                       );
+    my %scope            = (
+                        'transport' => 'one',
+                        'peertls'   => 'one',
+                        'access'    => 'one'
                        );
 
+    #First we read the whool main.cf configuration
     my $MainCf    = SCR::Read('.mail.postfix.main.table');
 
+    #Now we are looking for if all the needed ldap entries are done
     my $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_host');
     if($tmp ne $ldapserver) {
          write_attribute($MainCF,'ldap'.$config.'_server_host',$ldaphost); 
@@ -1050,10 +1152,33 @@ sub check_ldap_configuration {
          write_attribute($MainCF,'ldap'.$config.'_timeout',20); 
 	 $changes = 1;
     }
-    $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_host');
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_search_base');
+    if($tmp ne $mail_basedn) {
+         write_attribute($MainCF,'ldap'.$config.'_search_base',$mail_basedn); 
+	 $changes = 1;
+    }
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_query_filter');
+    if($tmp ne $query_filter{$config}) {
+         write_attribute($MainCF,'ldap'.$config.'_query_filter',$query_filter{$config}); 
+	 $changes = 1;
+    }
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_result_attribute');
+    if($tmp ne $result_attribute{$config}) {
+         write_attribute($MainCF,'ldap'.$config.'_result_attribute',$result_attribute{$config}); 
+	 $changes = 1;
+    }
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_scope');
+    if($tmp ne $scope{$config}) {
+         write_attribute($MainCF,'ldap'.$config.'_scope',$scope{$config}); 
+	 $changes = 1;
+    }
+
+    # If we had made changes we have to save it
     if($changes) {
        SCR::Write('.mail.postfix.main.table',$MainCF):
     }
+
+    return $changes;
 }
 
 sub read_ldap_settings {
