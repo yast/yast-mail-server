@@ -50,8 +50,8 @@ global boolean() AbortFunction = Modified;
  * @return blah blah lahjk
  */
 global define boolean Abort() ``{
-    if(AbortFunction != nil)
-	return eval(AbortFunction) == true;
+//    if(AbortFunction != nil)
+//	return eval(AbortFunction) == true;
     return false;
 }
 
