@@ -74,12 +74,12 @@ objectclass ( MailOC:1 NAME 'SuSEMailRecipient' SUP top AUXILIARY
         MAY ( SuSEMailAcceptAddress $ SuSEMailAlias $
               SuSEVirtualAddress $ SuSEMailCommand ) )
 
-objectclass ( MailOC:2 NAME 'SuSEVirtualDomainObject' SUP top AUXILIARY
-        DESC 'to configure behaviour of virtual domains'
-        MUST ( MTALocaldomain ))
+#objectclass ( MailOC:2 NAME 'SuSEVirtualDomainObject' SUP top AUXILIARY
+#        DESC 'to configure behaviour of virtual domains'
+#        MUST ( MTALocaldomain ))
 
 objectclass ( MailOC:3 NAME 'SuSEMailTransportObject' SUP top STRUCTURAL
         DESC 'To build transport maps in LDAP'
         MUST ( SuSEMailTransportDestination $ SuSEMailTransportNexthop  )
-        MAY   SuSEMailTransportTLS $ description )
+        MAY  ( SuSEMailTransportTLS $ description ) )
 
