@@ -13,28 +13,6 @@ objectidentifier MailAT SUSE:10.4.2
 ##
 ## Attribute Section
 ##
-attributetype ( MailAT:1 NAME ('SuSEMailvaddress')
-        DESC 'virtual address, similar to mail attribute'
-        EQUALITY caseIgnoreIA5Match
-        SUBSTR caseIgnoreIA5SubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
-
-attributetype ( MailAT:2 NAME ( 'fn' 'SuSEMailFolderName' ) SUP name )
-
-attributetype ( MailAT:3 NAME ( 'SuSEMailDeliveryProgram' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
-
-attributetype ( MailAT:4 NAME ( 'SuSEMailRestrictedAddress' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
-
-attributetype ( MailAT:5 NAME ( 'SuSEMailAllowedAddress' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
 
 attributetype ( MailAT:6 NAME ( 'SuSEMailRestrictedAddressRegexp' )
         EQUALITY caseIgnoreMatch
@@ -65,50 +43,19 @@ attributetype ( MailAT:10 NAME ( 'SuSEMailTransportTLS' )
         SUBSTR caseIgnoreSubstringsMatch
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
 
-# From here the attributes are not clened if we need it
-attributetype ( MailAT:11 NAME ( 'spamcheck' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
-
-attributetype ( MailAT:12 NAME ( 'mailenabled' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
-
-attributetype ( MailAT:13 NAME ( 'mailDomain' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
-
-attributetype ( MailAT:14 NAME ( 'relayClientcert' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
-
-attributetype ( MailAT:15 NAME ( 'MTALocaldomain' )
-        EQUALITY caseIgnoreMatch
-        SUBSTR caseIgnoreSubstringsMatch
-        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
-
 ##
 ## Objectclass Section
 ##
-objectclass ( MailOC:1 NAME 'SuSEeMailObject' SUP top AUXILIARY
-        DESC 'Additional Objectclass for SuSE eMail Server'
-        MAY ( mailenabled $ mailDomain $ writeGlobalAddress $ relayClientcert $
-              spamcheck $ vaddress))
+objectclass ( MailOC:1 NAME 'SUSEMailRecipient' SUP top AUXILIARY
+        DESC 'represents an entry which is able to receive mail'
+        MAY ( SUSEMailAcceptAddress $ SUSEMailAlias $ SUSEMailHost $
+              SUSEVirtualAddress $ SUSEMailCommand $ SUSEMailTransport) )
 
-objectclass ( MailOC:2 NAME 'SuSEIMAPFolderObject' SUP top STRUCTURAL
-        DESC 'For entries assigned to Shared IMAP Folder'
-        MUST fn
-        MAY ( mailDeliveryProgram $ description $ mailenabled ))
-
-objectclass ( MailOC:3 NAME 'SuSEVirtualDomainObject' SUP top AUXILIARY
+objectclass ( MailOC:2 NAME 'SuSEVirtualDomainObject' SUP top AUXILIARY
         DESC 'to configure behaviour of virtual domains'
         MUST ( MTALocaldomain ))
 
-objectclass ( MailOC:4 NAME 'SuSEMailTransportObject' SUP top STRUCTURAL
+objectclass ( MailOC:3 NAME 'SuSEMailTransportObject' SUP top STRUCTURAL
         DESC 'To build transport maps in LDAP'
         MUST ( SuSEMailTransportDestination $ SuSEMailTransportNexthop  )
         MAY   SuSEMailTransportTLS $ description )
