@@ -22,6 +22,11 @@ use POSIX;     # Needed for setlocale()
 
 setlocale(LC_MESSAGES, "");
 textdomain("mail-server");
+our %TYPEINFO;
+
+YaST::YCP::Import ("SCR");
+YaST::YCP::Import ("Service");
+
 
 sub _ {
     return gettext($_[0]);
@@ -53,11 +58,6 @@ sub Error {
 
 # -------------------------------------------------
 
-our %TYPEINFO;
-
-YaST::YCP::Import ("SCR");
-YaST::YCP::Import ("Service");
-
 
 ###
 # # Data was modified?
@@ -83,21 +83,22 @@ BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", "any"  ]; }
 sub ReadGlobalSettings {
     my %GlobalSettings = ( 
     			   'Changed' => 'false',
-    			   'MSize'   => '',
-    			   'Relay'   => ( 
+    			   'MSize'   => 0,
+    			   'Relay'   => { 
 			   		'Type'      => '',
 			   		'Security'  => '',
-					'RHost'     => (
+					'RHost'     => {
 							 'Name'     => '',
 							 'Security' => '',
-							 'Auth'     => '',
+							 'Auth'     => 0,
 							 'Account'  => '',
 							 'Password' => ''
-						       ),
+						       },
 			   		
-			   	      ),
+			   	      },
 			 );
-    # Reading maximal size of transported messages			 
+    # Reading maximal size of transported messages
+    
     $GlobalSettings{'MSize'}                  = SCR::Read('.mail.postfix.main','message_size_limit') || 0 ;
 
     # Determine if relay host is used
@@ -109,9 +110,11 @@ sub ReadGlobalSettings {
 	
         # Determine if relay host need sasl authentication
 	my $tmp = SCR::Read('.mail.postfix.saslpasswd',$GlobalSettings{'Relay'}{'RHost'}{'Name'}); 
-        ($GlobalSettings{'Relay'}{'RHost'}{'Account'},$GlobalSettings{'Relay'}{'RHost'}{'Password'}) = split /:/,$tmp;
+        if( $tmp ) {
+                ($GlobalSettings{'Relay'}{'RHost'}{'Account'},$GlobalSettings{'Relay'}{'RHost'}{'Password'}) = split /:/,$tmp;
+        }
         if($GlobalSettings{'Relay'}{'RHost'}{'Account'}  ne '') {
-           $GlobalSettings{'Relay'}{'RHost'}{'Auth'} = 'true';
+           $GlobalSettings{'Relay'}{'RHost'}{'Auth'} = 1;
 	}
     } else {
     	$GlobalSettings{'Relay'}{'Type'} = 'DNS';
@@ -129,13 +132,13 @@ BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  "any" ]; }
 sub WriteGlobalSettings {
     my $self = shift;
     my $GlobalSettings = shift;
-    my $MSize          = $ReadGlobalSettings->{'MSize'};
-    my $RelayTyp       = $ReadGlobalSettings->{'Relay'}->{'Type'};
-    my $RHostName      = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Name'};
-    my $RHostSecurity  = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Security'};
-    my $RHostAuth      = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Auth'};
-    my $RHostAccount   = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Account'};
-    my $RHostPassword  = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Password'};
+    my $MSize          = $GlobalSettings->{'MSize'};
+    my $RelayTyp       = $GlobalSettings->{'Relay'}{'Type'};
+    my $RHostName      = $GlobalSettings->{'Relay'}{'RHost'}{'Name'};
+    my $RHostSecurity  = $GlobalSettings->{'Relay'}{'RHost'}{'Security'};
+    my $RHostAuth      = $GlobalSettings->{'Relay'}{'RHost'}{'Auth'};
+    my $RHostAccount   = $GlobalSettings->{'Relay'}{'RHost'}{'Account'};
+    my $RHostPassword  = $GlobalSettings->{'Relay'}{'RHost'}{'Password'};
     
     # Parsing attributes 
     if($MSize =~ /[^\d+]/) {
@@ -146,7 +149,7 @@ sub WriteGlobalSettings {
     if($RelayTyp eq 'DNS') {
         #Make direkt mail sending
         #looking for relayhost setting from the past 
-        $tmp = SCR::Read('.mail.postfix.main','relayhost') || '';
+        my $tmp = SCR::Read('.mail.postfix.main','relayhost') || '';
         if( $tmp ne '' ) {
             SCR::Write('.mail.postfix.main','relayhost','');
             SCR::Write('.mail.postfix.saslpasswd',$tmp,'');
@@ -206,5 +209,7 @@ sub AutoPackages {
     );
     return \%ret;
 }
+
+1;
 
 # EOF
