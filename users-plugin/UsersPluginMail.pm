@@ -21,7 +21,7 @@ use Net::IMAP;
 use Data::Dumper;
 
 POSIX::setlocale(LC_MESSAGES, "");
-textdomain("mail-server");
+textdomain("MailServer");
 
 ##--------------------------------------
 ##--------------------- global imports

@@ -21,7 +21,7 @@
 
 {
 
-textdomain "mail-server";
+textdomain "MailServer";
 
 y2milestone("----------------------------------------");
 y2milestone("MailServer auto started");

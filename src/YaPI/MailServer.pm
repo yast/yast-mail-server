@@ -40,7 +40,7 @@ use POSIX;     # Needed for setlocale()
 use Data::Dumper;
 
 setlocale(LC_MESSAGES, "");
-textdomain("mail-server");
+textdomain("MailServer");
 our %TYPEINFO;
 our @CAPABILITIES = (
                      'SLES9'

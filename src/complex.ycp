@@ -9,7 +9,7 @@
 
 {
 
-textdomain "mail-server";
+textdomain "MailServer";
 
 import "Label";
 import "Popup";
@@ -42,7 +42,8 @@ boolean PollAbort() {
 symbol ReadDialog() {
     Wizard::RestoreHelp(HELPS["read"]:"");
     // MailServer::AbortFunction = PollAbort;
-    return MailServer::Read();
+    boolean ret = MailServer::Write();
+    return ret ? `next : `abort;
 }
 
 /**
