@@ -189,8 +189,8 @@ sub ReadGlobalSettings {
     my $MainCf    = SCR::Read('.mail.postfix.main.table');
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
     if( ! SCR::Read('.mail.postfix.master') ) {
-	# TODO for VaRkoLLY
-	SetErORRR();
+         return $self->SetError( summary =>_("Couln't open master.cf"),
+                                 code    => "PARAM_CHECK_FAILED" );
     }
 
     # Reading maximal size of transported messages
@@ -213,7 +213,6 @@ sub ReadGlobalSettings {
            $GlobalSettings{'SendingMail'}{'RelayHost'}{'Auth'} = 1;
         }
     } else {
-        #TODO Looking if smtp service is started
 	my $smtpsrv = SCR::Execute('.mail.postfix.master.findService',
 		{ 'service' => 'smtp',
 		  'command' => 'smtp' });
@@ -304,12 +303,27 @@ sub WriteGlobalSettings {
     my $RelayHostPassword  = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Password'};
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
     my $SaslPasswd         = SCR::Read('.mail.postfix.saslpasswd.table');
+    if( ! SCR::Read('.mail.postfix.master') ) {
+         return $self->SetError( summary =>_("Couln't open master.cf"),
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
     
     # Parsing attributes 
     if($MaximumMailSize =~ /[^\d+]/) {
          return $self->SetError( summary =>_("Maximum Mail Size value may only contain decimal number in byte"),
                                  code    => "PARAM_CHECK_FAILED" );
     }
+    # If SendingMailType ne NONE we have to have a look 
+    # at master.cf if smt is started
+    if($SendingMailType ne 'NONE') {
+       my $smtpsrv = SCR::Execute('.mail.postfix.master.findService',
+                   { 'service' => 'smtp',
+                     'command' => 'smtp' });
+       if(! defined $smtpsrv ) {
+           SCR::Execute('.mail.postfix.master.deleteService', { 'service' => 'smtp', 'command' => 'smtp' });
+       }
+    }
+    
     if($SendingMailType eq 'DNS') {
         #Make direkt mail sending
         #looking for relayhost setting from the past 
@@ -324,7 +338,7 @@ sub WriteGlobalSettings {
            write_attribute($SaslPasswd,$RelayHostName,"$RelayHostAccount:$RelayHostPassword");
         }
     } elsif ($SendingMailType eq 'NONE') {
-       #TODO we have to delete smtp from master.cf
+	SCR::Execute('.mail.postfix.master.deleteService', { 'service' => 'smtp', 'command' => 'smtp' });
     } else {
       return $self->SetError( summary =>_("Unknown mail sending type. Allowed values are:").
                                           " NONE | DNS | relayhost",
@@ -724,10 +738,18 @@ C<$MailPrevention = ReadMailPrevention($admindn,$adminpwd)>
  you can set. To make the setup easier we have defined three kind of predefined
  settings: 
    off:
-        Accept connections from all clients even if  the client IP address has no 
-        PTR (address to name) record in the DNS. 
+        1. Accept connections from all clients even if the client IP address has no 
+           PTR (address to name) record in the DNS. 
+        2. Accept all eMails has RCPT a local destination or the client is in the
+           local network.
+        3. Mail adresses via access table can be rejected.
    medium:
-        
+        1. Accept connections from all clients even if the client IP address has no 
+           PTR (address to name) record in the DNS. 
+        2. Accept all eMails has RCPT a local destination and the sender domain is
+           a valid domain. Furthermore mails from clients from local network will
+           be accepted.
+        3. 
    hard:
 
  $MailPrevention is a pointer to a hash containing the mail server
