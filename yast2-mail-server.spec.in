@@ -1,0 +1,30 @@
+@HEADER-COMMENT@
+# neededforbuild yast2-devel-packages
+
+@HEADER@
+Requires:	yast2
+
+BuildArchitectures:	noarch
+
+Summary:	Configuration of mail-server
+
+%description
+-
+
+@PREP@
+
+@BUILD@
+
+@INSTALL@
+
+@CLEAN@
+
+%files
+%defattr(-,root,root)
+%dir @yncludedir@/mail-server
+@yncludedir@/mail-server/*
+@clientdir@/mail-server.ycp
+@clientdir@/mail-server_*.ycp
+@moduledir@/MailServer.*
+@desktopdir@/mail-server.desktop
+%doc @docdir@
