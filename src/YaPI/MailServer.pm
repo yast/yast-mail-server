@@ -959,7 +959,7 @@ sub WriteMailPrevention {
     }
 
     #Now we write the new table
-print STDERR Dumper([$MailPrevention->{'AccessList'}]);
+#print STDERR Dumper([$MailPrevention->{'AccessList'}]);
     foreach my $entry (@{$MailPrevention->{'AccessList'}}) {
        my $dn  = { 'dn' => "SuSEMailClient=".$entry->{'MailClient'}.','. $ldap_map->{'mail_config_dn'}};
        my $tmp = { 'SuSEMailClient'   => $entry->{'MailClient'},
@@ -1196,7 +1196,6 @@ sub ReadMailLocalDelivery {
     my $MailboxSizeLimit   = read_attribute($MainCf,'mailbox_size_limit');
     my $HomeMailbox        = read_attribute($MainCf,'home_mailbox');
     my $MailSpoolDirectory = read_attribute($MainCf,'mail_spool_directory');
-    my $MaximumMailboxSize = read_attribute($MainCf,'mailbox_size_limit');
     my $LocalTransport     = read_attribute($MainCf,'local_transport');
 
     if($MailboxTransport eq 'local' || ( $MailboxCommand eq '' && $MailboxTransport eq '')) {
@@ -1209,7 +1208,7 @@ sub ReadMailLocalDelivery {
        } elsif ( $MailSpoolDirectory ne '' ) {
            $MailLocalDelivery{'SpoolDirectory'} = $MailSpoolDirectory;
        } else {
-           $MailLocalDelivery{'SpoolDirectory'} = 'default';
+           $MailLocalDelivery{'SpoolDirectory'} = '/var/spool/mail';
        }
     } elsif($MailboxCommand =~ /\/usr\/bin\/procmail/) {
         $MailLocalDelivery{'Type'} = 'procmail';
@@ -1258,20 +1257,17 @@ sub WriteMailLocalDelivery {
 
     # First we read the main.cf
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
-   
+#print STDERR Dumper([$MailLocalDelivery]);   
     if(      $MailLocalDelivery->{'Type'} eq 'local') {
 	write_attribute($MainCf,'mailbox_command','');
 	write_attribute($MainCf,'mailbox_transport','local');
-	if($MailLocalDelivery->{'MaximumMailboxSize'} =~ /^\d+$/) {
-	     write_attribute($MainCf,'mailbox_size_limit',$MailLocalDelivery->{'MaximumMailboxSize'});     
+	if($MailLocalDelivery->{'MailboxSizeLimit'} =~ /^\d+$/) {
+	     write_attribute($MainCf,'mailbox_size_limit',$MailLocalDelivery->{'MailboxSizeLimit'});     
 	} else {
             return $self->SetError( summary => _('Maximum Mailbox Size value may only contain decimal number in byte'),
                                       code    => "PARAM_CHECK_FAILED" );
 	}
-        if(     $MailLocalDelivery->{'SpoolDirectory'} eq 'default') {
-	   write_attribute($MainCf,'home_mailbox','');     
-	   write_attribute($MainCf,'mail_spool_directory','');
-	} elsif($MailLocalDelivery->{'SpoolDirectory'} =~ /\$HOME\/(.*)/) {
+	if($MailLocalDelivery->{'SpoolDirectory'} =~ /\$HOME\/(.*)/) {
 	   write_attribute($MainCf,'home_mailbox',$1);
 	   write_attribute($MainCf,'mail_spool_directory','');
 	} elsif(-e $MailLocalDelivery->{'SpoolDirectory'}) {
@@ -1279,7 +1275,7 @@ sub WriteMailLocalDelivery {
 	   write_attribute($MainCf,'mail_spool_directory',$MailLocalDelivery->{'SpoolDirectory'});
 	} else {
             return $self->SetError( summary => _('Bad value for SpoolDirectory. Possible values are:').
-	                                       _('"default", "$HOME/<path>" or a path to an existing directory.'),
+	                                       _('"$HOME/<path>" or a path to an existing directory.'),
                                       code  => "PARAM_CHECK_FAILED" );
 	}
     } elsif( $MailLocalDelivery->{'Type'} eq 'procmail') {
