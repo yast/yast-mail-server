@@ -12,7 +12,7 @@
 
 {
 
-textdomain "mail-server";
+textdomain "MailServer";
 
 import "MailServer";
 import "Progress";

@@ -9,7 +9,7 @@
 
 {
 
-textdomain "mail-server";
+textdomain "MailServer";
 
 import "Label";
 import "Wizard";
@@ -20,8 +20,10 @@ include "mail-server/helps.ycp";
 any AuthorizingDialog () {
     string caption = _("Mail Server Administrator Authorization.");
     term contents = `HBox(
-                            `TextEntry(`id(`user),   _("Enter Admin User Name:"), ""),
-                            `Password(`id(`passwd),  _("Enter Admin Password:"), "")
+			   `VBox(
+                              `TextEntry(`id(`user),   _("Enter Administrator User Name:"), ""),
+                              `Password(`id(`passwd),  _("Enter Administrator Password:"), "")
+			        )
                          );
 
     Wizard::SetContentsButtons(caption, contents, HELPS["c1"]:"",
@@ -32,15 +34,20 @@ any AuthorizingDialog () {
 
         ret = UI::UserInput();
 
+        string AdminUser      = (string) UI::QueryWidget(`id(`user), `Value);
+        string AdminPassword  = (string) UI::QueryWidget(`id(`passwd), `Value);
+
         /* abort? */
         if(ret == `abort || ret == `cancel) {
             if(ReallyAbort()) break;
             else continue;
-        }
-        else if(ret == `next || ret == `back) {
-            break;
-        }
-        else {
+        } else if(ret == `next) {
+                MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(AdminUser,AdminPassword);
+                if (MailServer::LDAPDefaults == nil) {
+			Popup::Error(_("Unable to authorize the Administrator User"));
+			continue;
+		}
+	} else {
             y2error("unexpected retcode: %1", ret);
             continue;
         }

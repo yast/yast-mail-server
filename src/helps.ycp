@@ -9,7 +9,7 @@
 
 {
 
-textdomain "mail-server";
+textdomain "MailServer";
 
 /**
  * All helps are here
