@@ -19,15 +19,17 @@ textdomain("MailServer");
 
 
 sub run {
+
+   print "Hier I am\n";
    my %GS = ( 
-                           'Changed' => 'false',
-                           'MSize'   => 0,
-                           'Relay'   => { 
+                           'Changed'           => '1',
+                           'MaximumMailSize'   => 0,
+                           'Banner'            => 'Das ist mein Mailserver',
+                           'SendingMail'   => { 
                                         'Type'      => 'relayhost',
-                                        'Security'  => '',
-                                        'RHost'     => {
+                                        'TLS'       => '',
+                                        'RelayHost'     => {
                                                          'Name'     => 'relay.suse.de',
-                                                         'Security' => '',
                                                          'Auth'     => 1,
                                                          'Account'  => 'user',
                                                          'Password' => 'passwd'
@@ -36,14 +38,14 @@ sub run {
                                       },
                          );
   my $GlobalSettings;
-  MailServer->WriteGlobalSettings(\%GS);
-  $GlobalSettings = MailServer->ReadGlobalSettings();
-  my $mastercf = MailServer::ReadMasterCF();
-   my $fsrv = MailServer::findService("smtp","smtp");
+  YaPI::MailServer->WriteGlobalSettings(\%GS,'cn=admin,dc=suse,dc=de','secret');
+  $GlobalSettings = YaPI::MailServer->ReadGlobalSettings();
+  my $mastercf = YaPI::MailServer->ReadMasterCF();
+  my $fsrv = YaPI::MailServer->findService("smtp","smtp");
   print Dumper($fsrv);
-  print $GlobalSettings->{'MSize'}."\n";
+  print $GlobalSettings->{'MaximumMailSize'}."\n";
   print $GlobalSettings->{'Changed'}."\n";
-  print $GlobalSettings->{'Relay'}{'Type'}."\n";
-  print $GlobalSettings->{'Relay'}{'RHost'}{'Name'}."\n";
+  print $GlobalSettings->{'SendingMail'}{'Type'}."\n";
+  print $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Name'}."\n";
   return 1;
 }
