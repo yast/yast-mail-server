@@ -53,41 +53,12 @@ any MainSequence() {
 
     /* FIXME: adapt to your needs */
     map aliases = $[
-	"summary"	:   ``( SummaryDialog() ),
-	"overview"	:   ``( OverviewDialog() ),
-	"configure"	: [ ``( AddSequence() ), true ],
-	"add"		: [ ``( AddSequence() ), true ],
-	"edit"		: [ ``( AddSequence() ), true ]
+	"complex"	:   ``( ComplexDialog() )
     ];
 
     /* FIXME: adapt to your needs */
     map sequence = $[
-	"ws_start" : "summary",
-	"summary" : $[
-	    `abort	: `abort,
-	    `next	: `next,
-	    `overview	: "overview",
-	    `configure	: "configure",
-	    `other	: "configure",
-	],
-	"overview" : $[
-	    `abort	: `abort,
-	    `next	: `next,
-	    `add	: "add",
-	    `edit	: "edit",
-	],
-	"configure" : $[
-	    `abort	: `abort,
-	    `next	: "summary",
-	],
-	"add" : $[
-	    `abort	: `abort,
-	    `next	: "overview",
-	],
-	"edit" : $[
-	    `abort	: `abort,
-	    `next	: "overview",
-	]
+	"ws_start" : "complex"
     ];
 
     any ret = Sequencer::Run(aliases, sequence);
@@ -115,7 +86,6 @@ any MailServerSequence() {
 	    `next	: "read"
         ],
 	"read" : $[
-	    `back	: "auth",
 	    `abort	: `abort,
 	    `next	: "main"
 	],

@@ -55,18 +55,6 @@ YaST::YCP::Import ("Ldap");
 #    return gettext($_[0]);
 #}
 
-# -------------- Global Variable -------------------
-my $dns_basedn   = '';
-my $mail_basedn  = '';
-my $user_basedn  = '';
-my $group_basedn = '';
-my $ldapserver   = '';
-my $ldapport     = '';
-my $ldapadmin    = '';
-my $my_ldap      = [];
-my $admin_bind   = [];
-# -------------------------------------------------
-
 ###
 # # Data was modified?
 # # We don't have a global modified variable.
@@ -99,7 +87,7 @@ sub findService {
     return $services;
 }
 =item *
-C<$GlobalSettings = ReadGlobalSettings($AdminDN,$AdminPassword)>
+C<$GlobalSettings = ReadGlobalSettings($AdminUser,$AdminPassword)>
 
  Dump the mail-server Global Settings to a single hash
  Return hash Dumped settings (later acceptable by WriteGlobalSettings ())
@@ -174,7 +162,7 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
 
@@ -183,7 +171,7 @@ use MailServer;
 BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", ["map", "string", "any" ], "string", "string" ]; }
 sub ReadGlobalSettings {
     my $self            = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
     my %GlobalSettings = ( 
@@ -278,7 +266,7 @@ will be accept to deliver, to 10MB.
 
 use MailServer;
 
-    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
     my %GlobalSettings = (
@@ -297,7 +285,7 @@ use MailServer;
                          }
              );
 
-   if( ! WriteGlobalSettings(\%GlobalSettings,$AdminDN,$AdminPassword) ) {
+   if( ! WriteGlobalSettings(\%GlobalSettings,$AdminUser,$AdminPassword) ) {
         print "ERROR in WriteGlobalSettings\n";
    }
 
@@ -307,7 +295,7 @@ BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  ["map", "strin
 sub WriteGlobalSettings {
     my $self               = shift;
     my $GlobalSettings     = shift;
-    my $AdminDN            = shift;
+    my $AdminUser          = shift;
     my $AdminPassword      = shift;
 
     if(! $GlobalSettings->{'Changed'}){
@@ -398,7 +386,7 @@ sub WriteGlobalSettings {
 }
 
 =item *
-C<$MailTransports = ReadMailTransports($AdminDN,$AdminPassword)>
+C<$MailTransports = ReadMailTransports($AdminUser,$AdminPassword)>
 
   Dump the mail-server Mail Transport to a single hash
   @return hash Dumped settings (later acceptable by WriteMailTransport ())
@@ -502,12 +490,12 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
     my $MailTransorts   = [];
 
-    if (! $MailTransorts = ReadMailTransports($AdminDN,$AdminPassword) ) {
+    if (! $MailTransorts = ReadMailTransports($AdminUser,$AdminPassword) ) {
        print "ERROR in ReadMailTransports\n";
     } else {
        foreach my $Transport (@{$MailTransports->{'Transports'}}){
@@ -529,7 +517,7 @@ use MailServer;
 BEGIN { $TYPEINFO{ReadMailTransports}  =["function", ["map", "string", "any"]  , "string", "string" ]; }
 sub ReadMailTransports {
     my $self            = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
 
@@ -545,8 +533,15 @@ sub ReadMailTransports {
                              'Account'      => '',
                              'Password'     => ''
                           );
+
+    # Make LDAP Connection 
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
+    }
+
     my %SearchMap       = (
-                               'base_dn'    => $mail_basedn,
+                               'base_dn'    => $ldap_map->{mail_config_dn},
                                'filter'     => "ObjectClass=SuSEMailTransport",
                                'attributes' => ['SuSEMailTransportDestination',
 			                        'SuSEMailTransportNexthop',
@@ -555,10 +550,6 @@ sub ReadMailTransports {
 
     my $SaslPaswd = SCR->Read('.mail.postfix.saslpasswd.table');
                              
-    # Anonymous bind 
-    SCR->Execute('.ldap');
-    SCR->Execute('.ldap.bind');
-
     # Searching all the transport lists
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
 
@@ -585,7 +576,7 @@ sub ReadMailTransports {
 }
 
 =item *
-C<boolean = WriteMailTransports($admindn,$adminpwd,$MailTransports)>
+C<boolean = WriteMailTransports($AdminUser,$adminpwd,$MailTransports)>
 
  Write the mail server Mail Transport from a single hash.
 
@@ -598,7 +589,7 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
 
     my %MailTransports  = ( 
@@ -629,7 +620,7 @@ use MailServer;
 			);
     push @($MailTransports{Transports}), %Transport; 
 
-    if( ! WriteMailTransports(\%Transports,$AdminDN,$AdminPassword) ) {
+    if( ! WriteMailTransports(\%Transports,$AdminUser,$AdminPassword) ) {
         print "ERROR in WriteMailTransport\n";
     }
 
@@ -639,7 +630,7 @@ BEGIN { $TYPEINFO{WriteMailTransports}  =["function", "boolean", ["map", "string
 sub WriteMailTransports {
     my $self            = shift;
     my $MailTransports  = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
     
     # Pointer for Error MAP
@@ -654,36 +645,21 @@ sub WriteMailTransports {
                                  code    => "PARAM_CHECK_FAILED" );
     }
     
-    # Search hash to find all the Transport Objects
-    my %SearchMap       = (
-                               'base_dn' => $mail_basedn,
-                               'filter'  => "ObjectClass=SuSEMailTransport",
-                               'attrs'   => ['SuSEMailTransportDestination']
-                          );
-
     # We'll need the sasl passwords entries
     my $SaslPasswd = SCR->Read('.mail.postfix.saslpasswd.table');
 
     # Make LDAP Connection 
-    my $ErrorSummary = read_ldap_settings();
-    if( $ErrorSummary  ne '' ) {
-         return $self->SetError( summary => $ErrorSummary,
-                                 code    => "PARAM_CHECK_FAILED" );
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
     }
-    if($AdminDN) {
-        $admin_bind->{'binddn'} = $AdminDN;
-    }
-    if($AdminPassword) {
-        $admin_bind->{'bindpw'} = $AdminPassword;
-    }
-    if(! SCR->Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
+
+    # Search hash to find all the Transport Objects
+    my %SearchMap       = (
+                               'base_dn' => $ldap_map->{mail_config_dn},
+                               'filter'  => "ObjectClass=SuSEMailTransport",
+                               'attrs'   => ['SuSEMailTransportDestination']
+                          );
 
     # First we have to clean the corresponding SaslPasswd entries in the hash
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
@@ -700,7 +676,7 @@ sub WriteMailTransports {
             $ERROR->{'code'}    = "PARAM_CHECK_FAILED";
             return $self->SetError( $ERROR );
 	       }
-       $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$mail_basedn;
+       $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$ldap_map->{mail_config_dn};
        $entry{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
        $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
        $entry{'SuSEMailTransportTLS'}           = 'NONE';
@@ -719,7 +695,7 @@ sub WriteMailTransports {
     }
 
     #have a look if our table is OK. If not make it to work!
-    check_ldap_configuration('transport');
+    check_ldap_configuration('transport',$ldap_map);
 
     # If there is no ERROR we do the changes
     # First we clean all the transport lists
@@ -742,7 +718,7 @@ sub WriteMailTransports {
 }
 
 =item *
-C<$MailPrevention = ReadMailPrevention($admindn,$adminpwd)>
+C<$MailPrevention = ReadMailPrevention($AdminUser,$adminpwd)>
 
  Dump the mail-server prevention to a single hash
  @return hash Dumped settings (later acceptable by WriteMailPrevention())
@@ -796,11 +772,11 @@ EXAMPLE:
 
 use MailServer;
 
-    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminUser       = "administrator";
     my $AdminPassword   = "VerySecure";
     my $MailPrevention  = [];
 
-    if( $MailPrevention = ReadMailPrevention($AdminDN,$AdminPassword) ) {
+    if( $MailPrevention = ReadMailPrevention($AdminUser,$AdminPassword) ) {
         print "Basic BasicProtection : $MailPrevention->{BasicProtection}\n";
         foreach(@{$MailPrevention->{RBLList}}) {
           print "Used RBL Server: $_\n";
@@ -822,7 +798,7 @@ use MailServer;
 BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any", "string", "string"  ]; }
 sub ReadMailPrevention {
     my $self            = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
     my %MailPrevention  = (
@@ -841,24 +817,9 @@ sub ReadMailPrevention {
     my $ERROR        = '';
 
     # Make LDAP Connection 
-    my $ErrorSummary = read_ldap_settings();
-    if( $ErrorSummary  ne '' ) {
-         return $self->SetError( summary => $ErrorSummary,
-                                 code    => "PARAM_CHECK_FAILED" );
-    }
-    if($AdminDN) {
-        $admin_bind->{'binddn'} = $AdminDN;
-    }
-    if($AdminPassword) {
-        $admin_bind->{'bindpw'} = $AdminPassword;
-    }
-    if(! SCR->Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
     }
 
     # First we read the main.cf
@@ -887,7 +848,7 @@ sub ReadMailPrevention {
 
     #Now we read the access table
     my %SearchMap = (
-                   'base_dn' => $mail_basedn,
+                   'base_dn' => $ldap_map->{mail_config_dn},
                    'filter'  => "ObjectClass=SuSEMailAccess",
                    'attrs'   => ['SuSEMailClient','SuSEMailAction']
                  );
@@ -908,7 +869,7 @@ BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", ["map", "string
 sub WriteMailPrevention {
     my $self            = shift;
     my $MailPrevention  = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
 
     my $ERROR  = '';
@@ -919,24 +880,9 @@ sub WriteMailPrevention {
     }
    
     # Make LDAP Connection 
-    my $ErrorSummary = read_ldap_settings();
-    if( $ErrorSummary  ne '' ) {
-         return $self->SetError( summary => $ErrorSummary,
-                                 code    => "PARAM_CHECK_FAILED" );
-    }
-    if($AdminDN) {
-        $admin_bind->{'binddn'} = $AdminDN;
-    }
-    if($AdminPassword) {
-        $admin_bind->{'bindpw'} = $AdminPassword;
-    }
-    if(! SCR->Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
     }
 
     # First we read the main.cf
@@ -991,7 +937,7 @@ sub WriteMailPrevention {
     }
     #Now we have a look on the access table
     my %SearchMap = (
-                   'base_dn' => $mail_basedn,
+                   'base_dn' => $ldap_map->{mail_config_dn},
                    'filter'  => "ObjectClass=SuSEMailAccess",
                    'attrs'   => []
                  );
@@ -1002,7 +948,7 @@ sub WriteMailPrevention {
     }
     #Now we write the new table
     foreach my $entry (@{$MailPrevention->{'AccessList'}}) {
-       my $dn  = [ 'dn' => "SuSEMailClient=".$entry->{'SuSEMailClient'}.','. $mail_basedn];
+       my $dn  = [ 'dn' => "SuSEMailClient=".$entry->{'SuSEMailClient'}.','. $ldap_map->{mail_config_dn}];
        my $tmp = [ 'SuSEMailClient'   => $entry->{'MailClient'},
                    'SuSEMailAction'   => $entry->{'SuSEMailAction'}
                  ];
@@ -1010,11 +956,11 @@ sub WriteMailPrevention {
     }
 
     # now we looks if the ldap entries in the main.cf for the access table are OK.
-    check_ldap_configuration('access');
+    check_ldap_configuration('access',$ldap_map);
 }
 
 =item *
-C<$MailRelaying = ReadMailRelaying($admindn,$adminpwd)>
+C<$MailRelaying = ReadMailRelaying($AdminUser,$adminpwd)>
 
  Dump the mail-server server side relay settings to a single hash
  @return hash Dumped settings (later acceptable by WriteMailRelaying ())
@@ -1056,7 +1002,7 @@ C<$MailRelaying = ReadMailRelaying($admindn,$adminpwd)>
 BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any", "string", "string"  ]; }
 sub ReadMailRelaying {
     my $self            = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
     my %MailRelaying    = (
                                 'Changed'         => 0,
@@ -1069,31 +1015,16 @@ sub ReadMailRelaying {
     my $ERROR  = '';
 
     # Make LDAP Connection 
-    my $ErrorSummary = read_ldap_settings();
-    if( $ErrorSummary  ne '' ) {
-         return $self->SetError( summary => $ErrorSummary,
-                                 code    => "PARAM_CHECK_FAILED" );
-    }
-    if($AdminDN) {
-        $admin_bind->{'binddn'} = $AdminDN;
-    }
-    if($AdminPassword) {
-        $admin_bind->{'bindpw'} = $AdminPassword;
-    }
-    if(! SCR->Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
     }
 
     # First we read the main.cf
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     # Now we look if there are manual inclued mynetworks entries
-    my $TrustedNetworks    = read_attributes($MainCf,'mynetworks');
+    my $TrustedNetworks    = read_attribute($MainCf,'mynetworks');
     foreach(split /, |,/, $TrustedNetworks) { 
        if(! /ldapmynetworks/) {
           push @{$MailRelaying{'TrustedNetworks'}}, $_;
@@ -1102,7 +1033,7 @@ sub ReadMailRelaying {
 
     #Now we have a look on the mynetworks ldaptable
 #    my %SearchMap = (
-##                   'base_dn' => $mail_basedn,
+##                   'base_dn' => $ldap_map->{mail_config_dn},
 #                   'filter'  => "ObjectClass=SuSEMailMyNetorks",
 #                   'attrs'   => ['SuSEMailClient']
 #                 );
@@ -1146,7 +1077,7 @@ sub ReadMailRelaying {
 BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
 sub WriteMailRelaying {
     my $self            = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
     my $MailRelaying    = shift;
    
@@ -1159,27 +1090,12 @@ sub WriteMailRelaying {
     }
     
     # Make LDAP Connection 
-    my $ErrorSummary = read_ldap_settings();
-    if( $ErrorSummary  ne '' ) {
-         return $self->SetError( summary => $ErrorSummary,
-                                 code    => "PARAM_CHECK_FAILED" );
-    }
-    if($AdminDN) {
-        $admin_bind->{'binddn'} = $AdminDN;
-    }
-    if($AdminPassword) {
-        $admin_bind->{'bindpw'} = $AdminPassword;
-    }
-    if(! SCR->Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
     }
 
-    # First we read the main.cf
+   # First we read the main.cf
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     # now we collent the trusted networks;
@@ -1226,7 +1142,7 @@ sub WriteMailRelaying {
 BEGIN { $TYPEINFO{ReadMailLocalDelivery}  =["function", "any", "string", "string"  ]; }
 sub ReadMailLocalDelivery {
     my $self            = shift;
-    my $AdminDN         = shift;
+    my $AdminUser       = shift;
     my $AdminPassword   = shift;
     my %MailLocalDelivery = (
                                 'Changed'         => 0,
@@ -1244,27 +1160,12 @@ sub ReadMailLocalDelivery {
     my $ERROR;
 
     # Make LDAP Connection 
-    my $ErrorSummary = read_ldap_settings();
-    if( $ErrorSummary  ne '' ) {
-         return $self->SetError( summary => $ErrorSummary,
-                                 code    => "PARAM_CHECK_FAILED" );
-    }
-    if($AdminDN) {
-        $admin_bind->{'binddn'} = $AdminDN;
-    }
-    if($AdminPassword) {
-        $admin_bind->{'bindpw'} = $AdminPassword;
-    }
-    if(! SCR->Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
     }
 
-    # First we read the main.cf
+   # First we read the main.cf
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
     my $MailboxCommand     = read_attribute($MainCf,'mailbox_command');
@@ -1313,7 +1214,7 @@ sub ReadMailLocalDelivery {
 BEGIN { $TYPEINFO{WriteMailLocalDelivery}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
 sub WriteMailLocalDelivery {
     my $self              = shift;
-    my $AdminDN           = shift;
+    my $AdminUser         = shift;
     my $AdminPassword     = shift;
     my $MailLocalDelivery = shift;
 
@@ -1326,24 +1227,9 @@ sub WriteMailLocalDelivery {
     }
     
     # Make LDAP Connection 
-    my $ErrorSummary = read_ldap_settings();
-    if( $ErrorSummary  ne '' ) {
-         return $self->SetError( summary => $ErrorSummary,
-                                 code    => "PARAM_CHECK_FAILED" );
-    }
-    if($AdminDN) {
-        $admin_bind->{'binddn'} = $AdminDN;
-    }
-    if($AdminPassword) {
-        $admin_bind->{'bindpw'} = $AdminPassword;
-    }
-    if(! SCR->Execute('.ldap',$my_ldap)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
-    }
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
+    my $ldap_map = $self->ReadLDAPDefaults($AdminUser,$AdminPassword);
+    if( !$ldap_map ) {
+         return undef;
     }
 
     # First we read the main.cf
@@ -1423,6 +1309,7 @@ BEGIN { $TYPEINFO{WriteMailLocalDomains} =["function", "boolean", ["map", "strin
 sub WriteMailLocalDomains {
 }
 
+
 BEGIN { $TYPEINFO{ReadLDAPDefaults} = ["function", ["map", "string", "any"], "string", "string" ]; }
 sub ReadLDAPDefaults {
     my $self          = shift;
@@ -1433,6 +1320,7 @@ sub ReadLDAPDefaults {
     my $admin_bind    = {};
     my $ldapret       = undef;
     my $ERROR; 
+
 
     if(Ldap->Read()) {
         $ldapMap = Ldap->Export();
@@ -1463,11 +1351,11 @@ sub ReadLDAPDefaults {
     # searching LDAP Bases
     # First we search mail base
     $ldapret = SCR->Read(".ldap.search", {
-                                          "base_dn" => $ldapMap->{'ldap_domain'},
-                                          "filter" => '(& (objectclass=suseMailServerConfiguration) (cn=default))',
-                                          "scope" => 2,
+                                          "base_dn"      => $ldapMap->{'base_config_dn'},
+                                          "filter"       => '(objectclass=suseMailServerConfiguration)',
+                                          "scope"        => 2,
                                           "not_found_ok" => 1,
-                                          "attrs" => [ 'suseDefaultBase' ]
+                                          "attrs"        => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1480,11 +1368,11 @@ sub ReadLDAPDefaults {
     }
     # now we search user base
     $ldapret = SCR->Read(".ldap.search", {
-                                          "base_dn" => $ldapMap->{'ldap_domain'},
-                                          "filter" => '(& (objectclass=suseUserConfiguration) (cn=default))',
-                                          "scope" => 2,
+                                          "base_dn"      => $ldapMap->{'base_config_dn'},
+                                          "filter"       => '(objectclass=suseUserConfiguration)',
+                                          "scope"        => 2,
                                           "not_found_ok" => 1,
-                                          "attrs" => [ 'suseDefaultBase' ]
+                                          "attrs"        => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1497,11 +1385,11 @@ sub ReadLDAPDefaults {
     }
     # now we search group base
     $ldapret = SCR->Read(".ldap.search", {
-                                          "base_dn" => $ldapMap->{'ldap_domain'},
-                                          "filter" => '(& (objectclass=suseGroupConfiguration) (cn=default))',
-                                          "scope" => 2,
+                                          "base_dn"      => $ldapMap->{'base_config_dn'},
+                                          "filter"       => '(objectclass=suseGroupConfiguration)',
+                                          "scope"        => 2,
                                           "not_found_ok" => 1,
-                                          "attrs" => [ 'suseDefaultBase' ]
+                                          "attrs"        => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1514,11 +1402,11 @@ sub ReadLDAPDefaults {
     }
     # now we search DNS base
     $ldapret = SCR->Read(".ldap.search", {
-                                          "base_dn" => $ldapMap->{'ldap_domain'},
-                                          "filter" => '(& (objectclass=suseDNSConfiguration) (cn=default))',
-                                          "scope" => 2,
+                                          "base_dn"      => $ldapMap->{'base_config_dn'},
+                                          "filter"       => '(objectclass=suseDNSConfiguration)',
+                                          "scope"        => 2,
                                           "not_found_ok" => 1,
-                                          "attrs" => [ 'suseDefaultBase' ]
+                                          "attrs"        => [ 'suseDefaultBase' ]
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
@@ -1531,34 +1419,50 @@ sub ReadLDAPDefaults {
     }
     # now we search the admin user DN
     $ldapret = SCR->Read(".ldap.search", {
-                                          "base_dn" => $ldapMap->{'ldap_domain'},
-                                          "filter" => "(& (objectclass=posixaccount) (uid=$AdminUser))",
-                                          "scope" => 2,
-                                          "not_found_ok" => 1,
-                                          "attrs" => [ 'suseDefaultBase' ]
+                                          "base_dn"      => $ldapMap->{'base_config_dn'},
+                                          "filter"       => "(& (objectclass=posixaccount) (uid=$AdminUser))",
+                                          "scope"        => 2,
+                                          "map"          => 1,
                                          });
     if (! defined $ldapret) {
         my $ldapERR = SCR->Read(".ldap.error");
-        return $self->SetError(summary => "LDAP search failed!",
+        return $self->SetError(summary     => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
-                               code => "LDAP_SEARCH_FAILED");
+                               code        => "LDAP_SEARCH_FAILED");
     }
-    if(@$ldapret > 0) {
-        $ldapMap->{'binddn'} = $ldapret->[0]->{'dn'};
+    if(keys(%{$ldapret})> 1 ){
+        return $self->SetError(summary => _("More then one account found for uid=").$AdminUser.'.',
+                               code    => "LDAP_SEARCH_FAILED");
+    }
+    if(keys(%{$ldapret}) == 0 ){
+        return $self->SetError(summary => _("Account not found for uid=").$AdminUser.'.',
+                               code    => "LDAP_SEARCH_FAILED");
+    }
+    foreach(keys(%{$ldapret})){
+        $ldapMap->{'bind_dn'} = $_;
     }
 
     # Now we try to bind to the LDAP
-    $admin_bind->{'binddn'} = $ldapMap->{'binddn'};
-    $admin_bind->{'bindpw'} = $AdminPassword;
-    if(! SCR->Execute('.ldap.bind',$admin_bind)) {
-         $ERROR = SCR->Read('.ldap.error');
-         return $self->SetError( $ERROR );
+    if (! SCR->Execute(".ldap", {"hostname" => $ldapMap->{'ldap_server'},
+                                 "port"     => $ldapMap->{'ldap_port'}})) {
+        return $self->SetError(summary => "LDAP init failed",
+                               code => "SCR_INIT_FAILED");
+    }
+
+    $ldapMap->{'bind_pw'} = $AdminPassword;
+#    $admin_bind->{'bind_dn'} = $ldapMap->{'bind_dn'};
+#    $admin_bind->{'bind_pw'} = $AdminPassword;
+    if(! SCR->Execute('.ldap.bind',$ldapMap)) {
+         my $ldapERR = SCR->Read('.ldap.error');
+         return $self->SetError(summary     => "LDAP bind failed!",
+                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
+                                code        => "LDAP_BIND_FAILED");
     }
     
-    $ldapMap->{'bindpw'} = $AdminPassword;
 
     return $ldapMap;
 }
+
 ##
  # Create a textual summary and a list of unconfigured cards
  # @return summary of the current configuration
@@ -1639,7 +1543,9 @@ sub write_attribute {
 # Internal helper Funktion to check if a needed ldap table is correctly defined
 # in the main.cf. If not so the neccesary entries will be created.
 sub check_ldap_configuration {
-    my $config    = shift;
+    my $config      = shift;
+    my $ldap_map    = shift;
+
     my $changes   = 0;
     my %query_filter     = (
                         'transport' => '(&(objectclass=SuSEMailTransport)(SuSEMailTransportDestination=%s))',
@@ -1665,13 +1571,13 @@ sub check_ldap_configuration {
 
     #Now we are looking for if all the needed ldap entries are done
     my $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_host');
-    if($tmp ne $ldapserver) {
-         write_attribute($MainCF,'ldap'.$config.'_server_host',$ldapserver); 
+    if($tmp ne $ldap_map->{ldap_server}) {
+         write_attribute($MainCF,'ldap'.$config.'_server_host',$ldap_map->{ldap_server}); 
 	 $changes = 1;
     }
     $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_port');
-    if($tmp ne $ldapport) {
-         write_attribute($MainCF,'ldap'.$config.'_server_port',$ldapport); 
+    if($tmp ne $ldap_map->{ldap_port}) {
+         write_attribute($MainCF,'ldap'.$config.'_server_port',$ldap_map->{ldap_port}); 
 	 $changes = 1;
     }
     $tmp       = read_attribute($MainCF,'ldap'.$config.'_bind');
@@ -1685,8 +1591,8 @@ sub check_ldap_configuration {
 	 $changes = 1;
     }
     $tmp       = read_attribute($MainCF,'ldap'.$config.'_search_base');
-    if($tmp ne $mail_basedn) {
-         write_attribute($MainCF,'ldap'.$config.'_search_base',$mail_basedn); 
+    if($tmp ne $ldap_map->{mail_config_dn}) {
+         write_attribute($MainCF,'ldap'.$config.'_search_base',$ldap_map->{mail_config_dn}); 
 	 $changes = 1;
     }
     $tmp       = read_attribute($MainCF,'ldap'.$config.'_query_filter');
@@ -1713,40 +1619,6 @@ sub check_ldap_configuration {
     return $changes;
 }
 
-sub read_ldap_settings {
-    # We have to set following global variables:
-    #$dns_basedn   = '';
-    #$mail_basedn  = '';
-    #$user_basedn  = '';
-    #$group_basedn = '';
-    #$ldapserver   = '';
-    #$ldapport     = '';
-    #$ldapadmin    = '';
-    #$my_ldap      = [];
-    #$admin_bind   = [];
-    if( ! $ldapserver ){
-                 return _("No LDAP host");
-    }
-    if( ! $ldapport ){
-                 return _("No LDAP host");
-    }
-    if( ! $mail_basedn ){
-                 return _("No LDAP mail base DN");
-    }
-    if( ! $dns_basedn ){
-                 return _("No LDAP dns base DN");
-    }
-    if( ! $user_basedn ){
-                 return _("No LDAP user base DN");
-    }
-    if( ! $group_basedn ){
-                 return _("No LDAP group base DN");
-    }
-    $my_ldap->{'host'} = $ldapserver;
-    $my_ldap->{'port'} = $ldapport;
-    return '';
-}    
-    
 1;
 
 # EOF

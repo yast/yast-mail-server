@@ -17,36 +17,51 @@ import "YaPI::MailServer";
 
 include "mail-server/helps.ycp";
 
-any AuthorizingDialog () {
+/**
+ * AuthorizingDialog
+ * The adminstrator user will be authorized
+ * @return dialog result
+ */
+define any AuthorizingDialog () {
     string caption = _("Mail Server Administrator Authorization.");
     term contents = `HBox(
 			   `VBox(
                               `TextEntry(`id(`user),   _("Enter Administrator User Name:"), ""),
-                              `Password(`id(`passwd),  _("Enter Administrator Password:"), "")
+                              `Password(`id(`password),  _("Enter Administrator Password:"), "")
 			        )
                          );
 
     Wizard::SetContentsButtons(caption, contents, HELPS["c1"]:"",
 	    Label::BackButton(), Label::NextButton());
 
+    UI::SetFocus (`id (`user));
+
     any ret = nil;
     while(true) {
 
         ret = UI::UserInput();
 
-        string AdminUser      = (string) UI::QueryWidget(`id(`user), `Value);
-        string AdminPassword  = (string) UI::QueryWidget(`id(`passwd), `Value);
+        MailServer::AdminUser      = (string) UI::QueryWidget(`id(`user), `Value);
+        MailServer::AdminPassword  = (string) UI::QueryWidget(`id(`password), `Value);
 
         /* abort? */
         if(ret == `abort || ret == `cancel) {
             if(ReallyAbort()) break;
             else continue;
         } else if(ret == `next) {
-                MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(AdminUser,AdminPassword);
+                MailServer::LDAPDefaults = (map<string,any>) YaPI::MailServer::ReadLDAPDefaults(
+                                                                MailServer::AdminUser,
+                                                                MailServer::AdminPassword);
                 if (MailServer::LDAPDefaults == nil) {
 			Popup::Error(_("Unable to authorize the Administrator User"));
 			continue;
 		}
+                y2milestone("mail_config_dn %1",MailServer::LDAPDefaults["mail_config_dn"]:"");
+                y2milestone("user_config_dn %1",MailServer::LDAPDefaults["user_config_dn"]:"");
+                y2milestone("DNS_config_dn %1",MailServer::LDAPDefaults["DNS_config_dn"]:"");
+                y2milestone("binddn %1",MailServer::LDAPDefaults["bind_dn"]:"");
+                y2milestone("bindpw %1",MailServer::LDAPDefaults["bind_pw"]:"");
+                return ret;
 	} else {
             y2error("unexpected retcode: %1", ret);
             continue;
@@ -55,6 +70,55 @@ any AuthorizingDialog () {
 
     return ret;
 
+}
+
+list<map> GenerateTree(list<map> Tree, string parent, list<list> input) {
+
+    foreach(list i, input, ``{
+            string title = i[0]:"";
+            list<list> children = i[1]:[];
+            Tree = Wizard::AddTreeItem(Tree , parent,  title, title );
+            if (size(children) > 0 ) {
+                Tree = GenerateTree(Tree, title, children);
+            }
+    });
+y2milestone("Tree=%1", Tree);
+    return Tree;
+}
+
+term GlobalSettingsDialog() {
+  term content = `Frame("GlobalSettingsDialog",
+                     `VBox (
+                                `TextEntry(`id(`MaximumMailSize),  _("Maximum Mail Size"),(string)MailServer::GlobalSettings["MaximumMailSize"]:""),
+                                `TextEntry(`id(`Banner),           _("Banner"),(string)MailServer::GlobalSettings["Banner"]:"SuSE Linux Mail Server")
+                           )
+                       );
+  return content;
+}
+
+any ComplexDialog() {
+
+   Wizard::CreateTreeDialog();
+   list<map> Tree = GenerateTree([], "", MailServer::ModulesTreeContent) ;
+   Wizard::CreateTree(Tree, _("&Mail Server Configuration Modules"));
+
+   string helptext = "Bla Bla Bla";
+   term content = GlobalSettingsDialog();
+
+   Wizard::SetContents(_("Mail Server Configuration"),
+                        `ReplacePoint(`id(`replace),
+                               content
+                         )
+                      ,helptext, true, true);
+
+   any ret = nil;
+   while(ret != `cancel && ret != `abort && ret != `next )
+   {
+        map event = UI::WaitForEvent();
+        ret = event["ID"]:nil;
+   }
+
+   return ret;
 }
 
 /**
