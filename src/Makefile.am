@@ -1,7 +1,7 @@
 # Makefile.am for mail-server/src
 
 yncludedir = @yncludedir@/mail-server
-schemadir  = /etc/openldap/scheme
+schemadir  = /etc/openldap/schema
 
 client_DATA =			\
 	mail-server.ycp		\
