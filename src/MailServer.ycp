@@ -254,10 +254,6 @@ concerning the mail server.
         return true;
 }
 
-global boolean procmail_installed  = false;
-global boolean cyrus_installed     = false;
-global boolean postfix_installed   = false;
-global boolean fetchmail_installed = false;
 /**
  * Read all mail-server settings
  * @return true on success
