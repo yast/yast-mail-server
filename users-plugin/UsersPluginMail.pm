@@ -19,7 +19,7 @@ use Locale::gettext;
 use POSIX ();
 
 POSIX::setlocale(LC_MESSAGES, "");
-textdomain("users");
+textdomain("mail-server");
 
 ##--------------------------------------
 ##--------------------- global imports
