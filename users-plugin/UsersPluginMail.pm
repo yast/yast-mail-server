@@ -19,6 +19,7 @@ use Locale::gettext;
 use POSIX ();
 use Net::IMAP;
 use Data::Dumper;
+use Net::IMAP;
 
 POSIX::setlocale(LC_MESSAGES, "");
 textdomain("MailServer");
@@ -137,7 +138,8 @@ sub Restriction {
 
     my $self	= shift;
     # this plugin applies only for LDAP users and groups
-    return { "ldap"	=> 1 };
+    return { "ldap"	=> 1,
+	     "user"     => 1};
 }
 
 
@@ -276,7 +278,12 @@ sub Add {
     my $config	= $_[0];
     my $data	= $_[1]; # the whole map of current user/group after Users::Edit
 
+    return $data if $data->{'uid'} eq "" || ! defined $data->{'uid'};
+
     y2internal ("Add Mail called");
+
+    cond_IMAP_OP($data->{'uid'}, "add");
+
     return addRequiredMailData($data);
 }
 
@@ -325,9 +332,91 @@ sub Edit {
     $data->{"susemailacceptaddress"} = $naddr;
     y2internal(Dumper($data));
 
+    #cond_IMAP_OP($data->{'uid'}, "add");
 
     y2internal ("Edit Mail called");
     return $data;
+}
+
+sub cond_IMAP_OP {
+    my $uid = shift;
+    my $op  = shift || "add";
+
+    # FIXME: How must Error handling be done here?
+    # FIXME: we need to somehow get this data elsewhere
+    my $imapadm    = "cyrus";
+    my $imaphost   = "localhost";
+
+    # FIXME: we need to ensure, that imapadmpw == rootdnpw!
+    my $imapadmpw  = Ldap->bind_pass();
+
+    #y2internal("imapadmpw = <$imapadmpw>\n");
+
+    my $imap = new Net::IMAP($imaphost, Debug => 0);
+    unless ($imap) {
+        y2internal("can't connect to $imaphost: $!\n");
+        return undef;
+    }
+
+    my $ret = $imap->login($imapadm, $imapadmpw);
+    if($$ret{Status} ne "ok") {
+        y2internal("login failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+        return undef;
+    }
+
+    my $namespace;
+    my $nscb = sub {
+        my $self = shift;
+        $namespace = shift;
+    };
+
+    $imap->set_untagged_callback('namespace', $nscb);
+
+    $ret = $imap->namespace();
+    if($$ret{Status} ne "ok") {
+        y2internal("namespace failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+        return undef;
+    }
+
+    my @users_ns = $namespace->other_users();
+    
+    # UGLY: Access the Namespace-Structure directly, as the access method lowercase the values
+    my $hsep = $namespace->{'Namespaces'}->{'other_users'}->{$users_ns[0]}; 
+
+    # y2internal("hsep = <$hsep>\n");
+   
+    my $fname = "user".$hsep.$uid;
+
+    #y2internal(Dumper(\@users_ns));
+    #y2internal(Dumper($namespace));
+
+    if( $op eq "add" ) {
+	$ret = $imap->create($fname);
+	if($$ret{Status} ne "ok") {
+	    y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+	    #return undef;
+	}
+	
+	$ret = $imap->deleteacl($fname, "anyone");
+	if($$ret{Status} ne "ok") {
+	    y2internal("deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+	    #return undef;
+	}
+	
+	$ret = $imap->setacl($fname, $imapadm, "lrswipcda");
+	if($$ret{Status} ne "ok") {
+	    y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+	    #return undef;
+	}
+    } elsif( $op eq "delete" ) {
+	$ret = $imap->delete($fname);
+	if($$ret{Status} ne "ok") {
+	    y2internal("delete failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+	    #return undef;
+	}
+    }
+
+    $imap->logout();
 }
 
 sub addRequiredMailData {
@@ -336,6 +425,9 @@ sub addRequiredMailData {
     if( ! contains( $data->{objectclass}, "susemailrecipient", 1) ) {
 	push @{$data->{'objectclass'}}, "susemailrecipient";
     }
+
+    # FIXME: why are we called several times and sometimes uid is empty???
+    return $data if $data->{'uid'} eq "" || ! defined $data->{'uid'};
 
     # FIXME: get default domain name from LDAP
     my $domain = "suse.de";
@@ -366,8 +458,15 @@ sub WriteBefore {
     my $config	= $_[0];
     my $data	= $_[1];
 
+    return if $data->{'uid'} eq "" || ! defined $data->{'uid'};
+
     # this means what was done with a user/group: added/edited/deleted
     my $action = $config->{"modified"} || "";
+
+    #y2internal(Dumper($config));
+    #y2internal(Dumper($data));
+    
+    cond_IMAP_OP($data->{'uid'}, "delete") if $action eq "deleted";
     
     y2internal ("WriteBefore Mail called");
     return;
