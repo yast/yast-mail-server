@@ -124,7 +124,8 @@ any MailServerSequence() {
     ];
 
     Wizard::CreateDialog();
-
+    Wizard::SetDesktopIcon("mail-server");
+    
     any ret = Sequencer::Run(aliases, sequence);
 
     UI::CloseDialog();
@@ -144,6 +145,7 @@ any MailServerAutoSequence() {
     term contents = `Label(_("Initializing..."));
 
     Wizard::CreateDialog();
+    Wizard::SetDesktopIcon("mail-server");
     Wizard::SetContentsButtons(caption, contents, "",
 	    Label::BackButton(), Label::NextButton());
 
