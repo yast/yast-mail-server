@@ -558,7 +558,7 @@ global boolean Write() {
     if(MailLocalDelivery["Type"]:"none" == "cyrus") {
        if(!cyrus_installed) {
          WFM::CallFunction("sw_single", (["cyrus-imapd"]));
-	 string crypted  = Users::CryptPassword(AdminPassword, "system");
+	 string crypted  = Users::CryptPassword(AdminPassword, "system", "user");
 	 SCR::Write(.target.passwd.cyrus, crypted);
 	 SCR::UnmountAgent(.etc.imapd_conf);
        }
