@@ -502,21 +502,57 @@ term MailLocalDeliveryDialog() {
 
   term settings = `HBox();
   if(TypeCYRUS){
-  } else if(TypePROCMAIL){
   } else if(TypeLOCAL){
+    boolean mbox     = true;
+    boolean mdir     = false;
+    boolean varspool = false;
+    boolean homedir  = true;
+    boolean custom   = false;
+
+    settings = `Frame(_("Mailbox Settings"),
+       `HBox(
+	 `HStretch(),
+	 `Frame(_("Type"),
+	   `RadioButtonGroup(`id(`MailboxType),
+	     `HBox(
+		`RadioButton(`id("mbox"), _("Maibox"),  mbox),
+		`RadioButton(`id("mdir"), _("Maildir"), mdir)
+	      )
+	    )
+	  ),
+	 `HStretch(),
+         `Frame(_("Repository"),
+	   `RadioButtonGroup(`id(`Repository),
+	     `VBox(
+	        `Left(`RadioButton(`id("varspool"), "/var/spool/mail/$USER",  varspool)),
+	        `Left(`RadioButton(`id("homedir"),  "$HOME/Mail",             homedir)),
+		`HBox(`Left(`RadioButton(`id("custom"),   "$HOME/",             custom)),
+		      `Left(`TextEntry(`id(`customdir),     "", ""))
+		     )
+	      )
+	    )
+	  ),
+	 `HStretch()
+        )
+    );
   }
-  term content = `VBox (
+
+  term content = `VBox(
       `Frame(_("Local Delivery Type"),
          `RadioButtonGroup(`id(`Type),
             `HBox(
 	        `RadioButton(`id("cyrus"),    `opt(`notify), _("Cyrus IMAP"), TypeCYRUS),
+		`HStretch(),
 	        `RadioButton(`id("procmail"), `opt(`notify), _("Procmail"),   TypePROCMAIL),
+		`HStretch(),
 	        `RadioButton(`id("local"),    `opt(`notify), _("Filesystem"), TypeLOCAL),
+		`HStretch(),
 	        `RadioButton(`id("none"),     `opt(`notify), _("No local Delivery"), TypeNONE)
 	     )
           )
       ),
-      settings
+      settings,
+      `VStretch()
    );
   return content;
 }
