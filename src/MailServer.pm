@@ -240,6 +240,13 @@ BEGIN { $TYPEINFO{WriteMailRouting}  =["function", "boolean", "any"  ]; }
 sub WriteMailRouting {
     my $self           = shift;
     my $MailRouting    = shift;
+
+    # Anonymous bind 
+    SCR::Execute(.ldap);
+    SCR::Execute(.ldap.bind);
+
+    foreach(@{%MailRouting{'Routes'}}){
+    }
 }
 
 ##

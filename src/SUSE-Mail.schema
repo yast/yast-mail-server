@@ -1,0 +1,97 @@
+#
+# Copyright (c) 2003 SUSE LINUX AG Nuernberg, Germany.  All rights reserved.
+#
+# Softly Inspired by draft-lachman-laser-ldap-mail-routing and
+# /usr/share/doc/packages/postfix/README_FILES/LDAP_README
+#
+# $Id$
+#
+objectidentifier SUSE 1.3.6.1.4.1.7057
+objectidentifier MailOC SUSE:10.4.1
+objectidentifier MailAT SUSE:10.4.2
+
+##
+## Attribute Section
+##
+attributetype ( MailAT:1 NAME ('vaddress')
+        DESC 'virtual address, similar to mail attribute'
+        EQUALITY caseIgnoreIA5Match
+        SUBSTR caseIgnoreIA5SubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.26{256} )
+
+attributetype ( MailAT:2 NAME ( 'fn' 'folderName' ) SUP name )
+
+attributetype ( MailAT:3 NAME ( 'mailDeliveryProgram' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+attributetype ( MailAT:4 NAME ( 'restrictedAddressRegexp' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+attributetype ( MailAT:5 NAME ( 'allowedAddressRegexp' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+attributetype ( MailAT:6 NAME ( 'transportDomain' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+attributetype ( MailAT:7 NAME ( 'transportNexthop' )
+	DESC 'The to be connected in the transport table
+	      Containing port & [] resp'
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+attributetype ( MailAT:8 NAME ( 'spamcheck' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
+
+attributetype ( MailAT:9 NAME ( 'mailenabled' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
+
+attributetype ( MailAT:10 NAME ( 'mailDomain' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
+
+attributetype ( MailAT:10 NAME ( 'relayClientcert' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
+
+attributetype ( MailAT:11 NAME ( 'MTALocaldomain' )
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} SINGLE-VALUE )
+
+##
+## Objectclass Section
+##
+objectclass ( MailOC:1 NAME 'SuSEeMailObject' SUP top AUXILIARY
+        DESC 'Additional Objectclass for SuSE eMail Server'
+        MAY ( mailenabled $ mailDomain $ writeGlobalAddress $ relayClientcert $
+              spamcheck $ vaddress))
+
+objectclass ( MailOC:2 NAME 'SuSEIMAPFolderObject' SUP top STRUCTURAL
+        DESC 'For entries assigned to Shared IMAP Folder'
+        MUST fn
+        MAY ( mailDeliveryProgram $ description $ mailenabled ))
+
+objectclass ( MailOC:3 NAME 'SuSEVirtualDomainObject' SUP top AUXILIARY
+        DESC 'to configure behaviour of virtual domains'
+        MUST ( MTALocaldomain ))
+
+objectclass ( 1.3.6.1.4.1.7057.10.2.1.11 NAME 'SuSEMailTransportObject' SUP top STRUCTURAL
+        DESC 'To build transport maps in LDAP'
+        MUST ( transportDomain $ transportNexthop )
+        MAY   description )
+
