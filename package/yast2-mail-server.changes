@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Mon Aug 23 10:32:12 CEST 2004 - mvidner@suse.cz
+
+- Removed cfg_mail.scr (had been moved to yast2-mail-aliases).
+- 2.10.1
+
+-------------------------------------------------------------------
 Fri Aug 20 15:27:48 CEST 2004 - schubi@suse.de
 
 - Merged SLES9 with head
