@@ -111,6 +111,19 @@ C<$GlobalSettings = ReadGlobalSettings($AdminDN,$AdminPassword)>
        'MaximumMailSize'       => 0,
             Shows the maximum message size in bytes, the mail server will accept 
             to deliver. Setting this value 0 means there is no limit.
+
+       'Banner'                => '$myhostname ESMTP $mail_name'
+            The smtpd_banner parameter specifies the text that follows the 220
+            code in the SMTP server's greeting banner. Some people like to see
+            the mail version advertised. By default, Postfix shows no version.
+            You MUST specify $myhostname at the start of the text. That is an
+            RFC requirement. Postfix itself does not care.
+
+       'Interfaces'            => ''
+            The inet_interfaces parameter specifies the network interface
+            addresses that this mail system receives mail on.  By default,
+            the software claims all active interfaces on the machine. The
+            parameter also controls delivery of mail to user@[ip.address]
        
        'SendingMail'           => {
             In this hash you can define the type of delivery of outgoing emails.
@@ -173,6 +186,7 @@ sub ReadGlobalSettings {
     my %GlobalSettings = ( 
                 'Changed'               => 0,
                 'MaximumMailSize'       => 0,
+                'Banner'                => '',
                 'SendingMail'           => { 
                          'Type'          => '',
                          'TLS'           => '',
@@ -195,6 +209,9 @@ sub ReadGlobalSettings {
 
     # Reading maximal size of transported messages
     $GlobalSettings{'MaximumMailSize'}           = read_attribute($MainCf,'message_size_limit');
+
+    #
+    $GlobalSettings{'Banner'}                    = read_attribute($MainCf,'smtpd_banner');
 
     # Determine if relay host is used
     $GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'} = read_attribute($MainCf,'relayhost');
@@ -264,6 +281,7 @@ use MailServer;
     my %GlobalSettings = (
                    'Changed'               => 1,
                    'MaximumMailSize'       => 10485760,
+                   'Banner'                => '$myhostname ESMTP $mail_name',
                    'SendingMail'           => {
                            'Type'          => 'relayhost',
                            'TLS'           => 'MUST',
@@ -370,6 +388,7 @@ sub WriteGlobalSettings {
     }
 
     write_attribute($MainCf,'message_size_limit',$MaximumMailSize);
+    write_attribute($MainCf,'smtpd_banner',$GlobalSettings->{'Banner'});
 
     SCR::Write('.mail.postfix.main.table',$MainCf);
     SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
@@ -1075,36 +1094,43 @@ sub ReadMailRelaying {
     }
 
     #Now we have a look on the mynetworks ldaptable
-    my %SearchMap = (
-                   'base_dn' => $mail_basedn,
-                   'filter'  => "ObjectClass=SuSEMailMyNetorks"
-                   'attrs'   => ['SuSEMailClient']
-                 );
-    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+#    my %SearchMap = (
+##                   'base_dn' => $mail_basedn,
+#                   'filter'  => "ObjectClass=SuSEMailMyNetorks"
+#                   'attrs'   => ['SuSEMailClient']
+#                 );
+#    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+#
+#    foreach my $entry (@{$ret}){
+#        foreach(@{$entry->{'SuSEMailClient'}}) {
+#          push @{$MailRelaying{'TrustedNetworks'}}, $_;
+#        }
+#    }
 
-    foreach my $entry (@{$ret}){
-        foreach(@{$entry->{'SuSEMailClient'}}) {
-          push @{$MailRelaying{'TrustedNetworks'}}, $_;
-        }
-    }
-
-    my $smtpd_recipient_restrictions = read_attributes($MainCf,'smtpd_recipient_restrictions');
-    my $smtpd_sasl_auth_enable       = read_attributes($MainCf,'smtpd_sasl_auth_enable');
-    my $smtpd_use_tls                = read_attributes($MainCf,'smtpd_use_tls');
-    my $smtpd_enforce_tls            = read_attributes($MainCf,'smtpd_enforce_tls');
-    my $smtpd_tls_auth_only          = read_attributes($MainCf,'smtpd_tls_auth_only');
+    my $smtpd_recipient_restrictions = read_attribute($MainCf,'smtpd_recipient_restrictions');
+    my $smtpd_sasl_auth_enable       = read_attribute($MainCf,'smtpd_sasl_auth_enable');
+    my $smtpd_use_tls                = read_attribute($MainCf,'smtpd_use_tls');
+    my $smtpd_enforce_tls            = read_attribute($MainCf,'smtpd_enforce_tls');
+    my $smtpd_tls_auth_only          = read_attribute($MainCf,'smtpd_tls_auth_only');
     if($smtpd_use_tls eq 'no') {
        $MailRelaying{'SMTPDTLSMode'} = 'none';
     }
     if($smtpd_enforce_tls eq 'on') {
-       $MailRelaying{'SMTPDTLSMode'} = 'enfoce';
+       $MailRelaying{'SMTPDTLSMode'} = 'enforce';
     }
     if($smtpd_tls_auth_only eq 'on') {
        $MailRelaying{'SMTPDTLSMode'} = 'auth_only';
     } 
     if($smtpd_sasl_auth_enable eq 'on') {
        $MailRelaying{'RequireSASL'}  = 1;
+       if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/) {
+         return $self->SetError( summary => _('Postfix configuration misteak: smtpd_sasl_auth_enable set yes').
+                                            _('but smtpd_recipient_restrictions dose not contain permit_sasl_authenticated.'),
+                                 code    => "PARAM_CHECK_FAILED" );
+       }                          
     }
+
+    return \%MailRelaying;
 }
 
 ##
@@ -1116,6 +1142,74 @@ sub WriteMailRelaying {
     my $AdminDN         = shift;
     my $AdminPassword   = shift;
     my $MailRelaying    = shift;
+
+    #If nothing to do we don't do antithing
+    if(! $MailPrevention->{'Changed'}){
+         return $self->SetError( summary =>_("Nothing to do"),
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    
+    # Make LDAP Connection 
+    my $ErrorSummary = read_ldap_settings();
+    if( $ErrorSummary  ne '' ) {
+         return $self->SetError( summary => $ErrorSummary,
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    if($AdminDN) {
+        $admin_bind->{'binddn'} = $AdminDN;
+    }
+    if($AdminPassword) {
+        $admin_bind->{'bindpw'} = $AdminPassword;
+    }
+    if(! SCR::Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+    }
+
+    # First we read the main.cf
+    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+
+    # now we collent the trusted networks;
+    my $TrustedNetworks    = '';
+    foreach(@{$MailRelaying->{'TrustedNetworks'}}){
+      if( $TrustedNetworks ne '' ) {
+        $TrustedNetworks = $TrustedNetworks.', '.$_
+      } else {
+        $TrustedNetworks = $_;
+      }
+    }
+    write_attribute($MainCf,'mynetworks',$TrustedNetworks);
+
+    #now we write TLS settings for the smtpd daemon
+    if($MailRelaying{'SMTPDTLSMode'} eq 'none') {
+        write_attribute($MainCf,'smtpd_use_tls','no');
+        write_attribute($MainCf,'smtp_enforce_tls','no');
+        write_attribute($MainCf,'smtpd_tls_auth_only','no');
+    } elsif($MailRelaying{'SMTPDTLSMode'} eq 'use') {
+        write_attribute($MainCf,'smtpd_use_tls','yes');
+        write_attribute($MainCf,'smtp_enforce_tls','no');
+        write_attribute($MainCf,'smtpd_tls_auth_only','no');
+    } elsif($MailRelaying{'SMTPDTLSMode'} eq 'enforce') {
+        write_attribute($MainCf,'smtpd_use_tls','yes');
+        write_attribute($MainCf,'smtp_enforce_tls','yes');
+        write_attribute($MainCf,'smtpd_tls_auth_only','no');
+    } elsif($MailRelaying{'SMTPDTLSMode'} eq 'auth_only') {
+        write_attribute($MainCf,'smtpd_use_tls','yes');
+        write_attribute($MainCf,'smtp_enforce_tls','no');
+        write_attribute($MainCf,'smtpd_tls_auth_only','yes');
+    } else {
+         return $self->SetError( summary => _('Bad value for SMTPDTLSMode. Avaiable values are:').
+                                            "\nnone use enforce auth_only",
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+
+    SCR::Write('.mail.postfix.main.table',$MainCf);
+
+    return 1;
 
 }
 
