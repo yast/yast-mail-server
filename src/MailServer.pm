@@ -34,11 +34,12 @@ sub _ {
 }
 
 # -------------- temporary ------------------------
-my $mail_basedn  = 'dc=suse,dc=de';
-my $user_basedn  = 'dc=suse,dc=de';
-my $group_basedn = 'dc=suse,dc=de';
+my $dns_basedn   = 'ou=dns,dc=suse,dc=de';
+my $mail_basedn  = 'ou=mail,dc=suse,dc=de';
+my $user_basedn  = 'ou=users,dc=suse,dc=de';
+my $group_basedn = 'ou=groups,dc=suse,dc=de';
 my $ldapserver   = 'localhost';
-my $port         = 389;
+my $ldapport     = 389;
 my $ldapadmin    = 'root';
 my $my_ldap      = [ 'host' => $ldapserver,
                      'port' => $ldapport
@@ -179,6 +180,12 @@ sub WriteGlobalSettings {
     my $self               = shift;
     my $GlobalSettings     = shift;
 
+    if(! $GlobalSettings->{'Changed'}){
+         return $self->SetError( summary =>_("Nothing to do"),
+                                 code    => "PARAM_CHECK_FAILED" );
+         return 0;
+    }
+
     my $MaximumMailSize    = $GlobalSettings->{'MaximumMailSize'};
     my $MaximumMailboxSize = $GlobalSettings->{'MaximumMailboxSize'};
     my $RelayTyp           = $GlobalSettings->{'Relay'}{'Type'};
@@ -192,12 +199,12 @@ sub WriteGlobalSettings {
     
     # Parsing attributes 
     if($MaximumMailSize =~ /[^\d+]/) {
-         return $self->SetError( summary =>_("Maximu Mail Size value may only contain decimal number in byte"),
+         return $self->SetError( summary =>_("Maximum Mail Size value may only contain decimal number in byte"),
                                  code    => "PARAM_CHECK_FAILED" );
          return 0;
     }
     if($MaximumMailboxSize =~ /[^\d+]/) {
-         return $self->SetError( summary =>_("Maximu Mailbox Size value may only contain decimal number in byte"),
+         return $self->SetError( summary =>_("Maximum Mailbox Size value may only contain decimal number in byte"),
                                  code    => "PARAM_CHECK_FAILED" );
          return 0;
     }
@@ -274,6 +281,7 @@ sub ReadMailTransports {
        $Transport{'Password'}        = '';
        my $tmp = $Transport{'Destination'};
        $tmp =~ s/\.//g;
+       $tmp = 'SMTP'.$tmp;
        if(SCR::Read('.mail.postfix.mastercf.findService', $tmp, 'smtp  -o smtpd_enforce_tls=yes')) {
             $Transport{'Security'} = 1;
        }
@@ -298,6 +306,12 @@ sub WriteMailTransports {
     my $self            = shift;
     my $MailTransports  = shift;
 
+    if(! $MailTransports->{'Changed'}){
+         return $self->SetError( summary =>_("Nothing to do"),
+                                 code    => "PARAM_CHECK_FAILED" );
+         return 0;
+    }
+
     my %SearchMap       = (
                                'base_dn' => $mail_basedn,
                                'filter'  => "ObjectClass=SuSEMailTransport"
@@ -315,18 +329,134 @@ sub WriteMailTransports {
 
     foreach(@{$MailTransports->{'Transports'}}){
        my %entry = ();
-       $entry{'dn'}  				= 'SuSEMailTransportDestination='.$_->{'Destination'}.','.$mail_basedn;
+       my %dn    = ();
+       $dn{'dn'}  				= 'SuSEMailTransportDestination='.$_->{'Destination'}.','.$mail_basedn;
        $entry{'SuSEMailTransportDestination'}   = $_->{'Destination'};
        $entry{'SuSEMailTransportNexthop'}       = $_->{'Nexthop'};
-       if($_->{'Security'} eq 'SSL' ) {
+       $entry{'Auth'}                           = $_->{'Auth'} || 0;
+       if($entry{'Auth'}) {
+	       $entry{'Account'}                        = $_->{'Account'};
+	       $entry{'Password'}                       = $_->{'Password'};
+       }
+       if($_->{'Security'}) {
             $entry{'SuSEMailTransportSecurity'}      = $_->{'Security'};
 	    my $TransportDestination = $entry{'SuSEMailTransportDestination'};
 	    $TransportDestination =~ s/\.//g;
+	    $TransportDestination = 'SMTP'.$TransportDestination;
 	    SCR::Write('.mail.postfix.mastercf', $TransportDestination, 'smtp  -o smtpd_enforce_tls=yes');
        }
-       SCR::Execute('.ldap.add',);
+       SCR::Execute('.ldap.add',\%dn,\%entry);
     }
+    return 1;
 }
+
+##
+ # Dump the mail-server prevention to a single map
+ # @return map Dumped settings (later acceptable by WriteMailPrevention())
+ #
+BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any"  ]; }
+sub ReadMailPrevention {
+    my $self            = shift;
+    my %MailPrevention      = (
+                               'Changed'               => 'false',
+			       'SPAMprotection'        => 'hard',
+			       'RPLList'               => [],
+			       'AcceptedSenderList'    => ['*'],
+			       'RejectedSenderList'    => [],
+			       'VirusScanning'         => 'no'
+                          );
+    # First we read the main.cf
+    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+
+    # We ar looking for the SPAM Basic Prevention
+    my $smtpd_helo_restrictions = read_attribute($MainCf,'smtpd_helo_restrictions');
+    if( $smtpd_helo_restrictions !~ /reject_invalid_hostname/ ) {
+       my $smtpd_helo_required  = read_attribute($MainCf,'smtpd_helo_required');
+       if( $smtpd_helo_required =~ /no/ ) {
+         $MailPrevention{'SPAMprotection'} =  'off';    
+       } else {
+         $MailPrevention{'SPAMprotection'} =  'medium';
+       }
+    }
+
+    # If the SPAM Basic Prevention is not off we collect the list of the RPL hosts
+    if($MailPrevention{'SPAMprotection'} ne 'off') {
+       my $smtpd_client_restrictions = read_attribute($MainCf,'smtpd_client_restrictions');
+       foreach(split /, |,/, $smtpd_client_restrictions){
+          if(/reject_rbl_client (\w+)/){
+	    push @{$MailPrevention{RPLList}}, $_;
+	  }
+       }
+    }
+    return \%MailPrevention;
+}
+
+##
+ # Write the mail-server Mail Prevention from a single map
+ #
+BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", "any"  ]; }
+sub WriteMailPrevention {
+    my $self            = shift;
+    my $MailPrevention  = shift;
+
+    if(! $MailPrevention->{'Changed'}){
+         return $self->SetError( summary =>_("Nothing to do"),
+                                 code    => "PARAM_CHECK_FAILED" );
+         return 0;
+    }
+   
+    # First we read the main.cf
+    my $MainCf             = SCR::Read('.mail.postfix.main.table');
+
+    #Collect the RPL host list
+    my $clnt_restrictions = '';
+    foreach(@{$MailPrevention->{'RPLList'}){
+      if($clnt_restrictions eq '') {
+          $clnt_restrictions="reject_rbl_client $_";
+      } else {
+          $clnt_restrictions="$clnt_restrictions, reject_rbl_client $i";
+      }
+    }
+
+    if($MailPrevention->{'SPAMprotection'} eq 'hard') {
+      #Write hard settings 
+       write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access, reject_unknown_sender_domain');   
+       write_attribute($MainCf,'smtpd_helo_required','yes');   
+       write_attribute($MainCf,'smtpd_helo_restrictions','permit_mynetworks, reject_invalid_hostname');   
+       write_attribute($MainCf,'strict_rfc821_envelopes','yes');   
+       write_attribute($MainCf,'smtpd_recipient_restrictions','permit_mynetworks, reject_unauth_destination');
+       if( $clnt_restrictions ne '') {
+          write_attribute($MainCf,'smtpd_client_restrictions',"permit_mynetworks, $clnt_restrictions, reject_unknown_client");
+       }  else {
+          write_attribute($MainCf,'smtpd_client_restrictions','permit_mynetworks, reject_unknown_client');
+       }
+    } elsif($MailPrevention->{'SPAMprotection'} eq 'medium') {
+      #Write medium settings  
+       write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access, reject_unknown_sender_domain');   
+       write_attribute($MainCf,'smtpd_helo_required','yes');   
+       write_attribute($MainCf,'smtpd_helo_restrictions','');   
+       write_attribute($MainCf,'strict_rfc821_envelopes','no');   
+       write_attribute($MainCf,'smtpd_recipient_restrictions','permit_mynetworks, reject_unauth_destination');
+       if( $clnt_restrictions ne '') {
+          write_attribute($MainCf,'smtpd_client_restrictions',"$clnt_restrictions");
+       }  else {
+          write_attribute($MainCf,'smtpd_client_restrictions','');
+       }
+    } elsif($MailPrevention->{'SPAMprotection'} eq 'off') {
+      # Write off settings  
+       write_attribute($MainCf,'smtpd_sender_restrictions','hash:/etc/postfix/access');   
+       write_attribute($MainCf,'smtpd_helo_required','no');   
+       write_attribute($MainCf,'smtpd_helo_restrictions','');   
+       write_attribute($MainCf,'strict_rfc821_envelopes','no');   
+       write_attribute($MainCf,'smtpd_recipient_restrictions','permit_mynetworks, reject_unauth_destination');
+       write_attribute($MainCf,'smtpd_client_restrictions','');
+    } else {
+      # Error no such value
+         return $self->SetError( summary =>_("Unknown SPAMprotection mode. Allowed values are: hard, medium, off"),
+                                 code    => "PARAM_CHECK_FAILED" );
+         return 0;
+    }
+}    
 
 ##
  # Create a textual summary and a list of unconfigured cards
