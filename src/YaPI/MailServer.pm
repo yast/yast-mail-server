@@ -1017,7 +1017,7 @@ sub ReadMailRelaying {
     my %MailRelaying    = (
                                 'Changed'         => 0,
                                 'TrustedNetworks' => [],
-                                'RequireSASL'     => 1,
+                                'RequireSASL'     => 0,
                                 'SMTPDTLSMode'    => 'use',
                                 'UserRestriction' => 0
                           );
@@ -1067,13 +1067,13 @@ sub ReadMailRelaying {
     if($smtpd_use_tls eq 'no') {
        $MailRelaying{'SMTPDTLSMode'} = 'none';
     }
-    if($smtpd_enforce_tls eq 'on') {
+    if($smtpd_enforce_tls eq 'yes') {
        $MailRelaying{'SMTPDTLSMode'} = 'enforce';
     }
-    if($smtpd_tls_auth_only eq 'on') {
+    if($smtpd_tls_auth_only eq 'yes') {
        $MailRelaying{'SMTPDTLSMode'} = 'auth_only';
     } 
-    if($smtpd_sasl_auth_enable eq 'on') {
+    if($smtpd_sasl_auth_enable eq 'yes') {
        $MailRelaying{'RequireSASL'}  = 1;
        if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/) {
          return $self->SetError( summary => _('Postfix configuration misteak: smtpd_sasl_auth_enable set yes,').
@@ -1082,6 +1082,7 @@ sub ReadMailRelaying {
        }                          
     }
 
+#print STDERR Dumper(%MailRelaying);
     return \%MailRelaying;
 }
 
@@ -1091,9 +1092,9 @@ sub ReadMailRelaying {
 BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
 sub WriteMailRelaying {
     my $self            = shift;
+    my $MailRelaying    = shift;
     my $AdminUser       = shift;
     my $AdminPassword   = shift;
-    my $MailRelaying    = shift;
    
     my $ERROR = '';
 
@@ -1109,6 +1110,7 @@ sub WriteMailRelaying {
          return undef;
     }
 
+#print STDERR Dumper(%{$MailRelaying});
    # First we read the main.cf
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
@@ -1228,9 +1230,9 @@ sub ReadMailLocalDelivery {
 BEGIN { $TYPEINFO{WriteMailLocalDelivery}  =["function", "boolean",["map", "string", "any"], "string", "string" ]; }
 sub WriteMailLocalDelivery {
     my $self              = shift;
+    my $MailLocalDelivery = shift;
     my $AdminUser         = shift;
     my $AdminPassword     = shift;
-    my $MailLocalDelivery = shift;
 
     my $ERROR;
 

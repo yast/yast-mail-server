@@ -294,7 +294,7 @@ global boolean Write() {
     // write  global settings
     if(Abort()) return false;
     Progress::NextStage();
-    if( GlobalSettings["Changed"]:false ) {
+    if( (boolean)GlobalSettings["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteGlobalSettings(GlobalSettings,AdminUser,AdminPassword) ) {
          Report::Error(_("Cannot write the mail server global settings."));
       }
@@ -304,7 +304,7 @@ global boolean Write() {
     // write mail transports
     if(Abort()) return false;
     Progress::NextStep();
-    if( MailTransports["Changed"]:false ) {
+    if( (boolean)MailTransports["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteMailTransports(MailTransports,AdminUser,AdminPassword) ) {
          Report::Error(_("Cannot write mail server transports."));
       }
@@ -314,7 +314,7 @@ global boolean Write() {
     // write mail preventions
     if(Abort()) return false;
     Progress::NextStage();
-    if( MailPrevention["Changed"]:false ) {
+    if( (boolean)MailPrevention["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteMailPrevention(MailPrevention,AdminUser,AdminPassword) ) {
          Report::Error(_("Cannot write mail server preventions."));
       }
@@ -324,7 +324,7 @@ global boolean Write() {
     // write mail realaying
     if(Abort()) return false;
     Progress::NextStage();
-    if( MailRelaying["Changed"]:false ) {
+    if( (boolean)MailRelaying["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteMailRelaying(MailRelaying,AdminUser,AdminPassword) ) {
         Report::Warning(_("Cannot write the mail server relay settings."));
       }
@@ -334,7 +334,7 @@ global boolean Write() {
     // write mail local delivery
     if(Abort()) return false;
     Progress::NextStage();
-    if( MailLocalDelivery["Changed"]:false ) {
+    if( (boolean)MailLocalDelivery["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteMailLocalDelivery(MailLocalDelivery,AdminUser,AdminPassword) ) {
         Report::Warning(_("Cannot write the mail server local delivery settings."));
       }
@@ -344,7 +344,7 @@ global boolean Write() {
     // write mail server fetching jobs
     if(Abort()) return false;
     Progress::NextStage();
-    if( FetchingMail["Changed"]:false ) {
+    if( (boolean)FetchingMail["Changed"]:false ) {
       if( ! YaPI::MailServer::WriteFetchingMail(FetchingMail,AdminUser,AdminPassword) ) {
         Report::Warning(_("Cannot write the mail server fetching jobs."));
       }
