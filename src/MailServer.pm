@@ -12,32 +12,11 @@ Input and output routines.
 
 use YaPI::MailServer
 
-$GlobalSettings = ReadGlobalSettings() 
-
- Dump the mail-server Global Settings to a single map
- Return map Dumped settings (later acceptable by WriteGlobalSettings ())
- %GlobalSettings is a hash containing the basic settings of postfix.
-       %GlobalSettings = (
-                               'Changed'               => '0',
-                               'MaximumMailSize'       => 0,
-                               'MaximumMailboxSize'    => 0,
-                               'Relay'                 => {
-                                                        'Type'          => '',
-                                                        'Security'      => '',
-                                                        'RelayHost'     => {
-                                                                         'Name'     => '',
-                                                                         'Security' => '',
-                                                                         'Auth'     => 0,
-                                                                         'Account'  => '',
-                                                                         'Password' => ''
-                                                                       },
-
-                                                      },
-                         );
-
-
 
 =head1 DESCRIPTION
+
+B<YaPI::MailServer>  is a collection of functions that implement a mail server
+configuration API to for Perl programs.
 
 =over 2
 
@@ -81,7 +60,7 @@ my $my_ldap      = [ 'host' => $ldapserver,
                      'port' => $ldapport
                    ];
 my $admin_bind   = [ 'binddn' => 'uid='.$ldapadmin.','.$user_basedn,
-                     'bindpw' => 'Salahm1'
+                     'bindpw' => '12345'
                    ];
 # -------------------------------------------------
 
@@ -144,13 +123,42 @@ sub findService {
 
     return $services;
 }
+=item *
+C<$GlobalSettings = ReadGlobalSettings()>
 
-##
- # Dump the mail-server Global Settings to a single map
- # @return map Dumped settings (later acceptable by WriteGlobalSettings ())
- #
-BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", "any"  ]; }
+ Dump the mail-server Global Settings to a single map
+ Return map Dumped settings (later acceptable by WriteGlobalSettings ())
+
+ %GlobalSettings is a hash containing the basic settings of postfix.
+       %GlobalSettings = (
+                               'Changed'               => '0',
+                               'MaximumMailSize'       => 0,
+                               'MaximumMailboxSize'    => 0,
+                               'Relay'                 => {
+                                                        'Type'          => '',
+                                                        'Security'      => '',
+                                                        'RelayHost'     => {
+                                                                         'Name'     => '',
+                                                                         'Security' => '',
+                                                                         'Auth'     => 0,
+                                                                         'Account'  => '',
+                                                                         'Password' => ''
+                                                                       },
+
+                                                      },
+                         );
+
+EXAMPLE:
+
+
+=cut
+
+BEGN { $TYPEINFO{ReadGlobalSettings}  =["function", ["map", "string", "any" ], "string", "string" ]; }
 sub ReadGlobalSettings {
+    my $self            = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
+
     my $MainCf    = SCR::Read('.mail.postfix.main.table');
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
     my %GlobalSettings = ( 
@@ -198,15 +206,23 @@ sub ReadGlobalSettings {
     return \%GlobalSettings;
 }
 
-##
- # Write the mail-server Global Settings from a single map
- # @param settings The YCP structure to be imported.
- # @return boolean True on success
- #
-BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  "any" ]; }
+=item *
+C<boolean = WriteGlobalSettings($GlobalSettings)>
+
+Write the mail-server Global Settings from a single map
+@param settings The YCP structure to be imported.
+@return boolean True on success
+
+EXAMPLE:
+
+
+=cut
+BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  ["map", "string", "any" ], "string", "string" ]; }
 sub WriteGlobalSettings {
     my $self               = shift;
     my $GlobalSettings     = shift;
+    my $AdminDN            = shift;
+    my $AdminPassword      = shift;
 
     if(! $GlobalSettings->{'Changed'}){
          return $self->SetError( summary =>_("Nothing to do"),
@@ -264,13 +280,24 @@ sub WriteGlobalSettings {
     return 1;
 }
 
-##
- # Dump the mail-server Mail Transport to a single map
- # @return map Dumped settings (later acceptable by WriteMailTransport ())
- #
-BEGIN { $TYPEINFO{ReadMailTransports}  =["function", "any"  ]; }
+=item *
+C<$MailTransports = ReadMailTransports()>
+
+Dump the mail-server Mail Transport to a single map
+@return map Dumped settings (later acceptable by WriteMailTransport ())
+
+
+EXAMPLE:
+
+
+=cut
+
+
+BEGIN { $TYPEINFO{ReadMailTransports}  =["function", ["map", "string", "any"]  , "string", "string" ]; }
 sub ReadMailTransports {
     my $self            = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
 
 
     my %MailTransports  = ( 
@@ -286,8 +313,9 @@ sub ReadMailTransports {
                              'Password'     => ''
                           );
     my %SearchMap       = (
-                               'base_dn' => $mail_basedn,
-                               'filter'  => "ObjectClass=SuSEMailTransport"
+                               'base_dn'    => $mail_basedn,
+                               'filter'     => "ObjectClass=SuSEMailTransport",
+                               'attributes' => ['SuSEMailTransportDestination','SuSEMailTransportNexthop','SuSEMailTransportTLS']
                           );
 
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
@@ -303,17 +331,12 @@ sub ReadMailTransports {
     foreach(@{$ret}){
        $Transport{'Destination'}     = $_->{'SuSEMailTransportDestination'};
        $Transport{'Nexthop'}         = $_->{'SuSEMailTransportNexthop'};
-       $Transport{'Security'}        = 0;
+       $Transport{'Security'}        = $_->{'SuSEMailTransporTLS'};
        $Transport{'Auth'}            = 0;
        $Transport{'Account'}         = '';
        $Transport{'Password'}        = '';
-       my $tmp = $Transport{'Destination'};
-       $tmp =~ s/\.//g;
-       $tmp = 'SMTP'.$tmp;
-       if(SCR::Read('.mail.postfix.mastercf.findService', $tmp, 'smtp  -o smtpd_enforce_tls=yes')) {
-            $Transport{'Security'} = 1;
-       }
-       $tmp = read_attribute($SaslPaswd,$Transport{'Destination'});
+       #Looking the type of TSL
+       my $tmp = read_attribute($SaslPaswd,$Transport{'Destination'});
        if($tmp) {
            ($Transport{'Account'},$Transport{'Password'}) = split /:/, $tmp;
             $Transport{'Auth'} = 1;
@@ -326,55 +349,116 @@ sub ReadMailTransports {
     return \%MailTransports;
 }
 
-##
- # Write the mail-server Mail Transport from a single map
- #
-BEGIN { $TYPEINFO{WriteMailTransports}  =["function", "boolean", "any"  ]; }
+=item *
+C<boolean = WriteMailTransports($admindn,$adminpwd,$MailTransports)>
+
+ Write the mail-server Mail Transport from a single map
+
+EXAMPLE:
+
+=cut
+
+BEGIN { $TYPEINFO{WriteMailTransports}  =["function", "boolean", ["map", "string", "any"], "string", "string" ]; }
 sub WriteMailTransports {
     my $self            = shift;
     my $MailTransports  = shift;
+    my $AdminDN         = shift;
+    my $AdminPassword   = shift;
+    
+    # Pointer for Error MAP
+    my $ERROR = [];
 
+    # Array for the Transport Entries
+    my @Entries   = '';
+
+    # If no changes we haven't to do anything
     if(! $MailTransports->{'Changed'}){
          return $self->SetError( summary =>_("Nothing to do"),
                                  code    => "PARAM_CHECK_FAILED" );
          return 0;
     }
-
+    
+    # Search map for the Transport Objects
     my %SearchMap       = (
                                'base_dn' => $mail_basedn,
                                'filter'  => "ObjectClass=SuSEMailTransport"
+                               'attrs'   => ['SuSEMailTransportDestination']
                           );
 
-    # Anonymous bind 
-    SCR::Execute('.ldap',$my_ldap);
-    SCR::Execute('.ldap.bind',$admin_bind);
+    # We'll need the sasl passwords entries
+    my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
 
-    # Searching all the transport lists
+    if($AdminDN) {
+        $admin_bind->{'binddn'} = $AdminDN;
+    }
+    if($AdminPassword) {
+        $admin_bind->{'bindpw'} = $AdminPassword;
+    }
+    
+    # Make LDAP Connection 
+    if(! SCR::Execute('.ldap',$my_ldap)) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+         return 0;
+    }
+    if(! SCR::Execute('.ldap.bind',$admin_bind) {
+         $ERROR = SCR::Read('.ldap.error');
+         return $self->SetError( $ERROR );
+         return 0;
+    }
+
+    # First we have to clean the corresponding SaslPasswd entries in the hash
     my $ret = SCR::Read('.ldap.search',\%SearchMap);
-    foreach(@{$ret}){    
-       SCR::Write('.ldap.delete',['dn'=>$_->{'dn'}]);
+    foreach my $entry (@{$ret}){    
+       write_attribute($SaslPasswd,$entry->{'SuSEMailTransportDestination'},'');
     }
 
-    foreach(@{$MailTransports->{'Transports'}}){
+    # Now let's work
+    foreach my $Transport (@{$MailTransports->{'Transports'}}){
        my %entry = ();
-       my %dn    = ();
-       $dn{'dn'}  				= 'SuSEMailTransportDestination='.$_->{'Destination'}.','.$mail_basedn;
-       $entry{'SuSEMailTransportDestination'}   = $_->{'Destination'};
-       $entry{'SuSEMailTransportNexthop'}       = $_->{'Nexthop'};
-       $entry{'Auth'}                           = $_->{'Auth'} || 0;
-       if($entry{'Auth'}) {
-	       $entry{'Account'}                        = $_->{'Account'};
-	       $entry{'Password'}                       = $_->{'Password'};
+       $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$mail_basedn;
+       $entry{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
+       $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
+       $entry{'SuSEMailTransportSecurity'}      = 'NONE';
+       if($Transport->{'Auth'}) {
+               # If needed write the sasl auth account & password
+               write_attribute($SaslPasswd,$Transport->{'Destination'},"$Transport->{'Account'}:$ransport->{'Password'}");
        }
-       if($_->{'Security'}) {
-            $entry{'SuSEMailTransportSecurity'}      = $_->{'Security'};
-	    my $TransportDestination = $entry{'SuSEMailTransportDestination'};
-	    $TransportDestination =~ s/\.//g;
-	    $TransportDestination = 'SMTP'.$TransportDestination;
-	    SCR::Write('.mail.postfix.mastercf', $TransportDestination, 'smtp  -o smtpd_enforce_tls=yes');
+       if($Transport->{'Security'} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/) {
+            $entry{'SuSEMailTransportSecurity'}      = $Transport->{'Security'};
+       } else {
+            $ERROR->{'summary'} = _("Wrong Value for MailTransportSecurity Value"),
+            $ERROR->{'code'}    = "PARAM_CHECK_FAILED"
        }
-       SCR::Execute('.ldap.add',\%dn,\%entry);
+       push @Entries, %entry;
     }
+
+    # If there is an ERROR we leave the modul without making changes
+    if($ERROR->{'summary'} ne '') {
+         return $self->SetError( $ERROR );
+         return 0;
+    }
+
+    # If there is no ERROR we do the changes
+    # First we clean all the transport lists
+    my $ret = SCR::Read('.ldap.search',\%SearchMap);
+    foreach my $entry (@{$ret}){    
+       SCR::Write('.ldap.delete',['dn'=>$entry->{'dn'}]);
+    }
+
+    foreach my $entry (@Entries){
+       my $dn  = [ 'dn' => $entry{'dn'} ];
+       my $tmp = [ 'SuSEMailTransportDestination' => $entry{'SuSEMailTransportDestination'},
+                   'SuSEMailTransportNexthop'     => $entry{'SuSEMailTransportNexthop'},
+                   'SuSEMailTransportSecurity'    => $entry{'SuSEMailTransportSecurity'}
+                 ];
+       SCR::Execute('.ldap.add',$dn,$tmp);
+    }
+    SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
+    
+    # We have to control if the all needed entries are existent.
+    my $MainCf    = SCR::Read('.mail.postfix.main.table');
+
     return 1;
 }
 
@@ -422,7 +506,7 @@ sub ReadMailPrevention {
 ##
  # Write the mail-server Mail Prevention from a single map
  #
-BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", "any"  ]; }
+BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
 sub WriteMailPrevention {
     my $self            = shift;
     my $MailPrevention  = shift;
@@ -507,7 +591,7 @@ sub ReadMailRelaying {
 ##
  # Write the mail-server server side relay settings  from a single map
  #
-BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean", "any"  ]; }
+BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
 sub WriteMailRelaying {
     my $self          = shift;
     my $MailRelaying  = shift;
