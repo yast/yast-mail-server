@@ -230,7 +230,7 @@ term GlobalSettingsDialog() {
   term content = `VBox (
        `TextEntry(`id(`Banner), _("Server Identification") ,(string)MailServer::GlobalSettings["Banner"]:"SuSE Linux Mail Server"),
        `VStretch(),
-       `Frame(_("Message Size"),
+       `Frame(_("Mail Size"),
          `RadioButtonGroup(`id(`MailSize),
            `HBox(
              `HWeight(2, `RadioButton(`id("MailSizeNoLimit"), `opt (`notify), _("No Limit"), !limit)),

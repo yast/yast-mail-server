@@ -199,23 +199,14 @@
 	}
 
 	// helptext 1/3
-	string help_text = _("<p>
-Here, see the table of all allowed attributes for the current LDAP entry that were not set in previous dialogs.</p>") +
+	string help_text = _("<p>In this dialog You can configure the mail settings of an user .</p>") +
 
-	// helptext 2/3 (don't translate objectclass"),
-        // %1 is list of values
-	sformat (_("<p>
-The list of attributes is given by the value of \"objectclass\"
-(which is currently:
-<br>%1).
-</p>
-"), mergestring (object_class, ",<br>")) +
+	// helptext 2/3
+	(_("<p>First you can set the mail addresses and aliases for the user.</p>")) +
 
 	// helptext 3/3
-	_("<p>
-Edit each attribute using <b>Edit</b>. Some attributes 
-could be required, as defined in the user template in the <b>LDAP Client Module</b>.</p>
-");
+	_("<p>If you have selected \"cyrus\" for the local delivery of mails, you can set the size limit for the users mail box.
+	   If you do not set any value the mail box size is unlimited.</p>");
 
         term items			= nil;
         list used_attributes	= [];

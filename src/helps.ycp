@@ -51,8 +51,8 @@ This is the SMTP server's greeting banner.</b>.
 <br></p>
 ") +
     /* GlobalSettings dialog help 2/3 */
-_("<p><b><big>Message Size:</big></b><br>
-This parameter limits the total size in bytes of a message (sending and getting), 
+_("<p><b><big>Mail Size:</big></b><br>
+This parameter limits the total size in bytes of a mail (sending and getting),
 including envelope information.
 </p>")+
     /* GlobalSettings dialog help 3/3 */
