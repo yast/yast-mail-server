@@ -1,0 +1,20 @@
+Test Run By msvec on Thu Feb  5 16:00:45 2004
+Native configuration is i686-suse-linux
+
+		=== yast2-devtools tests ===
+
+Schedule of variations:
+    unix
+
+Running target unix
+Using /usr/share/dejagnu/baseboards/unix.exp as board description file for target.
+Using /usr/share/dejagnu/config/unix.exp as generic interface file for target.
+Using /home/msvec/yast/source/devtools/devtools/skeletons/config/testsuite/config/unix.exp as tool-and-target-specific interface file.
+Running /home/msvec/yast/source/devtools/devtools/skeletons/config/testsuite/yast2-devtools.test/testsuite.exp ...
+PASS: MailServer
+testcase /home/msvec/yast/source/devtools/devtools/skeletons/config/testsuite/yast2-devtools.test/testsuite.exp completed in 0 seconds
+
+		=== yast2-devtools Summary ===
+
+# of expected passes		1
+runtest completed at Thu Feb  5 16:00:45 2004

@@ -1,0 +1,15 @@
+Test Run By msvec on Thu Feb  5 16:00:45 2004
+Native configuration is i686-suse-linux
+
+		=== yast2-devtools tests ===
+
+Schedule of variations:
+    unix
+
+Running target unix
+Running /home/msvec/yast/source/devtools/devtools/skeletons/config/testsuite/yast2-devtools.test/testsuite.exp ...
+PASS: MailServer
+
+		=== yast2-devtools Summary ===
+
+# of expected passes		1
