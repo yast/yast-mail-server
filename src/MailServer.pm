@@ -31,6 +31,7 @@ use strict;
 
 use ycp;
 use YaST::YCP;
+use YaPI;
 
 use Locale::gettext;
 use POSIX;     # Needed for setlocale()
@@ -39,6 +40,9 @@ use Data::Dumper;
 setlocale(LC_MESSAGES, "");
 textdomain("mail-server");
 our %TYPEINFO;
+our @CAPABILITIES = (
+                     'SLES9'
+                    );
 
 YaST::YCP::Import ("SCR");
 YaST::YCP::Import ("Service");
@@ -48,49 +52,17 @@ sub _ {
     return gettext($_[0]);
 }
 
-# -------------- temporary ------------------------
-my $dns_basedn   = 'ou=dns,dc=suse,dc=de';
-my $mail_basedn  = 'ou=mail,dc=suse,dc=de';
-my $user_basedn  = 'ou=users,dc=suse,dc=de';
-my $group_basedn = 'ou=groups,dc=suse,dc=de';
-my $ldapserver   = 'localhost';
-my $ldapport     = 389;
-my $ldapadmin    = 'root';
-my $my_ldap      = [ 'host' => $ldapserver,
-                     'port' => $ldapport
-                   ];
-my $admin_bind   = [ 'binddn' => 'uid='.$ldapadmin.','.$user_basedn,
-                     'bindpw' => '12345'
-                   ];
+# -------------- Global Variable -------------------
+my $dns_basedn   = '';
+my $mail_basedn  = '';
+my $user_basedn  = '';
+my $group_basedn = '';
+my $ldapserver   = '';
+my $ldapport     = '';
+my $ldapadmin    = '';
+my $my_ldap      = [];
+my $admin_bind   = [];
 # -------------------------------------------------
-
-# -------------- error handling -------------------
-my %__error = ();
-
-BEGIN { $TYPEINFO{SetError} = ["function", "boolean", ["map", "string", "any" ]]; }
-sub SetError {
-    my $class = shift;      # so that SetError can be called via -> like all
-                            # other SCRAgent functions
-    %__error = @_;
-    if( !$__error{package} && !$__error{file} && !$__error{line})
-    {
-        @__error{'package','file','line'} = caller();
-    }
-    if ( defined $__error{summary} ) {
-        y2error($__error{code}."[".$__error{line}.":".$__error{file}." ".$__error{summary});
-    } else {
-        y2error($__error{code});
-    }
-    return undef;
-}
-
-BEGIN { $TYPEINFO{Error} = ["function", ["map", "string", "any"] ]; }
-sub Error {
-    return \%__error;
-}
-
-# -------------------------------------------------
-
 
 ###
 # # Data was modified?
@@ -124,31 +96,70 @@ sub findService {
     return $services;
 }
 =item *
-C<$GlobalSettings = ReadGlobalSettings()>
+C<$GlobalSettings = ReadGlobalSettings($AdminDN,$AdminPassword)>
 
- Dump the mail-server Global Settings to a single map
- Return map Dumped settings (later acceptable by WriteGlobalSettings ())
+ Dump the mail-server Global Settings to a single hash
+ Return hash Dumped settings (later acceptable by WriteGlobalSettings ())
 
- %GlobalSettings is a hash containing the basic settings of postfix.
-       %GlobalSettings = (
-                               'Changed'               => '0',
-                               'MaximumMailSize'       => 0,
-                               'MaximumMailboxSize'    => 0,
-                               'Relay'                 => {
-                                                        'Type'          => '',
-                                                        'TLS'           => '',
-                                                        'RelayHost'     => {
-                                                                         'Name'     => '',
-                                                                         'TLS'      => '',
-                                                                         'Auth'     => 0,
-                                                                         'Account'  => '',
-                                                                         'Password' => ''
-                                                                       },
+ $GlobalSettings is a pointer to a hash containing the basic settings of 
+ the mail server.
 
-                                                      },
-                         );
+ %GlobalSettings = (
+       'Changed'               => 0,
+            Shows if the hash was changed. Possible values are 0 (no) or 1 (yes).
+
+       'MaximumMailSize'       => 0,
+            Shows the maximum message size in bytes, the mail server will accept 
+            to deliver. Setting this value 0 means there is no limit.
+       
+       'SendingMail'           => {
+            In this hash you can define the type of delivery of outgoing emails.
+	    
+            'Type'          => '',
+                Shows the type of the delivery of the outgoing mails. Possible 
+                values are: 
+	        DNS : Delivery via DNS lookup of the MX records of the
+		      destination domain.
+		relayhost : Delivery using a relay host
+		NONE : There is no delivery of outgoing mails. In this case
+		       some other funcions are not avaiable. For example
+		       setting of mail transport.
+		       
+            'TLS'           => '',
+	        If delivery via DNS is used you can set how TLS will be used
+		for security. Possible values are:
+		NONE    : don't use TLS.
+		MAY     : TLS will used when offered by the server.
+		MUST    : Only connection with TLS will be accepted.
+		MUST_NOPEERMATCH  : Only connection with TLS will be accepted, but
+		          no strict peername checking accours.
+			  
+            'RelayHost'     => {
+	        If the type of delivery of outgoing emails is set to "relayhost",
+		then you have to define the relyhost in this hash.
+		
+                  'Name'     => '',
+		        DNS name or IP address of the relay host.
+			
+                  'Auth'     => 0,
+		        Sets if SASL authentication will be used for the relayhost.
+			Possible values are: 0 (no) and 1 (yes).
+			
+                  'Account'  => '',
+		        The account name of the SASL account.
+			
+                  'Password' => ''
+		        The SASL account password
+                }
+          }
+     );
 
 EXAMPLE:
+
+use MailServer;
+
+    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminPassword   = "VerySecure";
 
 
 =cut
@@ -159,49 +170,68 @@ sub ReadGlobalSettings {
     my $AdminDN         = shift;
     my $AdminPassword   = shift;
 
+    my %GlobalSettings = ( 
+                'Changed'               => 0,
+                'MaximumMailSize'       => 0,
+                'SendingMail'           => { 
+                         'Type'          => '',
+                         'TLS'           => '',
+                         'RelayHost'     => {
+                                'Name'     => '',
+                                'Auth'     => 0,
+                                'Account'  => '',
+                                'Password' => ''
+                              }
+                         
+                       }
+          );
+
     my $MainCf    = SCR::Read('.mail.postfix.main.table');
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
-    my %GlobalSettings = ( 
-                               'Changed'               => '0',
-                               'MaximumMailSize'       => 0,
-                               'MaximumMailboxSize'    => 0,
-                               'Relay'                 => { 
-                                                        'Type'          => '',
-                                                        'TLS'           => '',
-                                                        'RelayHost'     => {
-                                                                         'Name'     => '',
-                                                                         'TLS'      => '',
-                                                                         'Auth'     => 0,
-                                                                         'Account'  => '',
-                                                                         'Password' => ''
-                                                                       },
-                                                        
-                                                      },
-                         );
+    
     # Reading maximal size of transported messages
-    
-    
     $GlobalSettings{'MaximumMailSize'}           = read_attribute($MainCf,'message_size_limit');
-    $GlobalSettings{'MaximumMailboxSize'}        = read_attribute($MainCf,'mailbox_size_limit');
 
     # Determine if relay host is used
-    $GlobalSettings{'Relay'}{'RelayHost'}{'Name'} = read_attribute($MainCf,'relayhost');
+    $GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'} = read_attribute($MainCf,'relayhost');
 
-    if($GlobalSettings{'Relay'}{'RelayHost'}{'Name'} ne '') {
+    if($GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'} ne '') {
       # If relay host is used read & set some parameters
-            $GlobalSettings{'Relay'}{'Type'} = 'relayhost';
+            $GlobalSettings{'SendingMail'}{'Type'} = 'relayhost';
         
         # Determine if relay host need sasl authentication
-        my $tmp = read_attribute($SaslPaswd,$GlobalSettings{'Relay'}{'RelayHost'}{'Name'}); 
+        my $tmp = read_attribute($SaslPaswd,$GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'}); 
         if( $tmp ) {
-            ($GlobalSettings{'Relay'}{'RelayHost'}{'Account'},$GlobalSettings{'Relay'}{'RelayHost'}{'Password'}) = split /:/,$tmp;
+            ($GlobalSettings{'SendingMail'}{'RelayHost'}{'Account'},$GlobalSettings{'SendingMail'}{'RelayHost'}{'Password'}) 
+	                 = split /:/,$tmp;
         }
-        if($GlobalSettings{'Relay'}{'RelayHost'}{'Account'}  ne '') {
-           $GlobalSettings{'Relay'}{'RelayHost'}{'Auth'} = 1;
+        if($GlobalSettings{'SendingMail'}{'RelayHost'}{'Account'}  ne '') {
+           $GlobalSettings{'SendingMail'}{'RelayHost'}{'Auth'} = 1;
         }
     } else {
-            $GlobalSettings{'Relay'}{'Type'} = 'DNS';
+        #TODO Looking if smtp service is started
+        if(!WASAUCHIMMER) {
+            $GlobalSettings{'SendingMail'}{'Type'} = 'DNS';
+	} else {   
+            $GlobalSettings{'SendingMail'}{'Type'} = 'NONE';
+	}    
     }
+    if( $GlobalSettings{'SendingMail'}{'Type'} ne 'NONE') {
+	    my $USE_TLS          = read_attribute($MainCf,'smtp_use_tls');
+	    my $ENFORCE_TLS      = read_attribute($MainCf,'smtp_enforce_tls');
+	    my $ENFORCE_PEERNAME = read_attribute($MainCf,'smtp_tls_enforce_peername');
+	    if($USE_TLS eq 'no' $ENFORCE_TLS ne 'yes') {
+               $GlobalSettings{'SendingMail'}{'TLS'} = 'NONE';
+	    } elsif( $ENFORCE_TLS eq 'yes') {
+	      if( $ENFORCE_PEERNAME eq 'no'){
+                 $GlobalSettings{'SendingMail'}{'TLS'} = 'MUST_NOPEERMATCH';
+	      } else {
+                 $GlobalSettings{'SendingMail'}{'TLS'} = 'MUST';
+	      } 
+	    } else {
+                 $GlobalSettings{'SendingMail'}{'TLS'} = 'MAY';
+	    }
+    }	    
     
     return \%GlobalSettings;
 }
@@ -209,14 +239,43 @@ sub ReadGlobalSettings {
 =item *
 C<boolean = WriteGlobalSettings($GlobalSettings)>
 
-Write the mail-server Global Settings from a single map
+Write the mail-server Global Settings from a single hash
 @param settings The YCP structure to be imported.
 @return boolean True on success
 
 EXAMPLE:
 
+This example shows the setting up of the mail server bsic configuration
+using a relay host with SASL authetication and TLS security.
+Furthermore there will be set the maximum mail size, which the mail server
+will be accept to deliver, to 10MB.
+
+use MailServer;
+
+    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminPassword   = "VerySecure";
+
+    my %GlobalSettings = (
+                   'Changed'               => 1,
+                   'MaximumMailSize'       => 10485760,
+                   'SendingMail'           => {
+                           'Type'          => 'relayhost',
+                           'TLS'           => 'MUST',
+                           'RelayHost'     => {
+                                   'Name'     => 'mail.domain.de',
+                                   'Auth'     => 1,
+                                   'Account'  => 'user',
+                                   'Password' => 'password'
+                                 }
+                         }
+             );
+
+   if( ! WriteGlobalSettings(\%GlobalSettings,$AdminDN,$AdminPassword) ) {
+        print "ERROR in WriteGlobalSettings\n";
+   }
 
 =cut
+
 BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  ["map", "string", "any" ], "string", "string" ]; }
 sub WriteGlobalSettings {
     my $self               = shift;
@@ -227,17 +286,15 @@ sub WriteGlobalSettings {
     if(! $GlobalSettings->{'Changed'}){
          return $self->SetError( summary =>_("Nothing to do"),
                                  code    => "PARAM_CHECK_FAILED" );
-         return 0;
     }
 
     my $MaximumMailSize    = $GlobalSettings->{'MaximumMailSize'};
-    my $MaximumMailboxSize = $GlobalSettings->{'MaximumMailboxSize'};
-    my $RelayTyp           = $GlobalSettings->{'Relay'}{'Type'};
-    my $RelayHostName      = $GlobalSettings->{'Relay'}{'RelayHost'}{'Name'};
-    my $RelayHostTLS       = $GlobalSettings->{'Relay'}{'RelayHost'}{'TLS'};
-    my $RelayHostAuth      = $GlobalSettings->{'Relay'}{'RelayHost'}{'Auth'};
-    my $RelayHostAccount   = $GlobalSettings->{'Relay'}{'RelayHost'}{'Account'};
-    my $RelayHostPassword  = $GlobalSettings->{'Relay'}{'RelayHost'}{'Password'};
+    my $SendingMailType    = $GlobalSettings->{'SendingMail'}{'Type'};
+    my $SendingMailTLS     = $GlobalSettings->{'SendingMail'}{'TLS'};
+    my $RelayHostName      = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Name'};
+    my $RelayHostAuth      = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Auth'};
+    my $RelayHostAccount   = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Account'};
+    my $RelayHostPassword  = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Password'};
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
     my $SaslPasswd         = SCR::Read('.mail.postfix.saslpasswd.table');
     
@@ -245,14 +302,8 @@ sub WriteGlobalSettings {
     if($MaximumMailSize =~ /[^\d+]/) {
          return $self->SetError( summary =>_("Maximum Mail Size value may only contain decimal number in byte"),
                                  code    => "PARAM_CHECK_FAILED" );
-         return 0;
     }
-    if($MaximumMailboxSize =~ /[^\d+]/) {
-         return $self->SetError( summary =>_("Maximum Mailbox Size value may only contain decimal number in byte"),
-                                 code    => "PARAM_CHECK_FAILED" );
-         return 0;
-    }
-    if($RelayTyp eq 'DNS') {
+    if($SendingMailType eq 'DNS') {
         #Make direkt mail sending
         #looking for relayhost setting from the past 
         my $tmp = read_attribute($MainCf,'relayhost');
@@ -260,19 +311,44 @@ sub WriteGlobalSettings {
             write_attribute($MainCf,'relayhost','');
             write_attribute($SaslPasswd,$tmp,'');
         }
-    } elsif ($RelayTyp eq 'relayhost') {
+    } elsif ($SendingMailType eq 'relayhost') {
         write_attribute($MainCf,'relayhost',$RelayHostName);
         if($RelayHostAuth){
            write_attribute($SaslPasswd,$RelayHostName,"$RelayHostAccount:$RelayHostPassword");
         }
+    } elsif ($SendingMailType eq 'NONE') {
+       #TODO we have to delete smtp from master.cf
     } else {
-      return $self->SetError( summary =>_("Unknown mail sending type. Allowed values are 'DNS' & 'relayhost'"),
+      return $self->SetError( summary =>_("Unknown mail sending type. Allowed values are:").
+                                          " NONE | DNS | relayhost",
                               code    => "PARAM_CHECK_FAILED" );
-      return 0;
+    }
+    #Now we write TLS settings if needed
+    if($SendingMailType ne 'NONE'){
+       if($SendingMailTLS eq 'NONE') {
+         write_attribute($MainCf,'smtp_use_tls','no');
+         write_attribute($MainCf,'smtp_enforce_tls','');
+         write_attribute($MainCf,'smtp_tls_enforce_peername','');
+       } elsif($SendingMailTLS eq 'MAY') {
+         write_attribute($MainCf,'smtp_use_tls','yes');
+         write_attribute($MainCf,'smtp_enforce_tls','no');
+         write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
+       } elsif($SendingMailTLS eq 'MUST') {
+         write_attribute($MainCf,'smtp_use_tls','yes');
+         write_attribute($MainCf,'smtp_enforce_tls','yes');
+         write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
+       } elsif($SendingMailTLS eq 'MUST_NOPEERMATCH') {
+         write_attribute($MainCf,'smtp_use_tls','yes');
+         write_attribute($MainCf,'smtp_enforce_tls','yes');
+         write_attribute($MainCf,'smtp_tls_enforce_peername','no');
+       } else {
+         return $self->SetError( summary =>_("Unknown mail sending TLS type. Allowed values are:").
+	                                     " NONE | MAY | MUST | MUST_NOPEERMATCH",
+                                 code    => "PARAM_CHECK_FAILED" );
+       }
     }
 
     write_attribute($MainCf,'message_size_limit',$MaximumMailSize);
-    write_attribute($MainCf,'mailbox_size_limit',$MaximumMailboxSize);
 
     SCR::Write('.mail.postfix.main.table',$MainCf);
     SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
@@ -281,14 +357,130 @@ sub WriteGlobalSettings {
 }
 
 =item *
-C<$MailTransports = ReadMailTransports()>
+C<$MailTransports = ReadMailTransports($AdminDN,$AdminPassword)>
 
-Dump the mail-server Mail Transport to a single map
-@return map Dumped settings (later acceptable by WriteMailTransport ())
+  Dump the mail-server Mail Transport to a single hash
+  @return hash Dumped settings (later acceptable by WriteMailTransport ())
+
+  $MailTransports is a pointer to a hash containing the mail transport
+  definitions.
+
+  %MailTransports  = (
+       'Changed'      => 0,
+             Shows if the hash was changed. Possible values are 0 (no) or 1 (yes).
+
+       'Transports'  => []
+             Poiter to an array containing the mail transport table entries.
+		       
+   );
+   
+   Each element of the arry 'Transports' has following syntax:
+
+   %Transport       = (
+       'Destination'  => '',
+           This field contains a search pattern for the mail destination.
+           Patterns are tried in the order as listed below:
+
+           user+extension@domain
+              Mail for user+extension@domain is delivered through
+              transport to nexthop.
+
+           user@domain
+              Mail for user@domain is delivered through transport
+              to nexthop.
+
+           domain
+              Mail  for  domain is delivered through transport to
+              nexthop.
+
+           .domain
+              Mail for  any  subdomain  of  domain  is  delivered
+              through  transport  to  nexthop.  This applies only
+              when the string transport_maps is not listed in the
+              parent_domain_matches_subdomains configuration set-
+              ting.  Otherwise, a domain name matches itself  and
+              its subdomains.
+
+           Note 1: the special pattern * represents any address (i.e.
+           it functions as the wild-card pattern).
+
+           Note 2:  the  null  recipient  address  is  looked  up  as
+           $empty_address_recipient@$myhostname (default: mailer-dae-
+           mon@hostname).
+
+       'Nexthop'      => '',
+           This field has the format transport:nexthop and shows how
+           the mails for the corresponding destination will be
+	   delivered.
+
+           The transport field specifies the name of a mail  delivery
+           transport (the first name of a mail delivery service entry
+           in the Postfix master.cf file).
+           
+           The interpretation  of  the  nexthop  field  is  transport
+           dependent. In the case of SMTP, specify host:service for a
+           non-default server port, and use [host] or [host]:port  in
+           order  to  disable MX (mail exchanger) DNS lookups. The []
+           form is required when you specify an IP address instead of
+           a hostname.
+           
+           A  null  transport  and  null nexthop result means "do not
+           change": use the delivery transport and  nexthop  informa-
+           tion  that  would  be used when the entire transport table
+           did not exist.
+           
+           A non-null transport  field  with  a  null  nexthop  field
+           resets the nexthop information to the recipient domain.
+           
+           A  null  transport  field with non-null nexthop field does
+           not modify the transport information.
+
+	   For a detailed description have a look in man 5 trnsport.
+
+       'TLS'          => '',
+	     You can set how TLS will be used for security. Possible values are:
+		NONE    : don't use TLS.
+		MAY     : TLS will used when offered by the server.
+		MUST    : Only connection with TLS will be accepted.
+		MUST_NOPEERMATCH  : Only connection with TLS will be accepted, but
+		          no strict peername checking accours.
+			  
+       'Auth'     => 0,
+             Sets if SASL authentication will be used for the relayhost.
+	     Possible values are: 0 (no) and 1 (yes).
+			
+       'Account'  => '',
+	     The account name of the SASL account.
+			
+       'Password' => ''
+	     The SASL account password
+    );
 
 
 EXAMPLE:
 
+use MailServer;
+
+    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminPassword   = "VerySecure";
+
+    my $MailTransorts   = [];
+
+    if (! $MailTransorts = ReadMailTransports($AdminDN,$AdminPassword) ) {
+       print "ERROR in ReadMailTransports\n";
+    } else {
+       foreach my $Transport (@{$MailTransports->{'Transports'}}){
+            print "Destination=> $Transport->{'Destination'}\n";
+	    print "    Nexthop=> $Transport->{'Nexthop'}\n";
+	    print "        TLS=> $Transport->{'TLS'}\n";
+	    if( $Transport->{'Auth'} ) {
+	        print "    Account=> $Transport->{'Account'}\n";
+	        print "   Passpord=> $Transport->{'Password'}\n";
+	    } else {
+	        print "    No SASL authentication is required.\n";
+	    }
+       }
+    }
 
 =cut
 
@@ -315,7 +507,9 @@ sub ReadMailTransports {
     my %SearchMap       = (
                                'base_dn'    => $mail_basedn,
                                'filter'     => "ObjectClass=SuSEMailTransport",
-                               'attributes' => ['SuSEMailTransportDestination','SuSEMailTransportNexthop','SuSEMailTransportTLS']
+                               'attributes' => ['SuSEMailTransportDestination',
+			                        'SuSEMailTransportNexthop',
+						'SuSEMailTransportTLS']
                           );
 
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
@@ -352,9 +546,51 @@ sub ReadMailTransports {
 =item *
 C<boolean = WriteMailTransports($admindn,$adminpwd,$MailTransports)>
 
- Write the mail-server Mail Transport from a single map
+ Write the mail server Mail Transport from a single hash.
+
+ WARNING!
+
+ All transport defintions not contained in the hash will be removed
+ from the tranport table.
 
 EXAMPLE:
+
+use MailServer;
+
+    my $AdminDN         = "uid=admin,ou=users,dc=my-company,dc=org";
+    my $AdminPassword   = "VerySecure";
+
+    my %MailTransports  = ( 
+                           'Changed' => '1',
+                           'Transports'  => [] 
+                          );
+    my %Transport       = (
+                             'Destination'  => 'dom.ain',
+                             'Nexthop'      => 'mail.dom.ain',
+                             'TLS'          => 'MUST',
+                             'Auth'         => 1,
+                             'Account'      => 'user',
+                             'Password'     => 'passwd'
+                          );
+    push @($MailTransports{Transports}), %Transport; 
+    
+    %Transport       = (
+                             'Destination'  => 'my-domain.de',
+                             'Nexthop'      => 'uucp:[mail.my-domain.de]',
+                             'TLS'          => 'NONE',
+                             'Auth'         => '0'
+			);
+    push @($MailTransports{Transports}), %Transport; 
+
+    %Transport       = (
+                             'Destination'  => 'my-old-domain.de',
+                             'Nexthop'      => "error:I've droped this domain"
+			);
+    push @($MailTransports{Transports}), %Transport; 
+
+    if( ! WriteMailTransports(\%Transports,$AdminDN,$AdminPassword) ) {
+        print "ERROR in WriteMailTransport\n";
+    }
 
 =cut
 
@@ -375,10 +611,9 @@ sub WriteMailTransports {
     if(! $MailTransports->{'Changed'}){
          return $self->SetError( summary =>_("Nothing to do"),
                                  code    => "PARAM_CHECK_FAILED" );
-         return 0;
     }
     
-    # Search map for the Transport Objects
+    # Search hash to find all the Transport Objects
     my %SearchMap       = (
                                'base_dn' => $mail_basedn,
                                'filter'  => "ObjectClass=SuSEMailTransport"
@@ -388,23 +623,25 @@ sub WriteMailTransports {
     # We'll need the sasl passwords entries
     my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
 
+    # Make LDAP Connection 
+    my $ErrorSummary = read_ldap_settings();
+    if( $ErrorSummary  ne '' ) {
+         return $self->SetError( summary => $ErrorSummary,
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
     if($AdminDN) {
         $admin_bind->{'binddn'} = $AdminDN;
     }
     if($AdminPassword) {
         $admin_bind->{'bindpw'} = $AdminPassword;
     }
-    
-    # Make LDAP Connection 
     if(! SCR::Execute('.ldap',$my_ldap)) {
          $ERROR = SCR::Read('.ldap.error');
          return $self->SetError( $ERROR );
-         return 0;
     }
-    if(! SCR::Execute('.ldap.bind',$admin_bind) {
+    if(! SCR::Execute('.ldap.bind',$admin_bind)) {
          $ERROR = SCR::Read('.ldap.error');
          return $self->SetError( $ERROR );
-         return 0;
     }
 
     # First we have to clean the corresponding SaslPasswd entries in the hash
@@ -416,6 +653,12 @@ sub WriteMailTransports {
     # Now let's work
     foreach my $Transport (@{$MailTransports->{'Transports'}}){
        my %entry = ();
+       if( $Transport->{'Destination'} =~ /[^\w\*\.\@]/ ) {
+            $ERROR->{'summary'} = _("Wrong Value for Mail Transport Destination. ")
+	                          _("This field mai contain only the charaters [a-zA-Z.*@]");
+            $ERROR->{'code'}    = "PARAM_CHECK_FAILED";
+            return $self->SetError( $ERROR );
+       }
        $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$mail_basedn;
        $entry{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
        $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
@@ -427,17 +670,15 @@ sub WriteMailTransports {
        if($Transport->{'TLS'} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/) {
             $entry{'SuSEMailTransportTLS'}      = $Transport->{'TLS'};
        } else {
-            $ERROR->{'summary'} = _("Wrong Value for MailTransportTLS Value"),
-            $ERROR->{'code'}    = "PARAM_CHECK_FAILED"
+            $ERROR->{'summary'} = _("Wrong Value for MailTransportTLS");
+            $ERROR->{'code'}    = "PARAM_CHECK_FAILED";
+            return $self->SetError( $ERROR );
        }
        push @Entries, %entry;
     }
 
-    # If there is an ERROR we leave the modul without making changes
-    if($ERROR->{'summary'} ne '') {
-         return $self->SetError( $ERROR );
-         return 0;
-    }
+    #have a look if our table is OK. If not make it to work!
+    check_ldap_configuration('transport');
 
     # If there is no ERROR we do the changes
     # First we clean all the transport lists
@@ -455,27 +696,24 @@ sub WriteMailTransports {
        SCR::Execute('.ldap.add',$dn,$tmp);
     }
     SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
-    
-    # We have to control if the all needed entries are existent.
-    my $MainCf    = SCR::Read('.mail.postfix.main.table');
 
     return 1;
 }
 
 ##
- # Dump the mail-server prevention to a single map
- # @return map Dumped settings (later acceptable by WriteMailPrevention())
+ # Dump the mail-server prevention to a single hash
+ # @return hash Dumped settings (later acceptable by WriteMailPrevention())
  #
 BEGIN { $TYPEINFO{ReadMailPrevention}  =["function", "any"  ]; }
 sub ReadMailPrevention {
     my $self            = shift;
     my %MailPrevention      = (
-                               'Changed'               => '0',
+                               'Changed'               => 0,
 			       'SPAMprotection'        => 'hard',
 			       'RPLList'               => [],
 			       'AcceptedSenderList'    => ['*'],
 			       'RejectedSenderList'    => [],
-			       'VirusScanning'         => 'no'
+			       'VirusScanning'         => 1
                           );
     # First we read the main.cf
     my $MainCf             = SCR::Read('.mail.postfix.main.table');
@@ -504,7 +742,7 @@ sub ReadMailPrevention {
 }
 
 ##
- # Write the mail-server Mail Prevention from a single map
+ # Write the mail-server Mail Prevention from a single hash
  #
 BEGIN { $TYPEINFO{WriteMailPrevention}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
 sub WriteMailPrevention {
@@ -514,7 +752,6 @@ sub WriteMailPrevention {
     if(! $MailPrevention->{'Changed'}){
          return $self->SetError( summary =>_("Nothing to do"),
                                  code    => "PARAM_CHECK_FAILED" );
-         return 0;
     }
    
     # First we read the main.cf
@@ -566,13 +803,12 @@ sub WriteMailPrevention {
       # Error no such value
          return $self->SetError( summary =>_("Unknown SPAMprotection mode. Allowed values are: hard, medium, off"),
                                  code    => "PARAM_CHECK_FAILED" );
-         return 0;
     }
 }
 
 ##
- # Dump the mail-server server side relay settings to a single map
- # @return map Dumped settings (later acceptable by WriteMailRelaying ())
+ # Dump the mail-server server side relay settings to a single hash
+ # @return hash Dumped settings (later acceptable by WriteMailRelaying ())
  #
 BEGIN { $TYPEINFO{ReadMailRelaying}  =["function", "any"  ]; }
 sub ReadMailRelaying {
@@ -589,7 +825,7 @@ sub ReadMailRelaying {
 }
 
 ##
- # Write the mail-server server side relay settings  from a single map
+ # Write the mail-server server side relay settings  from a single hash
  #
 BEGIN { $TYPEINFO{WriteMailRelaying}  =["function", "boolean", "string", "string", ["map", "string", "any"] ]; }
 sub WriteMailRelaying {
@@ -599,6 +835,16 @@ sub WriteMailRelaying {
 }
 
 ##
+
+    $GlobalSettings{'MaximumMailboxSize'}        = read_attribute($MainCf,'mailbox_size_limit');
+
+    my $MaximumMailboxSize = $GlobalSettings->{'MaximumMailboxSize'};
+    if($MaximumMailboxSize =~ /[^\d+]/) {
+         return $self->SetError( summary =>_("Maximum Mailbox Size value may only contain decimal number in byte"),
+                                 code    => "PARAM_CHECK_FAILED" );
+    }
+    write_attribute($MainCf,'mailbox_size_limit',$MaximumMailboxSize);
+
 
 ##
  # Create a textual summary and a list of unconfigured cards
@@ -627,7 +873,7 @@ sub Overview {
  # Return packages needed to be installed and removed during
  # Autoinstallation to insure module has all needed software
  # installed.
- # @return map with 2 lists.
+ # @return hash with 2 lists.
  #
 BEGIN { $TYPEINFO{AutoPackages} = ["function", ["map", "string", ["list", "string"]]]; }
 sub AutoPackages {
@@ -639,6 +885,8 @@ sub AutoPackages {
     return \%ret;
 }
 
+
+# some helper funktions
 sub read_attribute {
     my $config    = shift;
     my $attribute = shift;
@@ -675,6 +923,76 @@ sub write_attribute {
     return 1;
 }
 
+sub check_ldap_configuration {
+    my $config    = shift;
+    my $changes   = 0;
+    my %query_filter = (
+                        'transport' => '(&(objectclass=SuSEMailTransportObject)(SuSEMailTransportDestination=%s))',
+                        'peertls'   => '(&(objectclass=SuSEMailTransportObject)(SuSEMailTransportDestination=%s))',
+                       );
+
+    my $MainCf    = SCR::Read('.mail.postfix.main.table');
+
+    my $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_host');
+    if($tmp ne $ldapserver) {
+         write_attribute($MainCF,'ldap'.$config.'_server_host',$ldaphost); 
+	 $changes = 1;
+    }
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_port');
+    if($tmp ne $ldapport) {
+         write_attribute($MainCF,'ldap'.$config.'_server_port',$ldapport); 
+	 $changes = 1;
+    }
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_bind');
+    if($tmp ne 'no'){
+         write_attribute($MainCF,'ldap'.$config.'_bind','no'); 
+	 $changes = 1;
+    }
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_timeout');
+    if($tmp !~ /\d+/){
+         write_attribute($MainCF,'ldap'.$config.'_timeout',20); 
+	 $changes = 1;
+    }
+    $tmp       = read_attribute($MainCF,'ldap'.$config.'_server_host');
+    if($changes) {
+       SCR::Write('.mail.postfix.main.table',$MainCF):
+    }
+}
+
+sub read_ldap_settings {
+    # We have to set following global variables:
+    #$dns_basedn   = '';
+    #$mail_basedn  = '';
+    #$user_basedn  = '';
+    #$group_basedn = '';
+    #$ldapserver   = '';
+    #$ldapport     = '';
+    #$ldapadmin    = '';
+    #$my_ldap      = [];
+    #$admin_bind   = [];
+    $ldapserver  = SCR::Read('.etc.openldap.ldap_conf.host')         || {
+                 return _("No LDAP host");
+    }
+    $ldapport    = SCR::Read('.etc.openldap.ldap_conf.port')         || {
+                 return summary =>_("No LDAP host");
+    }
+    $mail_basedn = SCR::Read('.etc.openldap.ldap_conf.mail_basedn')  || {
+                 return _("No LDAP mail base DN");
+    }
+    $dns_basedn  = SCR::Read('.etc.openldap.ldap_conf.dns_basedn')   || {
+                 return _("No LDAP dns base DN");
+    }
+    $user_basedn = SCR::Read('.etc.openldap.ldap_conf.user_basedn')  || {
+                 return _("No LDAP user base DN");
+    }
+    $group_basedn= SCR::Read('.etc.openldap.ldap_conf.group_basedn') || {
+                 return _("No LDAP group base DN");
+    }
+    $my_ldap->{'host'} = $ldapserver;
+    $my_ldap->{'port'} = $ldapport;
+    return '';
+}    
+    
 1;
 
 # EOF
