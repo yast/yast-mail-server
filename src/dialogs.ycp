@@ -185,7 +185,7 @@ Create the certificate with the YaST2 CA management module.
                 /* Setting cyrus password if installed */
                 if(Require::AreAllPackagesInstalled (["cyrus-imapd"]))
                 {
-                  string crypted  = Users::CryptPassword(MailServer::AdminPassword, "system");
+                  string crypted  = Users::CryptPassword(MailServer::AdminPassword, "system", "user");
                   SCR::Write(.target.passwd.cyrus, crypted);
                 }
                 return ret;
