@@ -19,16 +19,13 @@
  * Example:
  *   Read (.mail.postfix.main)
  */
-.mail.postfix.main
+.mail.postfix.saslpasswd
 
 `ag_mailconfig (
   `Mailconfig ($[
-    "filename"                 : "/etc/postfix/main.cf",
-    "continue_escaped_newline" : false,
-    "continue_leading_blanks"  : true,
-    "write_empty_value"        : true,
-    "separator"                : "\s*=\s*",
-    "oseparator"               : "=",
-    "is_postmap"               : false,
+    "filename"                : "/etc/postfix/saslpasswd",
+    "continue_escaped_newline": false,
+    "write_empty_value"       : false,
+    "is_postmap"              : true,
   ])
 )

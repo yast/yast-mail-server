@@ -55,9 +55,6 @@ sub Error {
 
 our %TYPEINFO;
 
-YaST::YCP::Import ("Progress");
-YaST::YCP::Import ("Report");
-YaST::YCP::Import ("Summary");
 YaST::YCP::Import ("SCR");
 YaST::YCP::Import ("Service");
 
@@ -111,9 +108,10 @@ sub ReadGlobalSettings {
     	$GlobalSettings{'Relay'}{'Type'} = 'relayhost';
 	
         # Determine if relay host need sasl authentication
-	$GlobalSettings{'Relay'}{'RHost'}{'Auth'} = SCR::Read('.mail.postfix.main','smtp_sasl_auth_enable') || 'no';
-        if($GlobalSettings{'Relay'}{'RHost'}{'Auth'} eq 'yes') {
-	  
+	my $tmp = SCR::Read('.mail.postfix.saslpasswd',$GlobalSettings{'Relay'}{'RHost'}{'Name'}); 
+        ($GlobalSettings{'Relay'}{'RHost'}{'Account'},$GlobalSettings{'Relay'}{'RHost'}{'Password'}) = split /:/,$tmp;
+        if($GlobalSettings{'Relay'}{'RHost'}{'Account'}  ne '') {
+           $GlobalSettings{'Relay'}{'RHost'}{'Auth'} = 'true';
 	}
     } else {
     	$GlobalSettings{'Relay'}{'Type'} = 'DNS';
@@ -131,14 +129,43 @@ BEGIN { $TYPEINFO{WriteGlobalSettings}  =["function", "boolean",  "any" ]; }
 sub WriteGlobalSettings {
     my $self = shift;
     my $GlobalSettings = shift;
-
-    my $error = 1;
-    if( $error ) {
-        return $self->SetError( summary =>_("hier kommt ein algemeiner text in englisch"),
-                                code => "PARAM_CHECK_FAILED" );
+    my $MSize          = $ReadGlobalSettings->{'MSize'};
+    my $RelayTyp       = $ReadGlobalSettings->{'Relay'}->{'Type'};
+    my $RHostName      = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Name'};
+    my $RHostSecurity  = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Security'};
+    my $RHostAuth      = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Auth'};
+    my $RHostAccount   = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Account'};
+    my $RHostPassword  = $ReadGlobalSettings->{'Relay'}->{'RHost'}->{'Password'};
+    
+    # Parsing attributes 
+    if($MSize =~ /[^\d+]/) {
+         return $self->SetError( summary =>_("Mail size value may only contain decimal number in byte"),
+                                 code    => "PARAM_CHECK_FAILED" );
+         return 0;
+    }
+    if($RelayTyp eq 'DNS') {
+        #Make direkt mail sending
+        #looking for relayhost setting from the past 
+        $tmp = SCR::Read('.mail.postfix.main','relayhost') || '';
+        if( $tmp ne '' ) {
+            SCR::Write('.mail.postfix.main','relayhost','');
+            SCR::Write('.mail.postfix.saslpasswd',$tmp,'');
+        }
+    } elsif ($RelayTyp eq 'relayhost') {
+        SCR::Write('.mail.postfix.main','relayhost',$RHostName);
+        if($RHostAuth){
+           SCR::Write('.mail.postfix.saslpasswd',$RHostName,"$RHostAccount:$RHostPassword");
+        }
+    } else {
+      return $self->SetError( summary =>_("Unknown mail sending type. Allowed values are 'DNS' & 'relayhost'"),
+                              code    => "PARAM_CHECK_FAILED" );
+      return 0;
     }
 
-    return {};
+    SCR::Write('.mail.postfix.main','message_size_limit',$MSize);
+
+    Service::Reload('postfix');
+    return 1;
 }
 
 ##
