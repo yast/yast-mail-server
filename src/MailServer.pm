@@ -81,6 +81,8 @@ my $write_only = 0;
  #
 BEGIN { $TYPEINFO{ReadGlobalSettings}  =["function", "any"  ]; }
 sub ReadGlobalSettings {
+    my $MainCf    = SCR::Read('.mail.postfix.main.table');
+    my $SaslPaswd = SCR::Read('.mail.postfix.saslpasswd.table');
     my %GlobalSettings = ( 
     			   'Changed' => 'false',
     			   'MSize'   => 0,
@@ -99,17 +101,18 @@ sub ReadGlobalSettings {
 			 );
     # Reading maximal size of transported messages
     
-    $GlobalSettings{'MSize'}                  = SCR::Read('.mail.postfix.main','message_size_limit') || 0 ;
+    
+    $GlobalSettings{'MSize'}                  = read_attribute($MainCf,'message_size_limit');
 
     # Determine if relay host is used
-    $GlobalSettings{'Relay'}{'RHost'}{'Name'} = SCR::Read('.mail.postfix.main','relayhost') || '';
+    $GlobalSettings{'Relay'}{'RHost'}{'Name'} = read_attribute($MainCf,'relayhost');
 
     if($GlobalSettings{'Relay'}{'RHost'}{'Name'} ne '') {
       # If relay host is used read & set some parameters
     	$GlobalSettings{'Relay'}{'Type'} = 'relayhost';
 	
         # Determine if relay host need sasl authentication
-	my $tmp = SCR::Read('.mail.postfix.saslpasswd',$GlobalSettings{'Relay'}{'RHost'}{'Name'}); 
+	my $tmp = read_attribute($SaslPaswd,$GlobalSettings{'Relay'}{'RHost'}{'Name'}); 
         if( $tmp ) {
                 ($GlobalSettings{'Relay'}{'RHost'}{'Account'},$GlobalSettings{'Relay'}{'RHost'}{'Password'}) = split /:/,$tmp;
         }
@@ -139,6 +142,8 @@ sub WriteGlobalSettings {
     my $RHostAuth      = $GlobalSettings->{'Relay'}{'RHost'}{'Auth'};
     my $RHostAccount   = $GlobalSettings->{'Relay'}{'RHost'}{'Account'};
     my $RHostPassword  = $GlobalSettings->{'Relay'}{'RHost'}{'Password'};
+    my $MainCf         = SCR::Read('.mail.postfix.main.table');
+    my $SaslPasswd     = SCR::Read('.mail.postfix.saslpasswd.table');
     
     # Parsing attributes 
     if($MSize =~ /[^\d+]/) {
@@ -149,15 +154,15 @@ sub WriteGlobalSettings {
     if($RelayTyp eq 'DNS') {
         #Make direkt mail sending
         #looking for relayhost setting from the past 
-        my $tmp = SCR::Read('.mail.postfix.main','relayhost') || '';
+        my $tmp = read_attribute($MainCf,'relayhost');
         if( $tmp ne '' ) {
-            SCR::Write('.mail.postfix.main','relayhost','');
-            SCR::Write('.mail.postfix.saslpasswd',$tmp,'');
+            write_attribute($MainCf,'relayhost','');
+            write_attribute($SaslPasswd,$tmp,'');
         }
     } elsif ($RelayTyp eq 'relayhost') {
-        SCR::Write('.mail.postfix.main','relayhost',$RHostName);
+        write_attribute($MainCf,'relayhost',$RHostName);
         if($RHostAuth){
-           SCR::Write('.mail.postfix.saslpasswd',$RHostName,"$RHostAccount:$RHostPassword");
+           write_attribute($SaslPasswd,$RHostName,"$RHostAccount:$RHostPassword");
         }
     } else {
       return $self->SetError( summary =>_("Unknown mail sending type. Allowed values are 'DNS' & 'relayhost'"),
@@ -165,7 +170,10 @@ sub WriteGlobalSettings {
       return 0;
     }
 
-    SCR::Write('.mail.postfix.main','message_size_limit',$MSize);
+    write_attribute($MainCf,'message_size_limit',$MSize);
+
+    SCR::Write('.mail.postfix.main.table',$MainCf);
+    SCR::Write('.mail.postfix.saslpasswd.table',$SaslPasswd);
 
     Service::Reload('postfix');
     return 1;
@@ -208,6 +216,42 @@ sub AutoPackages {
 	"remove" => (),
     );
     return \%ret;
+}
+
+sub read_attribute {
+    my $config    = shift;
+    my $attribute = shift;
+
+    foreach(@{$config}){
+	if($_->{"key"} eq $attribute) {
+		return $_->{"value"};
+	}
+    }
+    return '';
+}
+
+sub write_attribute {
+    my $config    = shift;
+    my $attribute = shift;
+    my $value     = shift;
+    my $comment   = shift;
+
+    my $unset = 1;
+
+    foreach(@{$config}){
+	if($_->{"key"} eq $attribute) {
+	    $_->{"value"} = $value;
+	    $unset = 0; 
+	    last;
+	}
+    }
+    if($unset) {
+	push (@{$config}, { "comment" => $comment,
+                                "key" => $attribute,
+                              "value" => $value }
+                  );
+    }
+    return 1;
 }
 
 1;
