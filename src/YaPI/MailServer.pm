@@ -527,6 +527,7 @@ sub ReadMailTransports {
                           );
     my %Transport       = (
                              'Destination'  => '',
+                             'Transport'    => 'smtp',
                              'Nexthop'      => '',
                              'TLS'          => '',
                              'Auth'         => '',
@@ -556,7 +557,11 @@ sub ReadMailTransports {
     # filling up our array
     foreach(@{$ret}){
        $Transport{'Destination'}     = $_->{'SuSEMailTransportDestination'};
-       $Transport{'Nexthop'}         = $_->{'SuSEMailTransportNexthop'};
+       if( $_->{'SuSEMailTransportNexthop'} =~ /:/) {
+         ($Transport{'Transport'},$Transport{'Nexthop'}) = split /:/,$_->{'SuSEMailTransportNexthop'};
+       } else {
+         $Transport{'Nexthop'}         = $_->{'SuSEMailTransportNexthop'};
+       }
        $Transport{'TLS'}             = $_->{'SuSEMailTransporTLS'};
        $Transport{'Auth'}            = 0;
        $Transport{'Account'}         = '';
@@ -598,7 +603,8 @@ use MailServer;
                           );
     my %Transport       = (
                              'Destination'  => 'dom.ain',
-                             'Nexthop'      => 'mail.dom.ain',
+                             'Transport'    => 'smtp',
+                             'Nexthop'      => '[mail.dom.ain]',
                              'TLS'          => 'MUST',
                              'Auth'         => 1,
                              'Account'      => 'user',
@@ -675,10 +681,14 @@ sub WriteMailTransports {
 	                          _('This field may contain only the charaters [a-zA-Z.*@]');
             $ERROR->{'code'}    = "PARAM_CHECK_FAILED";
             return $self->SetError( $ERROR );
-	       }
+      }
        $entry{'dn'}  				= 'SuSEMailTransportDestination='.$Transport->{'Destination'}.','.$ldap_map->{mail_config_dn};
        $entry{'SuSEMailTransportDestination'}   = $Transport->{'Destination'};
-       $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
+       if(defined $Transport->{'Transport'} ) {
+          $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Transport'}.':'.$Transport->{'Nexthop'};
+       } else {
+          $entry{'SuSEMailTransportNexthop'}       = $Transport->{'Nexthop'};
+       }
        $entry{'SuSEMailTransportTLS'}           = 'NONE';
        if($Transport->{'Auth'}) {
                # If needed write the sasl auth account & password

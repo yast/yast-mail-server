@@ -176,7 +176,7 @@ term GlobalSettingsDialog() {
                            `Left(`RadioButton(`id("NONE"),             _("Do not use TLS"), TLS_NONE)),
                            `Left(`RadioButton(`id("MAY"),              _("Use TLS if Possible"), TLS_MAY)),
                            `Left(`RadioButton(`id("MUST"),             _("Enforce TLS"), TLS_MUST))
-      //                  ,`Left(`RadioButton(`id("MUST_NOPEERMATCH"), _("Use Relay Host"), TLS_MUSTN))
+      //                  ,`Left(`RadioButton(`id("MUST_NOPEERMATCH"), _("Use TLS but do not check CA"), TLS_MUSTN))
                          )
                       ),
                       `HStretch()
@@ -198,8 +198,126 @@ term GlobalSettingsDialog() {
   return content;
 }
 
-term MailTransportsDialog() {
+term MailTransportsDialog(integer CurrentItem) {
+  list<map> Transports      = (list<map>) MailServer::MailTransports["Transports"]:[];
+  list      Transport_items = [];
+  integer   TransportID     = 1;
+  string    Destination     = "";
+  boolean   Subdomains      = true;
+  string    Protocol        = "smtp";
+  map<string,list<term> > Protocols = $[ "smtp":[ `item(`id("smtp"),  "smtp", true ),
+                                          `item(`id("uucp"),  "uucp" ),
+                                          `item(`id("slow"),  "slow" ),
+                                          `item(`id("error"), "error" ) ],
+				 "uucp":[ `item(`id("smtp"),  "smtp" ),
+                                          `item(`id("uucp"),  "uucp", true ),
+                                          `item(`id("slow"),  "slow" ),
+                                          `item(`id("error"), "error" ) ],
+				 "slow":[ `item(`id("smtp"),  "smtp" ),
+                                          `item(`id("uucp"),  "uucp" ),
+                                          `item(`id("slow"),  "slow", true ),
+                                          `item(`id("error"), "error" ) ],
+				 "error":[`item(`id("smtp"),  "smtp" ),
+                                          `item(`id("uucp"),  "uucp" ),
+                                          `item(`id("slow"),  "slow" ),
+                                          `item(`id("error"), "error", true ) ]
+			      ];
+  string    Server          = "";
+  boolean   NOMX            = true;
+  string    TLS             = "";
+  boolean   Auth            = false;
+  string    Account         = "";
+  string    Password        = "";
+  boolean   TransportTLSnone    = false;
+  boolean   TransportTLSuse     = true;
+  boolean   TransportTLSenforce = false;
+
+
+  foreach(map Transport,Transports, ``{
+    TransportID = TransportID+1;
+    if(CurrentItem == TransportID) {
+      Destination = Transport["Destination"]:"";
+      TLS         = Transport["TLS"]:"";
+      Auth        = (boolean)Transport["Auth"]:false;
+      Account     = Transport["Destination"]:"";
+      Password    = Transport["Password"]:"";
+      if( regexpmatch(Transport["Nexthop"]:"", "\[") ) {
+        Server = deletechars(Transport["Nexthop"]:"","[");
+        Server = deletechars(Server,"]");
+      } else {
+        Server = Transport["Nexthop"]:"";
+	NOMX   = false;
+      }
+      if(TLS == "NONE") {
+        TransportTLSnone    = true;
+	TransportTLSuse     = false;
+	TransportTLSenforce = false;
+      }else if(TLS == "MUST"){
+        TransportTLSnone    = false;
+	TransportTLSuse     = false;
+	TransportTLSenforce = true;
+      }
+    }
+    term my_item = `item( `id(TransportID), Transport["Destination"]:"",
+                                            Transport["Nexthop"]:"",
+                                            Transport["Protocol"]:"",
+					    Transport["TLS"]:"");
+    Transport_items = add(Transport_items,my_item);
+  });
+
+  term TransportAuth  = `VBox(
+    `Left(`CheckBox (`id(`TransportAuth),   _("Server need Authentication"), true)),
+    `Left(`TextEntry(`id(`TransportAccount),_("Account"),          Account)),
+    `Left(`Password (`id(`Password1),       _("Password"),         Password)),
+    `Left(`Password (`id(`Password2),       _("Confirm Passowrd"), Password))
+  );
+  if(!Auth) {
+    TransportAuth  = `VBox(
+      `Left(`CheckBox (`id(`TransportAuth),   _("Server need Authentication"),       false)),
+      `Left(`TextEntry(`id(`TransportAccount),`opt(`disabled), _("Account"),          Account)),
+      `Left(`Password (`id(`Password1),       `opt(`disabled), _("Password"),         Password)),
+      `Left(`Password (`id(`Password2),       `opt(`disabled), _("Confirm Passowrd"), Password))
+    );
+  }
+
+
   term content = `VBox (
+     `Frame(_("Manage Mail Routing"),
+       `VBox(
+         `HBox(
+           `VBox(
+             `Left(`TextEntry(`id(`Destination), _("Destination"),     Destination)),
+             `Left(`CheckBox (`id(`Subdomains),  _("With Subdomains"), Subdomains)),
+             `Left(`HBox(`Label(_("Protocol")),`ComboBox (`id(`Protocol), "", Protocols[Protocol]:nil))),
+             `Left(`TextEntry(`id(`Server),      _("Server"),     Server)),
+             `Left(`CheckBox (`id(`NOMX),        _("Suppress MX Lookups"), NOMX))
+            ),
+           `Frame(_("Security"),
+             `HBox(
+               `RadioButtonGroup(`id(`TransportTLSMode),
+                 `VBox(
+                   `Left(`RadioButton(`id(`TransportTLSnone),     _("No TLS"),     TransportTLSnone)),
+                   `Left(`RadioButton(`id(`TransportTLSuse),      _("Use TLS"),    TransportTLSuse)),
+                   `Left(`RadioButton(`id(`TransportTLSenforce),  _("Enforce TLS"),TransportTLSenforce))
+                  )
+                ),
+                TransportAuth
+              )
+            )
+          ),
+         `HBox(
+           `PushButton(`id(`AddNewTransport), _("Add")),
+           `PushButton(`id(`EditTransport),   _("Edit")),
+           `PushButton(`id(`DeleteTransport), _("Delete")),
+           `PushButton(`id(`CleanFields),     _("Clean Fields"))
+          )
+        )
+      ),
+     `Frame(_("Defined Mail Transport Routen"),
+       `HBox(
+         `Table(`id(`MailTransports), `header(_("Destination"),_("Server"),_("Protocol"),_("Security")),Transport_items)
+        )
+      )
    );
   return content;
 }
@@ -217,14 +335,14 @@ term MailRelayingDialog() {
   boolean SMTPDTLSuse     = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "use");
   boolean SMTPDTLSenforce = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "enforce");
   boolean SMTPDTLSauth_only    = ((string)MailServer::MailRelaying["SMTPDTLSMode"]:"none" == "auth_only");
-  list  networks          = (list) MailServer::MailRelaying["TrustedNetworks"]:[];
-  list  network_items     = [];
-  integer networkid       = 0;
+  list    Networks        = (list) MailServer::MailRelaying["TrustedNetworks"]:[];
+  list    Network_items   = [];
+  integer NetworkID       = 1;
 
-  foreach(`network,networks, ``{
-    term my_item = `item( `id("LocalNetwork"+networkid), network);
-    network_items = add(network_items,my_item);
-    networkid = networkid+1;
+  foreach(`Network,Networks, ``{
+    term my_item = `item( `id(NetworkID), Network);
+    Network_items = add(Network_items,my_item);
+    NetworkID = NetworkID+1;
   });
 
   term content = `VBox (
@@ -238,7 +356,7 @@ term MailRelayingDialog() {
           ),
          `Frame("",
            `HBox(
-             `Table(`id(`TrustedNetworks), `header(_("Network")),network_items),
+             `Table(`id(`TrustedNetworks), `header(_("Network")),Network_items),
              `PushButton(`id(`DeleteNetwork), _("Delete"))
             )
           )
@@ -344,9 +462,13 @@ any ComplexDialog() {
         } else if(FocusedContent == "MailRelaying") {
           MailServer::MailRelaying["Changed"]            = true;
           list<list> Networks = (list<list>)UI::QueryWidget(`id(`TrustedNetworks), `Items);
-          string ci    =  (string)UI::QueryWidget(`id(`TrustedNetworks), `CurrentItem);
+          integer ci          = (integer) UI::QueryWidget(`id(`TrustedNetworks), `CurrentItem);
+          string Network      = (string)  select((list) UI::QueryWidget(`id(`TrustedNetworks), `Item(ci)),1,1);
 y2milestone("Networks %1",Networks);
+y2milestone("Network %1",Network);
 y2milestone("ci %1",ci);
+           content        = MailRelayingDialog();
+           helptext       = HELPS["MailRelaying"]:"Bla Bla Bla";
         }
         if(ret == "GlobalSettings" && FocusedContent != "GlobalSettings") {
            content        = GlobalSettingsDialog();
@@ -354,7 +476,7 @@ y2milestone("ci %1",ci);
            focus_changed  = true;
            FocusedContent ="GlobalSettings";
         } else if(ret == "MailTransports" && FocusedContent != "MailTransports") {
-           content        = MailTransportsDialog();
+           content        = MailTransportsDialog(0);
            helptext       = HELPS["MailTransports"]:"Bla Bla Bla";
            focus_changed  = true;
            FocusedContent ="MailTransports";
