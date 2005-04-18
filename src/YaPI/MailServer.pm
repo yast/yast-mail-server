@@ -2233,7 +2233,7 @@ fi';
 					 "param" => "eq" }	
 				     );
 	}
-        Service->Restart('ldap');
+        YaPI::LdapServer->RecreateIndex($ldapMap->{ldap_domain});
     }
 
     #Put user postfix into the group mail
