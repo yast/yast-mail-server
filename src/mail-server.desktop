@@ -16,7 +16,7 @@ X-SuSE-YaST-Geometry=
 X-SuSE-YaST-SortKey=
 X-SuSE-YaST-AutoInstResource=mail-server
 
-Icon=mailserver
+Icon=yast-mail-server
 Exec=/sbin/yast2 mail-server 
 
 Name=Mail Server
