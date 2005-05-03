@@ -1548,7 +1548,6 @@ sub WriteMailLocalDelivery {
 	write_attribute($MainCf,'mailbox_command','/usr/bin/procmail');
 	write_attribute($MainCf,'mailbox_transport','');
     } elsif( $MailLocalDelivery->{'Type'} eq 'cyrus') {
-print STDERR "HERE I AM";
         write_attribute($MainCf,'home_mailbox','');
 	write_attribute($MainCf,'mail_spool_directory','');
 	write_attribute($MainCf,'mailbox_command','');
@@ -2188,52 +2187,57 @@ fi';
     SCR->Write(".sysconfig.mail.MAIL_CREATE_CONFIG","no");
     SCR->Write(".sysconfig.mail",undef);
 
-    # Now we configure the LDAP-Server to be able store the mail server configuration
-    my $schemas = YaPI::LdapServer->ReadSchemaIncludeList();
-    my $SCHEMA  = join "",@{$schemas};
-    if( $SCHEMA !~ /suse-mailserver.schema/ ) {
-	push @{$schemas},'/etc/openldap/schema/suse-mailserver.schema';
-	YaPI::LdapServer->WriteSchemaIncludeList($schemas);
-	my $indices = YaPI::LdapServer->ReadIndex($ldapMap->{ldap_domain});
-	my $SuSEMailClient = 0;
-	my $SuSEMailDomainMasquerading = 0;
-	my $suseTLSPerSitePeer= 0;
-	foreach my $index (@{$indices}) {
-	  if( $index->{attr} eq "SuSEMailClient,SUSEMailAcceptAddress,zoneName")
-	  {
-	    $SuSEMailClient = 1;
-	  }
-	  if( $index->{attr} eq "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType")
-	  {
-	    $SuSEMailDomainMasquerading = 1;
-	  }
-	  if( $index->{attr} eq "suseTLSPerSitePeer,SuSEMailTransportDestination")
-	  {
-	    $suseTLSPerSitePeer = 1;
-	  }
+    # don't configure if using eDirectory server
+    Ldap->CheckNDS ();
+    if (! Ldap->nds())
+    {
+	# Now we configure the LDAP-Server to be able store the mail server configuration
+	my $schemas = YaPI::LdapServer->ReadSchemaIncludeList();
+	my $SCHEMA  = join "",@{$schemas};
+	if( $SCHEMA !~ /suse-mailserver.schema/ ) {
+	    push @{$schemas},'/etc/openldap/schema/suse-mailserver.schema';
+	    YaPI::LdapServer->WriteSchemaIncludeList($schemas);
+	    my $indices = YaPI::LdapServer->ReadIndex($ldapMap->{ldap_domain});
+	    my $SuSEMailClient = 0;
+	    my $SuSEMailDomainMasquerading = 0;
+	    my $suseTLSPerSitePeer= 0;
+	    foreach my $index (@{$indices}) {
+		if( $index->{attr} eq "SuSEMailClient,SUSEMailAcceptAddress,zoneName")
+		{
+		    $SuSEMailClient = 1;
+		}
+		if( $index->{attr} eq "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType")
+		{
+		    $SuSEMailDomainMasquerading = 1;
+		}
+		if( $index->{attr} eq "suseTLSPerSitePeer,SuSEMailTransportDestination")
+		{
+		    $suseTLSPerSitePeer = 1;
+		}
+	    }
+	    if(!$SuSEMailClient)
+	    {
+		YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
+					   { "attr"  => "SuSEMailClient,SUSEMailAcceptAddress,zoneName",
+					     "param" => "eq" }	
+					   );
+	      }
+	    if(!$SuSEMailDomainMasquerading)
+	    {
+		YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
+					   { "attr"  => "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType",
+					     "param" => "eq" }	
+					   );
+	      }
+	    if(!$SuSEMailClient)
+	    {
+		YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
+					   { "attr"  => "suseTLSPerSitePeer,SuSEMailTransportDestination",
+					     "param" => "eq" }	
+					   );
+	    }
+            YaPI::LdapServer->RecreateIndex($ldapMap->{ldap_domain});
 	}
-	if(!$SuSEMailClient)
-	{
-	   YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
-	   			       { "attr"  => "SuSEMailClient,SUSEMailAcceptAddress,zoneName",
-					 "param" => "eq" }	
-				     );
-	}
-	if(!$SuSEMailDomainMasquerading)
-	{
-	   YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
-	   			       { "attr"  => "SuSEMailDomainMasquerading,relativeDomainName,suseMailDomainType",
-					 "param" => "eq" }	
-				     );
-	}
-	if(!$SuSEMailClient)
-	{
-	   YaPI::LdapServer->AddIndex($ldapMap->{ldap_domain},
-	   			       { "attr"  => "suseTLSPerSitePeer,SuSEMailTransportDestination",
-					 "param" => "eq" }	
-				     );
-	}
-        YaPI::LdapServer->RecreateIndex($ldapMap->{ldap_domain});
     }
 
     #Put user postfix into the group mail

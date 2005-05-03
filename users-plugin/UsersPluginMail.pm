@@ -41,6 +41,8 @@ my @group_object_class                 =
 # error message, returned when some plugin function fails
 my $error       = "";
 
+my $pluginName = "UsersPluginMail"; 
+ 
 ##--------------------------------------
 
 # All functions have 2 "any" parameters: this will probably mean
@@ -102,7 +104,8 @@ BEGIN { $TYPEINFO{InternalAttributes} = ["function",
     "any", "any"];
 }
 sub InternalAttributes {
-    return [ "localdeliverytype" , "imapquota", "imapquotaused"];
+#    return [ "localdeliverytype" , "imapquota", "imapquotaused"];
+    return [ "localdeliverytype"];
 }
 
 # return plugin name, used for GUI (translated)
@@ -302,6 +305,10 @@ sub AddBefore {
     my $imapadmpw  = Ldap->bind_pass();
     my $MailLocalDelivery = YaPI::MailServer->ReadMailLocalDelivery($imapadmpw);
     $data->{'localdeliverytype'} = $MailLocalDelivery->{'Type'};
+    if($data->{'localdeliverytype'} eq 'cyrus' ) {
+        #setting default quota
+        $data->{'imapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
+    }
 
     return $data;
 }
@@ -389,7 +396,37 @@ sub Add {
     # get default domain name from LDAP
     my $domain = getMainDomain();
 
-    return $data if !defined $domain || !defined $data->{'uid'} || $domain eq "";
+    if ( !defined $domain || $domain eq "" ){
+	if( $error ne "" ){
+	    y2internal($error);
+	    y2internal("Disabling: $pluginName");
+	    $error = "";
+        }
+
+        # Remove "UserPluginMail" from plugin list
+        my @updated_plugin;
+        foreach my $plugin ( @{$data->{'plugins'}} ) {
+            if ( lc($plugin) ne lc($pluginName) ) {
+                push @updated_plugin, $plugin;
+            }
+        }
+        $data->{'plugins'} = \@updated_plugin;
+
+        # Remove "suseMailReceipient" from objectclasses
+        my @updated_oc;
+        foreach my $oc ( @{$data->{'objectclass'}} ) {
+            if ( lc($oc) ne "susemailrecipient" ) {
+                push @updated_oc, $oc;
+            }
+        }
+        delete( $data->{'imapquota'});
+        delete( $data->{'imapquotaused'});
+        $data->{'objectclass'} = \@updated_oc;
+
+      	return $data;
+    }
+
+    return $data if !defined $data->{'uid'};
 
 
     return addRequiredMailData($data,$domain);
@@ -422,7 +459,6 @@ sub EditBefore {
             $error = __("Run the mail server module first.");
             return undef;
         }
-        $data->{'imapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
 
     # looking for the local delivery type
@@ -472,7 +508,37 @@ sub Edit {
 	# get default domain name from LDAP
 	my $domain = getMainDomain();
 	
-        return $data if !defined $domain || !defined $data->{'uid'} || $domain eq "";
+        if ( !defined $domain || $domain eq "" ){
+            if( $error ne "" ){
+                y2internal($error);
+                y2internal("Disabling: $pluginName");
+                $error = "";
+            }
+
+            # Remove "UserPluginMail" from plugin list
+            my @updated_plugin;
+            foreach my $plugin ( @{$data->{'plugins'}} ) {
+                if ( lc($plugin) ne lc($pluginName) ) {
+                    push @updated_plugin, $plugin;
+                }
+            }
+            $data->{'plugins'} = \@updated_plugin;
+
+            # Remove "suseMailReceipient" from objectclasses
+            my @updated_oc;
+            foreach my $oc ( @{$data->{'objectclass'}} ) {
+                if ( lc($oc) ne "susemailrecipient" ) {
+                    push @updated_oc, $oc;
+                }
+            }
+            delete( $data->{'imapquota'});
+            delete( $data->{'imapquotaused'});
+            $data->{'objectclass'} = \@updated_oc;
+
+            return $data;
+        }
+            
+        return $data if !defined $data->{'uid'};
 	
 	return addRequiredMailData($data,$domain);
     }
@@ -646,7 +712,7 @@ sub cond_IMAP_OP {
                 $error = "authenticate failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
                 return undef;
             }
-            $ret = $proxy_imap->subscribe( $fname );
+            $ret = $proxy_imap->subscribe( 'INBOX' );
             if ( $$ret{Status} ne "ok" ) {
 		y2internal("subscribe failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
                 $error = "subscribe failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
@@ -703,14 +769,21 @@ sub cond_IMAP_OP {
                     #return undef;
                 }
                 
-		if( $imapquota ) {
+		if( $imapquota && $data->{'imapquota'} > 0 ) {
 		    $ret = $imap->setquota($fname, ("STORAGE", $imapquota ) );
 		    if($$ret{Status} ne "ok") {
 			y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
 			$errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
 			#return undef;
 		    }
-		}
+		} else {
+		    $ret = $imap->setquota($fname, () );
+		    if($$ret{Status} ne "ok") {
+			y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+			$errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+			#return undef;
+		    }
+                }
                 if( $errtxt ne "" ) {
                     $error = $errtxt;
                     return undef;
@@ -731,7 +804,7 @@ sub cond_IMAP_OP {
                         $error = "authenticate failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
                         return undef;
                     }
-                    $ret = $proxy_imap->subscribe( $fname );
+                    $ret = $proxy_imap->subscribe( 'INBOX' );
                     if ( $$ret{Status} ne "ok" ) {
                         y2internal("subscribe failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
                         $error = "subscribe failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
@@ -740,13 +813,20 @@ sub cond_IMAP_OP {
                     $proxy_imap->logout();
                 }
             } else {
-                if( defined $data->{'imapquota'} ) {
+                if( defined $data->{'imapquota'} && $data->{'imapquota'} > 0 ) {
                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'imapquota'} ) );
                     if($$ret{Status} ne "ok") {
                         y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
                         $error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}";
                         return undef;
                     }
+		} else {
+		    $ret = $imap->setquota($fname, () );
+		    if($$ret{Status} ne "ok") {
+			y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+			$error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+			return undef;
+		    }
                 }
             }
         }
@@ -886,8 +966,9 @@ sub Write {
     if ( ($data->{'what'} eq "add_user" ) && $self->PluginPresent($config, $data) ) {
         # create Folder if plugin has been added
         cond_IMAP_OP($data, "add") if $action eq "added";
+	return;
     }
-    return;
+    return 1;
 }
 1
 # EOF

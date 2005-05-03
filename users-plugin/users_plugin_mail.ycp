@@ -244,19 +244,25 @@
         emails = add (emails, `HWeight (1, buttons));
 
 	term    imap     = `VBox();
-	integer dummyint = tointeger ((string) data["imapquota"]:"10000" );
+	integer intimapquota = -1;
+	if (haskey (data, "imapquota")
+	    && data["imapquota"]:"10000" != nil)
+	{
+	    intimapquota = tointeger ((string) data["imapquota"]:"10000" );
+	}
+
 	if(data["localdeliverytype"]:"local" == "cyrus" ) {
 	     imap   = `Frame ( _("IMAP Quota"),
 			`VBox(
 				 `HBox(
 				       `IntField (`id(`imapquota), _("in kByte"), 1, 10000000,
-						  dummyint),
+						  intimapquota >= 0 ? intimapquota : 10000),
 				       `HStretch()
 				       ),
 				 `Left(`Label(sformat (_("IMAP quota already in use: %1 kByte"),
-						 data["imapquotaused"]:"0"))),
+						 data["imapquotaused"]:"0" != nil ? data["imapquotaused"]:"0":"0"))),
 				 `Left(`CheckBox( `id(`enableImpapquota ), `opt(`notify), _("Enable IMAP Quota"),
-						  haskey (data, "imapquota")
+						  intimapquota >= 0
 						  ))
 			)
 		);
@@ -377,9 +383,7 @@
 		 }
 		 else
 		 {
-                    if ( data["imapquota"]:"" != "") {
-                        data = remove(data,"imapquota");
-                    }
+		     data["imapquota"] = -1;
 		 }
 		 if (data["what"]:"" == "edit_user")
 		 {

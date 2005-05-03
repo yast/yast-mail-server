@@ -111,8 +111,6 @@ Create the certificate with the YaST2 CA management module.
 			Popup::Error(_("Unable to Authorize the Administrator User"));
 			continue;
 		}
-                string crypted  = Users::CryptPassword(AdminPassword, "system");
-                SCR::Write(.target.passwd.cyrus, crypted);
                 return ret;
 	} else {
             y2error("unexpected retcode: %1", ret);
@@ -431,7 +429,7 @@ void ShowMailTransport(string CID, string ACTION) {
         NewTransport["Transport"]   = (string)UI::QueryWidget(`id(`Protocol), `Value);
         NewTransport["Nexthop"]     = (string)UI::QueryWidget(`id(`Server), `Value);
         // Now we looking for if everything is all right
-        if( !regexpmatch(NewTransport["Destination"]:"","^[0-9a-zA-Z.\*-]*$") || NewTransport["Destination"]:"" == ""){
+        if( !regexpmatch(NewTransport["Destination"]:"","^[\@0-9a-zA-Z.\*-]*$") || NewTransport["Destination"]:"" == ""){
            Report::Error(_("The destination is invalid."));
            continue;
         }
