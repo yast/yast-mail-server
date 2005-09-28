@@ -1648,7 +1648,7 @@ sub ReadFetchingMail {
 				
                        );
 #    my $CronTab                 = SCR->Read('.cron','/etc/crontab',\%FetchingMail);
-    my $FetchingInterval        = SCR->Read('.sysconfig.fetchmail.FETCHMAIL_POLLING_INTERVAL'); 
+    my $FetchingInterval        = SCR->Read('.sysconfig.fetchmail.FETCHMAIL_POLLING_INTERVAL') || 0; 
     $FetchingMail{'FetchingInterval'} = $FetchingInterval / 60;
 
     if(! Service->Enabled('fetchmail')) {
