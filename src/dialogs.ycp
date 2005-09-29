@@ -429,7 +429,7 @@ void ShowMailTransport(string CID, string ACTION) {
         NewTransport["Transport"]   = (string)UI::QueryWidget(`id(`Protocol), `Value);
         NewTransport["Nexthop"]     = (string)UI::QueryWidget(`id(`Server), `Value);
         // Now we looking for if everything is all right
-        if( !regexpmatch(NewTransport["Destination"]:"","^[\@0-9a-zA-Z.\*-]*$") || NewTransport["Destination"]:"" == ""){
+        if( !regexpmatch(NewTransport["Destination"]:"","^[\+\@0-9a-zA-Z.\*-]*$") || NewTransport["Destination"]:"" == ""){
            Report::Error(_("The destination is invalid."));
            continue;
         }

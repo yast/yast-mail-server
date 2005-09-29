@@ -168,7 +168,7 @@ global boolean sasl_installed      = false;
 
 boolean Check_Mail_Domain() {
         map LDAPSettings = Ldap::Export();
-        term ERROR = `RichText(_("There is no main mail domain defined. Please fix it!") +
+        term WarningMsg = `RichText(_("There is no main mail domain defined. Please fix it!") +
 _("<p>Note: You can create and set up the domains with the YaST2 
 DNS server module. In this module, you only can set the properties
 concerning the mail server.
@@ -198,7 +198,7 @@ concerning the mail server.
 
         if(domains == nil || domains == $[])
         {
-                Popup::LongText(Label::ErrorMsg(),ERROR,60,12);
+                Popup::LongText(Label::WarningMsg(),WarningMsg,60,12);
                 return false;
         }
         boolean is_main_domain = false;
@@ -660,7 +660,7 @@ global boolean Write() {
 	   else
 	   {
 	       return false;
-	   }		   
+	   }
        }
     } else {
        if(fetchmail_installed) Service::Disable("fetchmail");

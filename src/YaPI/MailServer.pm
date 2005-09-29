@@ -543,8 +543,8 @@ sub ReadMailTransports {
     if( !$ldap_map ) {
          return undef;
     }
-    my $SaslPaswd = SCR->Read('.mail.postfix.saslpasswd.table');
-    my $MainCf    = SCR->Read('.mail.postfix.main.table');
+    my $SaslPaswd       = SCR->Read('.mail.postfix.saslpasswd.table');
+    my $MainCf          = SCR->Read('.mail.postfix.main.table');
     my $transport_maps  = read_attribute($MainCf,'transport_maps');
     if($transport_maps !~ /ldap:\/etc\/postfix\/ldaptransport_maps.cf/) {
     	$MailTransports{'Use'} = YaST::YCP::Boolean(0);
@@ -705,18 +705,20 @@ sub WriteMailTransports {
 
     # Now let's work
     foreach my $Transport (@{$MailTransports->{'Transports'}}){
-       if( $Transport->{'Destination'} =~ /[^-\w\*\.\@]/ ) {
+       if( $Transport->{'Destination'} =~ /[^-\w\*\.\@\+]/ ) {
 	    return $self->SetError( summary     => 'Wrong Value for Mail Transport Destination. '.
 	                                           'This field may contain only the charaters [-a-zA-Z.*@]',
 				    code        => 'PARAM_CHECK_FAILED'
 				  );
-      }
-       my $dn	= 'suseMailTransportDestination='.$Transport->{'Destination'}.','.$ldap_map->{'mail_config_dn'};
-       $Entries{$dn}->{'suseMailTransportDestination'}   = $Transport->{'Destination'};
+       }
+       my $Destination =  $Transport->{'Destination'};
+          $Destination =~ s#\+#\\+#;
+       my $dn	= 'suseMailTransportDestination='.$Destination.','.$ldap_map->{'mail_config_dn'};
+       $Entries{$dn}->{'suseMailTransportDestination'} = $Transport->{'Destination'};
        if(defined $Transport->{'Transport'} ) {
-          $Entries{$dn}->{'suseMailTransportNexthop'}       = $Transport->{'Transport'}.':'.$Transport->{'Nexthop'};
+          $Entries{$dn}->{'suseMailTransportNexthop'}  = $Transport->{'Transport'}.':'.$Transport->{'Nexthop'};
        } else {
-          $Entries{$dn}->{'suseMailTransportNexthop'}       = $Transport->{'Nexthop'};
+          $Entries{$dn}->{'suseMailTransportNexthop'}  = $Transport->{'Nexthop'};
        }
        if( $Transport->{'Nexthop'} =~ /\[(.*)\]/ ){
             $NeededServers->{$1} = 1;
@@ -728,18 +730,15 @@ sub WriteMailTransports {
 
     #have a look if our table is OK. If not make it to work!
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
-    check_ldap_configuration('transport',$ldap_map);
-    write_attribute($MainCf,'transport_maps','ldap:/etc/postfix/ldaptransport.cf');
-    check_ldap_configuration('tls_per_site',$ldap_map);
-    write_attribute($MainCf,'smtp_tls_per_site','ldap:/etc/postfix/ldapsmtp_tls_per_site.cf');
-    if($MailTransports->{'Use'}){
-        check_ldap_configuration('transport_maps',$ldap_map);
-        write_attribute($MainCf,'transport_maps','ldap:/etc/postfix/ldaptransport_maps.cf');
-    } else {
-    	write_attribute($MainCf,'transport_maps',' ','transport_maps=ldap:/etc/postfix/ldaptransport_maps.cf');
-    }
+    check_ldap_configuration('transport_maps',$ldap_map);
     check_ldap_configuration('smtp_tls_per_site',$ldap_map);
-    write_attribute($MainCf,'smtp_tls_per_site','ldap:/etc/postfix/ldapsmtp_tls_per_site.cf');
+    if( $MailTransports->{Use} ){
+	write_attribute($MainCf,'transport_maps','ldap:/etc/postfix/ldaptransport_maps.cf');
+	write_attribute($MainCf,'smtp_tls_per_site','ldap:/etc/postfix/ldapsmtp_tls_per_site.cf');
+    } else {
+	write_attribute($MainCf,'transport_maps','');
+	write_attribute($MainCf,'smtp_tls_per_site','');
+    }
 
     # If there is no ERROR we do the changes
     # First we clean all the transport lists
@@ -2455,41 +2454,42 @@ sub check_ldap_configuration {
 
     #Now we are looking for if all the needed ldap entries are done
     if(!$LDAPCF->{'server_host'} || $LDAPCF->{'server_host'} ne $ldap_map->{'ldap_server'}) {
-         $LDAPCF->{'server_host'} = $ldap_map->{'ldap_server'};
 	 $changes = 1;
     }
     if(! $LDAPCF->{'server_port'} || $LDAPCF->{'server_port'} ne $ldap_map->{'ldap_port'}) {
-         $LDAPCF->{'server_port'} = $ldap_map->{'ldap_port'};
 	 $changes = 1;
     }
     if(! $LDAPCF->{'bind'}  || $LDAPCF->{'bind'} ne 'no') {
-         $LDAPCF->{'bind'} = 'no';
 	 $changes = 1;
     }
     if(! $LDAPCF->{'timeout'} || $LDAPCF->{'timeout'} !~ /^\d+$/){
-         $LDAPCF->{'timeout'} = '20';
 	 $changes = 1;
     }
     if(! $LDAPCF->{'search_base'} || $LDAPCF->{'search_base'} ne $base{$config}) {
-         $LDAPCF->{'search_base'} = $base{$config}; 
 	 $changes = 1;
     }
     if(! $LDAPCF->{'query_filter'} || $LDAPCF->{'query_filter'} ne $query_filter{$config}) {
-         $LDAPCF->{'query_filter'} = $query_filter{$config}; 
 	 $changes = 1;
     }
     if(! $LDAPCF->{'result_attribute'} || $LDAPCF->{'result_attribute'} ne $result_attribute{$config}) {
-         $LDAPCF->{'result_attribute'} = $result_attribute{$config}; 
 	 $changes = 1;
     }
     if(! $LDAPCF->{'scope'} || $LDAPCF->{'scope'} ne $scope{$config}) {
-         $LDAPCF->{'scope'} = $scope{$config}; 
 	 $changes = 1;
     }
 
     # If we had made changes we have to save it
-    if($changes) {
-       SCR->Write('.mail.ldaptable',[$config,$LDAPCF]);
+    if( $changes ) {
+        $LDAPCF->{'server_host'}      = $ldap_map->{'ldap_server'};
+        $LDAPCF->{'server_port'}      = $ldap_map->{'ldap_port'};
+        $LDAPCF->{'bind'}             = 'no';
+        $LDAPCF->{'timeout'}          = '20';
+        $LDAPCF->{'search_base'}      = $base{$config}; 
+        $LDAPCF->{'query_filter'}     = $query_filter{$config}; 
+        $LDAPCF->{'result_attribute'} = $result_attribute{$config}; 
+        $LDAPCF->{'scope'}            = $scope{$config}; 
+
+	SCR->Write('.mail.ldaptable',[$config,$LDAPCF]);
     }
 
     return $changes;
