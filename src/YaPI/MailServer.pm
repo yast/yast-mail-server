@@ -1520,6 +1520,7 @@ sub WriteMailLocalDelivery {
     if(  $MailLocalDelivery->{'Type'} ne 'none') {
         write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
         write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+        write_attribute($MainCf,'alias_maps','/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf');
     }
     if(  $MailLocalDelivery->{'Type'} eq 'local') {
 	write_attribute($MainCf,'mailbox_command','');
@@ -2292,10 +2293,12 @@ fi';
     write_attribute($MainCf,'content_filter','');
     write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
     write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+    write_attribute($MainCf,'alias_maps','/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf');
     check_ldap_configuration('masquerade_domains',$ldapMap);
     check_ldap_configuration('mydestination',$ldapMap);
     check_ldap_configuration('local_recipient_maps',$ldapMap);
     check_ldap_configuration('virtual_alias_maps',$ldapMap);
+    check_ldap_configuration('alias_maps',$ldapMap);
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
     SCR->Execute(".target.bash", "touch /var/adm/YaST/yast2-mail-server-used");
@@ -2411,16 +2414,18 @@ sub check_ldap_configuration {
                         'smtp_tls_per_site'   => '(&(objectclass=suseMailTransport)(suseMailTransportDestination=%s))',
                         'access'              => '(&(objectclass=suseMailAccess)(suseMailClient=%s))',
                         'local_recipient_maps'=> '(&(objectclass=suseMailRecipient)(|(suseMailAcceptAddress=%s)(uid=%s)))',
+                        'alias_maps'          => '(&(objectclass=suseMailRecipient)(cn=%s))',
                         'mynetworks'          => '(&(objectclass=suseMailMyNetworks)(suseMailClient=%s))',
                         'masquerade_domains'  => '(&(objectclass=suseMailDomain)(zoneName=%s)(suseMailDomainMasquerading=yes))',
                         'mydestination'       => '(&(objectclass=suseMailDomain)(zoneName=%s)(relativeDomainName=@)(!(suseMailDomainType=virtual)))',
-                        'virtual_alias_maps'        => '(&(objectclass=suseMailDomain)(zoneName=%s)(relativeDomainName=@)(suseMailDomainType=virtual))'
+                        'virtual_alias_maps'  => '(&(objectclass=suseMailDomain)(zoneName=%s)(relativeDomainName=@)(suseMailDomainType=virtual))'
                        );
     my %result_attribute = (
                         'transport_maps'      => 'suseMailTransportNexthop',
                         'smtp_tls_per_site'   => 'suseTLSPerSiteMode',
                         'access'              => 'suseMailAction',
                         'local_recipient_maps'=> 'uid',
+                        'alias_maps'          => 'suseMailCommand',
                         'mynetworks'          => 'suseMailClient',
                         'masquerade_domains'  => 'zoneName',
                         'mydestination'       => 'zoneName',
@@ -2431,6 +2436,7 @@ sub check_ldap_configuration {
                         'smtp_tls_per_site'   => 'one',
                         'access'              => 'one',
                         'local_recipient_maps'=> 'one',
+                        'alias_maps'          => 'one',
                         'mynetworks'          => 'one',
                         'masquerade_domains'  => 'sub',
                         'mydestination'       => 'sub',
@@ -2441,6 +2447,7 @@ sub check_ldap_configuration {
                         'smtp_tls_per_site'   => $ldap_map->{'mail_config_dn'},
                         'access'              => $ldap_map->{'mail_config_dn'},
                         'local_recipient_maps'=> $ldap_map->{'user_config_dn'},
+                        'alias_maps'          => $ldap_map->{'group_config_dn'},
                         'mynetworks'          => $ldap_map->{'mail_config_dn'},
                         'masquerade_domains'  => $ldap_map->{'dns_config_dn'},
                         'mydestination'       => $ldap_map->{'dns_config_dn'},
