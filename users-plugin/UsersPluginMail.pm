@@ -114,7 +114,7 @@ sub Name {
 
     my $self		= shift;
     # plugin name
-    return __("LDAP Attributes");
+    return __("User Mail Attributes");
 }
 
 # return plugin summary
