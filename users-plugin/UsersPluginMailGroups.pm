@@ -1,11 +1,10 @@
 #! /usr/bin/perl -w
 #
 # Example of plugin module
-# This is the API part of UsersPluginMail plugin - configuration of
-# all user/group LDAP attributes
+# This is the API part of UsersPluginMailGroups plugin 
 #
 
-package UsersPluginMail;
+package UsersPluginMailGroups;
 
 use strict;
 
@@ -37,7 +36,7 @@ my @required_object_class                =
 # error message, returned when some plugin function fails
 my $error       = "";
 
-my $pluginName = "UsersPluginMailGroup"; 
+my $pluginName = "UsersPluginMailGroups"; 
 
 
 # All functions have 2 "any" parameters: this will probably mean
@@ -99,7 +98,6 @@ BEGIN { $TYPEINFO{InternalAttributes} = ["function",
     "any", "any"];
 }
 sub InternalAttributes {
-#    return [ "localdeliverytype" , "imapquota", "imapquotaused"];
     return [ "localdeliverytype"];
 }
 
@@ -181,33 +179,33 @@ sub Check {
     my @required_attrs        = ();
     my @object_classes        = ();
     if (defined $data->{"objectclass"} && ref ($data->{"objectclass"}) eq "ARRAY") {
-    @object_classes        = @{$data->{"objectclass"}};
+        @object_classes        = @{$data->{"objectclass"}};
     }
 
     # get the attributes required for entry's object classes
     foreach my $class (@object_classes) {
-    my $object_class = SCR->Read (".ldap.schema.oc", {"name"=> $class});
-    if (!defined $object_class || ref ($object_class) ne "HASH" ||
-        ! %{$object_class}) { next; }
-    my $req = $object_class->{"must"};
-    if (defined $req && ref ($req) eq "ARRAY") {
-        foreach my $r (@{$req}) {
-        push @required_attrs, $r;
+        my $object_class = SCR->Read (".ldap.schema.oc", {"name"=> $class});
+        if (!defined $object_class || ref ($object_class) ne "HASH" ||
+            ! %{$object_class}) { next; }
+        my $req = $object_class->{"must"};
+        if (defined $req && ref ($req) eq "ARRAY") {
+            foreach my $r (@{$req}) {
+              push @required_attrs, $r;
+            }
         }
-    }
     }
 
     # check the presence of required attributes
     foreach my $req (@required_attrs) {
-    my $attr    = lc ($req);
-    my $val        = $data->{$attr};
-    if (!defined $val || $val eq "" || 
-        (ref ($val) eq "ARRAY" && 
-        ((@{$val} == 0) || (@{$val} == 1 && $val->[0] eq "")))) {
-        # error popup (user forgot to fill in some attributes)
-        return sprintf (__("The attribute '%s' is required for this object according
-to its LDAP configuration, but it is currently empty."), $attr);
-    }
+        my $attr    = lc ($req);
+        my $val        = $data->{$attr};
+        if (!defined $val || $val eq "" || 
+            (ref ($val) eq "ARRAY" && 
+            ((@{$val} == 0) || (@{$val} == 1 && $val->[0] eq "")))) {
+            # error popup (user forgot to fill in some attributes)
+            return sprintf (__("The attribute '%s' is required for this object according".
+            		   "to its LDAP configuration, but it is currently empty."), $attr);
+        }
     }
     return "";
 }
@@ -247,9 +245,9 @@ sub AddBefore {
     my $ldapret = get_LDAP_Config();
 
     if(@$ldapret <= 0) {
-    $error = __("Run the mail server module first.");
-    y2internal("You have to run the mail-server module, first.");
-    return undef;
+        $error = __("Run the mail server module first.");
+        y2internal("You have to run the mail-server module, first.");
+        return undef;
     }
     #print "AddBefore";
     #print Dumper($data);
@@ -264,9 +262,9 @@ sub AddBefore {
         #setting default quota
         $data->{'imapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     } else {
-    $error = __("Mailserver attributes for group are only avaiable if cyrus-IMAP is the local delivery system.");
-    y2internal("Mailserver attributes for group are only avaiable if cyrus-IMAP is the local delivery system.");
-    return undef;
+        $error = __("Mailserver attributes for group are only avaiable if cyrus-IMAP is the local delivery system.");
+        y2internal("Mailserver attributes for group are only avaiable if cyrus-IMAP is the local delivery system.");
+        return undef;
     }
 
     return $data;
@@ -287,7 +285,7 @@ sub Add {
     return undef if !defined $data;
     return $data if !defined $data->{'cn'} || $data->{'cn'} eq "";
    
-    if( grep /^UsersPluginMail$/, @{$data->{'plugins_to_remove'}} ) {
+    if( grep /^UsersPluginMailGroups$/, @{$data->{'plugins_to_remove'}} ) {
         my @updated_oc;
         foreach my $oc ( @{$data->{'objectclass'}} ) {
             if ( lc($oc) ne "susemailrecipient" ) {
@@ -344,74 +342,44 @@ sub EditBefore {
 BEGIN { $TYPEINFO{Edit} = ["function", ["map", "string", "any"], "any", "any"]; }
 sub Edit {
 
-my $self    = shift;
-my $config    = $_[0];
-my $data    = $_[1]; # the whole map of current user/group after Users::Edit
-
-y2internal ("Edit Mail called");
-y2debug(Dumper($data));
-
-if ( ! $data->{'imapquota'} ) {
-my $tmp_data = cond_IMAP_OP($data, "getquota");
-if( $tmp_data ) {
-    $data = $tmp_data;
-}
-}
-# Has the plugin been removed?
-if( grep /^UsersPluginMail$/, @{$data->{'plugins_to_remove'}} ) {
-my @updated_oc;
-foreach my $oc ( @{$data->{'objectclass'}} ) {
-    if ( lc($oc) ne "susemailrecipient" ) {
-    push @updated_oc, $oc;
-    }
-}
-delete( $data->{'imapquota'});
-delete( $data->{'imapquotaused'});
-
-$data->{'objectclass'} = \@updated_oc;
-
-y2milestone ("Removed Mail plugin");
-y2debug ( Data::Dumper->Dump( [ $data ] ) );
-} else {
-# get default domain name from LDAP
-my $domain = getMainDomain();
-
-if ( !defined $domain || $domain eq "" ){
-    if( $error ne "" ){
-    y2internal($error);
-    y2internal("Disabling: $pluginName");
-    $error = "";
-    }
-
-    # Remove "UserPluginMail" from plugin list
-    my @updated_plugin;
-    foreach my $plugin ( @{$data->{'plugins'}} ) {
-    if ( lc($plugin) ne lc($pluginName) ) {
-        push @updated_plugin, $plugin;
-    }
-    }
-    $data->{'plugins'} = \@updated_plugin;
-
-    # Remove "suseMailReceipient" from objectclasses
-    my @updated_oc;
-    foreach my $oc ( @{$data->{'objectclass'}} ) {
-    if ( lc($oc) ne "susemailrecipient" ) {
-        push @updated_oc, $oc;
-    }
-    }
-    delete( $data->{'imapquota'});
-    delete( $data->{'imapquotaused'});
-    $data->{'objectclass'} = \@updated_oc;
-
-    return $data;
-}
+    my $self    = shift;
+    my $config    = $_[0];
+    my $data    = $_[1]; # the whole map of current user/group after Users::Edit
     
-return $data if !defined $data->{'uid'};
-
-return addRequiredMailData($data);
-}
-
-return $data;
+    y2internal ("Edit Mail called");
+    y2debug(Dumper($data));
+    
+    if ( ! $data->{'imapquota'} ) {
+        my $tmp_data = cond_IMAP_OP($data, "getquota");
+        if( $tmp_data ) {
+            $data = $tmp_data;
+        }
+    }
+    # Has the plugin been removed?
+    if( grep /^UsersPluginMailGroups$/, @{$data->{'plugins_to_remove'}} ) {
+        my @updated_oc;
+        foreach my $oc ( @{$data->{'objectclass'}} ) {
+            if ( lc($oc) ne "susemailrecipient" ) {
+               push @updated_oc, $oc;
+            }
+        }
+        delete( $data->{'imapquota'});
+        delete( $data->{'imapquotaused'});
+        
+        $data->{'objectclass'} = \@updated_oc;
+        
+        y2milestone ("Removed Mail plugin");
+        y2debug ( Data::Dumper->Dump( [ $data ] ) );
+    } else {
+    # get default domain name from LDAP
+    
+        
+    return $data if !defined $data->{'uid'};
+    
+    return addRequiredMailData($data);
+    }
+    
+    return $data;
 }
 
 
@@ -426,7 +394,7 @@ sub WriteBefore {
     y2internal ("WriteBefore Mail called");
     y2debug( Dumper($data) );
 
-    return if $data->{'uid'} eq "" || ! defined $data->{'uid'};
+    return if $data->{'cn'} eq "" || ! defined $data->{'cn'};
 
     # looking for the local delivery type
     my $imapadmpw  = Ldap->bind_pass();
@@ -457,7 +425,7 @@ sub WriteBefore {
     }
     # Has the plugin been removed?
     if ( ($data->{'what'} eq "edit_user" ) && 
-            (grep /^UsersPluginMail$/, @{$data->{'plugins_to_remove'}}) ){
+            (grep /^UsersPluginMailGroups$/, @{$data->{'plugins_to_remove'}}) ){
         cond_IMAP_OP($data, "delete");
         # ignore errors here otherwise it might be possible, that the plugin can't
         # be deleted for the user at all
@@ -542,14 +510,14 @@ sub update_object_classes {
 sub addRequiredMailData {
     my $data   = shift;
     
-    if( ! contains( $data->{objectclass}, "susemailrecipient", 1) ) {
+    if( ! contains( $data->{'objectclass'}, "susemailrecipient", 1) ) {
         push @{$data->{'objectclass'}}, "susemailrecipient";
     }
     
     return undef if !defined $data;
     return $data if !defined $data->{'cn'} || $data->{'cn'} eq "";
     
-    $data->{susemailcommand} = '"|/usr/bin/formail -I \"From \" |/usr/lib/cyrus/bin/deliver -r '.$data->{'cn'}.' -a cyrus -m '.$data->{'cn'}.'"';
+    $data->{'susemailcommand'} = '"|/usr/bin/formail -I \"From \" |/usr/lib/cyrus/bin/deliver -r '.$data->{'cn'}.' -a cyrus -m '.$data->{'cn'}.'"';
 
     return $data;
 }

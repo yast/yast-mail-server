@@ -1,15 +1,18 @@
 /**
  * File:
- *    users_plugin_ldap_all.ycp
+ *    users_plugin_mail_groups.ycp
  *
  * Package:
- *    Configuration of Users
+ *    Configuration of Mail Server + Group
  *
  * Summary:
- *    This is part GUI of UsersPluginMailGroups - plugin for editing all LDAP
- *    user/group attributes.
+ *    This is part GUI of UsersPluginMailGroups - plugin for editing mail server
+ *    group attributes. (Shared folders)
  *
- * $Id: users_plugin_mail.ycp 23264 2005-05-03 11:38:44Z choeger $
+ * Authors:     Peter Varkoly <varkoly@suse.de>
+ *
+ *
+ * $Id$
  */
 
 
@@ -84,13 +87,13 @@
         }
 
         // helptext 1/1
-        string help_text = _("<p>In this dialog You can configure the mail settings of a group.</p>") +
+        string help_text = _("<p>In this dialog You can configure the mail settings of a group.</p>"); 
 
-        term mBox = `Frame ( _("Shared Mailbox"),
+        term mbox = `Frame ( _("Shared Mailbox"),
                       `VBox(
                          `Left(
                            `CheckBox( `id(`enableMailbox ), `opt(`notify),
-                                  _("Enable Shared Mailbox"), enableMailbox
+                                  _("&Enable Shared Mailbox"), enableMailbox
                             )
                           )
                        )
@@ -102,23 +105,20 @@
         {
             intimapquota = tointeger ((string) data["imapquota"]:"10000" );
         }
-
         term imap = `Frame ( _("IMAP Quota"),
                       `VBox(
                         `HBox(
-                          `IntField (`id(`imapquota), _("in kByte"), 1, 10000000,
+                          `IntField (`id(`imapquota), _("in &kByte"), 1, 10000000,
                                   intimapquota >= 0 ? intimapquota : 10000),
                           `HStretch()
-                        ),
-                         `Left(
+                         ),
+                        `Left(
 			   `Label(sformat (_("IMAP quota already in use: %1 kByte"),
                                data["imapquotaused"]:"0" != nil ? data["imapquotaused"]:"0":"0")
 			    )
 			  ),
                          `Left(
-			   `CheckBox( `id(`enableImpapquota ), `opt(`notify), _("Enable IMAP Quota"),
-                               intimapquota >= 0
-                            )
+			   `CheckBox( `id(`enableImpapquota ), `opt(`notify), _("Enable IMAP &Quota"), intimapquota >= 0)
 			  )
                        )
                  );
@@ -127,7 +127,7 @@
 	                  `HSpacing (1.5),
                             `VBox(
                               `VSpacing(0.5),
-			       mBox,
+			       mbox,
                               `VSpacing(0.5),
                                imap
                              ),
@@ -138,8 +138,7 @@
         Wizard::SetDesktopIcon("group");
 
         // dialog caption
-        Wizard::SetContentsButtons(_("Mail Settings"),
-                   contents, help_text, Label::BackButton(), Label::NextButton());
+        Wizard::SetContentsButtons(_("Mail Settings"), contents, help_text, Label::BackButton(), Label::NextButton());
 
         Wizard::HideAbortButton ();
 
@@ -147,115 +146,47 @@
             // UI::SetFocus (`id(`table));
         repeat
         {
-            UI::ChangeWidget (`id (`deleteEmail), `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
-            UI::ChangeWidget (`id (`editEmail), `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
-            UI::ChangeWidget(`id(`imapquota), `Enabled,
-                         ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value)));
-
             ret = UI::UserInput();
-
-            if (ret == `addEmail)
-            {
-            string emailName = (string) UI::QueryWidget(`id(`id_emailname), `Value) + "@" + (string) UI::QueryWidget(`id(`domain), `Value);
-
-            if (size (emailName) > 0)
-            {
-                if (check_mail_address (emailName))
-                {
-                if (contains (data["susemailacceptaddress"]:[], emailName))
-                {
-                Popup::Error(_("Entry already exists."));
-                }
-                else
-                {
-                data["susemailacceptaddress"] = add (data["susemailacceptaddress"]:[],
-                         emailName);
-                UI::ChangeWidget(`id(`table), `Items, getEMAILList ());
-                UI::ChangeWidget(`id(`id_emailname), `Value, "");
-                }
-                }
-                else
-                {
-                Popup::Error(_("Invalid e-mail format."));
-                }
-            }
-            }
-            if (ret == `deleteEmail)
-            {
-            integer id = (integer) UI::QueryWidget (`id (`table), `CurrentItem);
-            data["susemailacceptaddress"] = remove (data["susemailacceptaddress"]:[],
-                        id);
-            UI::ChangeWidget(`id(`table), `Items, getEMAILList ());
-            }
-            if (ret == `editEmail)
-            {
-            integer id = (integer) UI::QueryWidget (`id (`table), `CurrentItem);
-            string oldEMAIL = (string)((list) data["susemailacceptaddress"]:[])[id]:"";
-            string newEMAIL = editEMAIL (oldEMAIL);
-
-            if (contains (data["susemailacceptaddress"]:[], newEMAIL))
-            {
-                Popup::Error(_("Entry already exists."));
-            }
-            else
-            {
-                data["susemailacceptaddress"] = remove (data["susemailacceptaddress"]:[],
-                        id);
-                data["susemailacceptaddress"] = add (data["susemailacceptaddress"]:[],
-                         newEMAIL);
-            }
-            UI::ChangeWidget(`id(`table), `Items, getEMAILList ());
-            }
 
             if ( ret == `next )
             {
-            string err = UsersPluginMailGroups::Check (
-                config,
-                (map<string,any>) union (data, tmp_data));
-
-            if (err != "")
-            {
-                Report::Error (err);
-                ret = `notnext;
-                continue;
-            }
-
-                // if this plugin wasn't in default set, we must save its name
-                 if (!contains (data["plugins"]:[], "UsersPluginMailGroups"))
-             {
-                 data["plugins"] = add (data["plugins"]:[],
-                    "UsersPluginMailGroups");
-             }
-             if( size(data["susemailacceptaddress"]:[]) == 1 ) {
-                 data["susemailacceptaddress"] = ((list)data["susemailacceptaddress"]:[])[0]:"";
-             } else if( size(data["susemailacceptaddress"]:[]) == 0 ) {
-                 remove(data,"susemailacceptaddress");
-             }
-
-             if ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value))
-             {
-                 data["imapquota"] = (integer) UI::QueryWidget(`id(`imapquota), `Value);
-             }
-             else
-             {
-                 data["imapquota"] = -1;
-             }
-             if (data["what"]:"" == "edit_user")
-             {
-                 Users::EditUser (data);
-             }
-             else if (data["what"]:"" == "add_user")
-             {
-                 Users::AddUser (data);
-             }
-             else if (data["what"]:"" == "edit_group")
-             {
-                 Users::EditGroup (data);
-             }
-             else if (data["what"]:"" == "add_group")
-             {
-                 Users::AddGroup (data);
-             }
+                // Mailbox is not neccesary
+                if ( ! (boolean) UI::QueryWidget(`id(`enableMailbox), `Value))
+		{
+		  if (!contains (data["plugins"]:[], "UsersPluginMailGroups"))
+		  {
+                       data["plugins_to_remove"] = add (data["plugins_to_remove"]:[], "UsersPluginMailGroups");
+		  }
+		} else {
+                   string err = UsersPluginMailGroups::Check ( config, (map<string,any>) union (data, tmp_data));
+                   if (err != "")
+                   {
+                       Report::Error (err);
+                       ret = `notnext;
+                       continue;
+                   }
+                   // if this plugin wasn't in default set, we must save its name
+                   if (!contains (data["plugins"]:[], "UsersPluginMailGroups"))
+                   {
+                       data["plugins"] = add (data["plugins"]:[], "UsersPluginMailGroups");
+                   }
+                   if ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value))
+                   {
+                       data["imapquota"] = (integer) UI::QueryWidget(`id(`imapquota), `Value);
+                   }
+                   else
+                   {
+                       data["imapquota"] = -1;
+                   }
+                   if (data["what"]:"" == "edit_group")
+                   {
+                       Users::EditGroup(data);
+                   }
+                   else if (data["what"]:"" == "add_group")
+                   {
+                       Users::AddGroup(data);
+                   }
+               }
             }
         } until (is(ret,symbol) && contains ([`next, `abort, `back, `cancel], (symbol) ret));
 
