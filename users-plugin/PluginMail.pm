@@ -3,7 +3,7 @@
 # Example of plugin module
 # Helper funktions for UsersPluginMail and UsersPluginMailGroups plugins 
 #
-
+require Exporter;
 package PluginMail;
 
 use strict;
@@ -26,13 +26,13 @@ textdomain("MailServer");
 
 YaST::YCP::Import ("SCR");
 
+##--------------------------------------
 # default object classes of LDAP mail group
-my @required_object_class = ( "SuSEMailRecipient");
-
+my @required_object_class  = ( "SuSEMailRecipient");
+    
 ##--------------------------------------
 # error message, returned when some plugin function fails
 my $error       = "";
-
 
 # ----------------- Helper Funktions ----------------------
  
@@ -59,12 +59,12 @@ sub update_object_classes {
     my @orig_object_class    = ();
     if (defined $data->{"objectclass"} && ref $data->{"objectclass"} eq "ARRAY")
     {
-    @orig_object_class    = @{$data->{"objectclass"}};
+        @orig_object_class    = @{$data->{"objectclass"}};
     }
     foreach my $oc (@required_object_class) {
-    if (!contains (\@orig_object_class, $oc, 1)) {
-        push @orig_object_class, $oc;
-    }
+        if (!contains (\@orig_object_class, $oc, 1)) {
+            push @orig_object_class, $oc;
+        }
     }
 
     $data->{"objectclass"}    = \@orig_object_class;
@@ -210,10 +210,10 @@ sub cond_IMAP_OP {
                 #return undef;
             }
         }
-	if( $errtxt ne "" ) {
+    if( $errtxt ne "" ) {
             $error = "add failed: ".$errtxt;
             return undef;
-	}
+    }
     } elsif( $op eq "delete" ) {
        $ret = $imap->delete($cn);
        if($$ret{Status} ne "ok") {
@@ -285,7 +285,7 @@ sub cond_IMAP_OP {
                     }
                 }
             }
-	    if( $errtxt ne "" ) {
+        if( $errtxt ne "" ) {
                 $error = "update failed: ".$errtxt;
                 return undef;
             }
@@ -313,5 +313,13 @@ sub cond_IMAP_OP {
     return $data;
 }
 ##--------------------------------------
+@PluginMail::ISA    = qw(Exporter);
+@PluginMail::EXPORT = qw(
+                         &contains
+			 &update_object_classes
+			 &addRequiredMailData
+			 &get_LDAP_Config
+			 &cond_IMAP_OP
+                        );
 1
 # EOF
