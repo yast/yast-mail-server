@@ -7,6 +7,7 @@ client_DATA =			\
 	users_plugin_mail_groups.ycp
 
 module_DATA =			\
+	PluginMail.pm           \
 	UsersPluginMail.pm      \
 	UsersPluginMailGroups.pm
 
