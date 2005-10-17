@@ -14,7 +14,7 @@ use YaPI;
 
 our %TYPEINFO;
 
-
+use PluginMail;
 use Net::IMAP;
 use Data::Dumper;
 use YaPI::MailServer;
@@ -28,10 +28,6 @@ YaST::YCP::Import ("SCR");
 
 ##--------------------------------------
 ##--------------------- global variables
-
-# default object classes of LDAP mail group
-my @required_object_class                =
-    ( "SuSEMailRecipient");
 
 # error message, returned when some plugin function fails
 my $error       = "";
@@ -467,44 +463,6 @@ sub Write {
         return;
     }
     return 1;
-}
-
-# ----------------- Helper Funktions ----------------------
- 
-sub contains {
-    my ( $list, $key, $ignorecase ) = @_;
-    if ( $ignorecase ) {
-        if ( grep /^$key$/i, @{$list} ) {
-            return 1;
-        }
-    } else {
-        if ( grep /^$key$/, @{$list} ) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-sub update_object_classes {
-
-    my $config    = $_[0];
-    my $data    = $_[1];
-
-    # define the object class for new user/groupa
-    my @orig_object_class    = ();
-    if (defined $data->{"objectclass"} && ref $data->{"objectclass"} eq "ARRAY")
-    {
-    @orig_object_class    = @{$data->{"objectclass"}};
-    }
-    foreach my $oc (@required_object_class) {
-    if (!contains (\@orig_object_class, $oc, 1)) {
-        push @orig_object_class, $oc;
-    }
-    }
-
-    $data->{"objectclass"}    = \@orig_object_class;
-
-    return $data;
 }
 
 sub addRequiredMailData {

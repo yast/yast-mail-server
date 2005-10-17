@@ -12,6 +12,7 @@ use strict;
 use ycp;
 use YaST::YCP;
 use YaPI;
+use PluginMail;
 
 our %TYPEINFO;
 
@@ -232,46 +233,6 @@ sub Disable {
     return $data;
 }
 
-
-sub contains {
-    my ( $list, $key, $ignorecase ) = @_;
-    if ( $ignorecase ) {
-        if ( grep /^$key$/i, @{$list} ) {
-            return 1;
-        }
-    } else {
-        if ( grep /^$key$/, @{$list} ) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-sub update_object_classes {
-
-    my $config	= $_[0];
-    my $data	= $_[1];
-
-    # define the object class for new user/groupa
-    my @orig_object_class	= ();
-    if (defined $data->{"objectclass"} && ref $data->{"objectclass"} eq "ARRAY")
-    {
-	@orig_object_class	= @{$data->{"objectclass"}};
-    }
-    my @ocs			= @user_object_class;
-    if (($config->{"what"} || "") eq "group") {
-	@ocs			= @group_object_class;
-    }
-    foreach my $oc (@ocs) {
-	if (!contains (\@orig_object_class, $oc, 1)) {
-	    push @orig_object_class, $oc;
-	}
-    }
-
-    $data->{"objectclass"}	= \@orig_object_class;
-
-    return $data;
-}
 
 # this will be called at the beggining of Users::Add
 # Could be called multiple times for one user/group!
@@ -544,25 +505,6 @@ sub Edit {
     }
 
     return $data;
-}
-
-sub get_LDAP_Config {
-    my $ldapMap = Ldap->Export();
-    
-    # Read mail specific ldapconfig object
-    my $ldapret = SCR->Read(".ldap.search", {
-	"base_dn"      => $ldapMap->{'base_config_dn'},
-	"filter"       => '(objectclass=suseMailConfiguration)',
-	"scope"        => 2,
-	"not_found_ok" => 1,
-	"attrs"        => [ 'suseImapServer', 'suseImapAdmin', 'suseImapDefaultQuota' ]
-	});
-    if (! defined $ldapret) {
-        my $ldapERR = SCR->Read(".ldap.error");
-	$error = "LDAP read failed: ".$ldapERR->{'code'}." : ".$ldapERR->{'msg'};
-        return undef;
-    }
-    return $ldapret;
 }
 
 sub cond_IMAP_OP {
