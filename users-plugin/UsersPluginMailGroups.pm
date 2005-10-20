@@ -135,9 +135,11 @@ BEGIN { $TYPEINFO{Restriction} = ["function",
 sub Restriction {
 
     my $self    = shift;
-    # this plugin applies only for LDAP users and groups
+    # this plugin applies only for LDAP groups
     return { "ldap"    => 1,
-         "group"    => 1};
+            "group"    => 1,
+	    "user"     => 0
+           };
 }
 
 # checks the current data map of user/group (2nd parameter) and returns
@@ -214,8 +216,8 @@ BEGIN { $TYPEINFO{Disable} = ["function",
 sub Disable {
 
     my $self    = shift;
-    my $config    = $_[0];
-    my $data    = $_[1];
+    my $config  = shift;
+    my $data    = shift;
 
     y2internal ("Disable Mail called");
     return $data;
@@ -231,8 +233,8 @@ BEGIN { $TYPEINFO{AddBefore} = ["function",
 sub AddBefore {
 
     my $self    = shift;
-    my $config    = $_[0];
-    my $data    = $_[1]; # only new data that will be copied to current user map
+    my $config  = shift;
+    my $data    = shift; # only new data that will be copied to current user map
 
     $data    = update_object_classes ($config, $data);
 
@@ -273,8 +275,8 @@ BEGIN { $TYPEINFO{Add} = ["function", ["map", "string", "any"], "any", "any"];}
 sub Add {
 
     my $self    = shift;
-    my $config    = $_[0];
-    my $data    = $_[1]; # the whole map of current user/group after Users::Edit
+    my $config  = shift;
+    my $data    = shift; # the whole map of current user/group after Users::Edit
 
     y2internal ("Add Mail called");
     y2debug(Dumper($data));
@@ -305,8 +307,8 @@ BEGIN { $TYPEINFO{EditBefore} = ["function", ["map", "string", "any"], "any", "a
 sub EditBefore {
 
     my $self    = shift;
-    my $config    = $_[0];
-    my $data    = $_[1]; # only new data that will be copied to current user map
+    my $config  = shift;
+    my $data    = shift; # only new data that will be copied to current user map
     # data of original user/group are saved as a submap of $config
     # data with key "org_data"
     
@@ -339,8 +341,8 @@ BEGIN { $TYPEINFO{Edit} = ["function", ["map", "string", "any"], "any", "any"]; 
 sub Edit {
 
     my $self    = shift;
-    my $config    = $_[0];
-    my $data    = $_[1]; # the whole map of current user/group after Users::Edit
+    my $config  = shift;
+    my $data    = shift; # the whole map of current user/group after Users::Edit
     
     y2internal ("Edit Mail called");
     y2debug(Dumper($data));
@@ -367,12 +369,7 @@ sub Edit {
         y2milestone ("Removed Mail plugin");
         y2debug ( Data::Dumper->Dump( [ $data ] ) );
     } else {
-    # get default domain name from LDAP
-    
-        
-    return $data if !defined $data->{'uid'};
-    
-    return addRequiredMailData($data);
+      return addRequiredMailData($data);
     }
     
     return $data;
@@ -384,8 +381,8 @@ BEGIN { $TYPEINFO{WriteBefore} = ["function", "boolean", "any", "any"];}
 sub WriteBefore {
 
     my $self    = shift;
-    my $config    = $_[0];
-    my $data    = $_[1];
+    my $config  = shift;
+    my $data    = shift;
 
     y2internal ("WriteBefore Mail called");
     y2debug( Dumper($data) );
@@ -398,30 +395,24 @@ sub WriteBefore {
     $data->{'localdeliverytype'} = $MailLocalDelivery->{'Type'};
 
     # this means what was done with a user/group: added/edited/deleted
-    my $action = $config->{"modified"} || "";
-
-    #y2internal(Dumper($config));
-    #y2internal("ACTION=$action\n");
-    
     my $ldapret = get_LDAP_Config();
 
     if(@$ldapret <= 0) {
-    $error = __("Run the mail server module first.");
-    y2internal("You have to run the mail-server module, first.");
-    return undef;
+        $error = __("Run the mail server module first.");
+        y2internal("You have to run the mail-server module, first.");
+        return undef;
     }
 
     # is the user being deleted?
-    if ( ($data->{'what'} eq "delete_user" ) && $self->PluginPresent($config, $data) ){
-        cond_IMAP_OP($data, "delete") if $action eq "deleted";
+    if ( ($config->{'modified'} eq "deleted" ) && $self->PluginPresent($config, $data) ){
+        cond_IMAP_OP($data, "delete") ;
         # ignore errors here otherwise it might be possible, that a user can't
         # be deleted at all
         $error = "";
         return 1;
     }
     # Has the plugin been removed?
-    if ( ($data->{'what'} eq "edit_user" ) && 
-            (grep /^UsersPluginMailGroups$/, @{$data->{'plugins_to_remove'}}) ){
+    if ( grep /^UsersPluginMailGroups$/, @{$data->{'plugins_to_remove'}}) {
         cond_IMAP_OP($data, "delete");
         # ignore errors here otherwise it might be possible, that the plugin can't
         # be deleted for the user at all
@@ -429,15 +420,15 @@ sub WriteBefore {
         return 1;
     }
 
-    if ( ($data->{'what'} eq "edit_user" ) && $self->PluginPresent($config, $data) ) {
+    if ( ($config->{'modified'} eq "edited" ) && $self->PluginPresent($config, $data) ) {
         # create Folder if plugin has been added
         if ( ! grep /^suseMailRecipient$/i, @{$data->{'org_user'}->{'objectclass'}} ) {
             y2milestone("creating INBOX");
-            cond_IMAP_OP($data, "add") if $action eq "edited";
+            cond_IMAP_OP($data, "add","group");
             return;
         } else {
             y2milestone("updating INBOX");
-            cond_IMAP_OP($data, "update") if $action eq "edited";
+            cond_IMAP_OP($data, "update","group");
             return;
         }
     }
@@ -450,261 +441,21 @@ BEGIN { $TYPEINFO{Write} = ["function", "boolean", "any", "any"];}
 sub Write {
 
     my $self    = shift;
-    my $config    = $_[0];
-    my $data    = $_[1];
+    my $config  = shift;
+    my $data    = shift;
 
     # this means what was done with a user: added/edited/deleted
     my $action = $config->{"modified"} || "";
-    y2internal ("Write Mail called");
+    y2internal ("Write Group Mail called");
     y2debug( Dumper($data) );
-    if ( ($data->{'what'} eq "add_user" ) && $self->PluginPresent($config, $data) ) {
+    if ( $config->{'modified'} eq "added" && $self->PluginPresent($config, $data) ) {
         # create Folder if plugin has been added
-        cond_IMAP_OP($data, "add") if $action eq "added";
+        cond_IMAP_OP($data, "add","group");
         return;
     }
     return 1;
 }
 
-sub addRequiredMailData {
-    my $data   = shift;
-    
-    if( ! contains( $data->{'objectclass'}, "susemailrecipient", 1) ) {
-        push @{$data->{'objectclass'}}, "susemailrecipient";
-    }
-    
-    return undef if !defined $data;
-    return $data if !defined $data->{'cn'} || $data->{'cn'} eq "";
-    
-    $data->{'susemailcommand'} = '"|/usr/bin/formail -I \"From \" |/usr/lib/cyrus/bin/deliver -r '.$data->{'cn'}.' -a cyrus -m '.$data->{'cn'}.'"';
-
-    return $data;
-}
-
-sub get_LDAP_Config {
-    my $ldapMap = Ldap->Export();
-    
-    # Read mail specific ldapconfig object
-    my $ldapret = SCR->Read(".ldap.search", {
-                 "base_dn"      => $ldapMap->{'base_config_dn'},
-                 "filter"       => '(objectclass=suseMailConfiguration)',
-                 "scope"        => 2,
-                 "not_found_ok" => 1,
-                 "attrs"        => [ 'suseImapServer', 'suseImapAdmin', 'suseImapDefaultQuota' ]
-            });
-    if (! defined $ldapret) {
-    my $ldapERR = SCR->Read(".ldap.error");
-    $error = "LDAP read failed: ".$ldapERR->{'code'}." : ".$ldapERR->{'msg'};
-    return undef;
-    }
-    return $ldapret;
-}
-
-sub cond_IMAP_OP {
-    my $data   = shift;
-    my $op     = shift || "add";
-    my $errtxt = "";
-    my $imapadm;
-    my $imaphost;
-    my $imapquota;
-    
-    my $cn = $data->{'cn'};
-    if(!defined $data->{'localdeliverytype'} || $data->{'localdeliverytype'} ne 'cyrus') {
-        return $data
-    }
-    my $ldapret = get_LDAP_Config();
-    
-    if(@$ldapret > 0) {
-        $imapadm    = $ldapret->[0]->{'suseimapadmin'}->[0];
-        $imaphost   = $ldapret->[0]->{'suseimapserver'}->[0];
-        #$imapquota  = $ldapret->[0]->{'suseimapdefaultquota'}->[0];
-    } else {
-        $imapadm    = "cyrus";
-        $imaphost   = "localhost";
-        #$imapquota  = 10000;
-    }
-    
-    if ( $data->{'imapquota'} ) {
-        $imapquota = $data->{'imapquota'};
-    }
-    
-    # FIXME: we need to ensure, that imapadmpw == rootdnpw!
-    my $imapadmpw  = Ldap->bind_pass();
-    
-    
-    my $imap = new Net::IMAP($imaphost, Debug => 0);
-    unless ($imap) {
-        y2internal("can't connect to $imaphost: $!\n");
-        $error = "can't connect to $imaphost: $!";
-        return undef;
-    }
-    
-    my $cpb;
-    my $capaf = sub {
-        my $self = shift;
-        my $resp = shift;
-        $cpb = $resp->{Capabilities};
-    };
-    
-    $imap->set_untagged_callback('capability', $capaf);
-    
-    my $ret = $imap->capability();
-    if($$ret{Status} ne "ok") {
-        y2internal("capability failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-        $error = "capability failed: Serverresponse:$$ret{Status} => $$ret{Text}";
-        return undef;
-    }
-    
-    if( ( ! $cpb->{QUOTA} ) || ( ! $cpb->{NAMESPACE} ) || ( ! $cpb->{ACL} ) ) {
-        $error = "IMAP server <$imaphost> does not support one or all of the IMAP extensions QUOTA, NAMESPACE or ACL";
-        return undef;
-    }
-    
-    $ret = $imap->login($imapadm, $imapadmpw);
-    if($$ret{Status} ne "ok") {
-        y2internal("login failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-        $error = "login failed: Serverresponse:$$ret{Status} => $$ret{Text}";
-        return undef;
-    }
-   
-    if( $op eq "add" ) {
-        $ret = $imap->create($cn);
-        if($$ret{Status} ne "ok" && $$ret{Text} !~ /Mailbox already exists/) {
-            y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
-        }
-        
-        $ret = $imap->setacl($cn, $imapadm, "lrswipcda");
-        if($$ret{Status} ne "ok") {
-            y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
-        }
-        
-        $ret = $imap->setacl($cn, "group:$cn", "lrswipcda");
-        if($$ret{Status} ne "ok") {
-            y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
-        }
-
-        $ret = $imap->deleteacl($cn, "anyone");
-        if($$ret{Status} ne "ok") {
-            y2internal("deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
-        }
-        
-        if( $imapquota ) {
-            $ret = $imap->setquota($cn, ("STORAGE", $imapquota ) );
-            if($$ret{Status} ne "ok") {
-                y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                $errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                #return undef;
-            }
-        }
-	if( $errtxt ne "" ) {
-            $error = "add failed: ".$errtxt;
-            return undef;
-	}
-    } elsif( $op eq "delete" ) {
-       $ret = $imap->delete($cn);
-       if($$ret{Status} ne "ok") {
-           y2internal("delete failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-           $error = "delete failed: Serverresponse:$$ret{Status} => $$ret{Text}";
-           return undef;
-       }
-    } elsif( $op eq "update" ) {
-        my @__folder = ();
-        # check if user's INBOX exists
-        my $listcb = sub {
-            my $self = shift;
-            my $resp = shift;
-            push @__folder, $resp->mailbox;
-        };
-        $imap->set_untagged_callback('list', $listcb);
-        
-        $ret = $imap->list("", $cn);
-        
-        if ($$ret{Status} ne "ok")  {
-            y2internal("list failed: Serverresponse:$$ret{Status} => $$ret{Text}");
-            $error = "list failed: Serverresponse:$$ret{Status} => $$ret{Text}";
-            return undef;
-        } else {
-            if( scalar(@__folder) == 0  ) {
-                # Mailbox doesn't exist -> recreate it
-                y2milestone("recreating Mailbox $cn");
-                my $errtxt = "";
-                $ret = $imap->create($cn);
-                if($$ret{Status} ne "ok") {
-                    y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                
-                $ret = $imap->setacl($cn, $imapadm, "lrswipcda");
-                if($$ret{Status} ne "ok") {
-                    y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                $ret = $imap->setacl($cn, "group:$cn", "lrswipcda");
-                if($$ret{Status} ne "ok") {
-                    y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                
-                $ret = $imap->deleteacl($cn, "anyone");
-                if($$ret{Status} ne "ok") {
-                    y2internal("deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                
-                if( $imapquota && $data->{'imapquota'} > 0 ) {
-                    $ret = $imap->setquota($cn, ("STORAGE", $imapquota ) );
-                    if($$ret{Status} ne "ok") {
-                        y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                        $errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                        #return undef;
-                    }
-                } else {
-                    $ret = $imap->setquota($cn, () );
-                    if($$ret{Status} ne "ok") {
-                        y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                        $errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                        #return undef;
-                    }
-                }
-            }
-	    if( $errtxt ne "" ) {
-                $error = "update failed: ".$errtxt;
-                return undef;
-            }
-        }
-    } elsif( $op eq "getquota" ) {
-        my $q_val;
-        my $q_used;
-        my $qf = sub {
-            my $self = shift;
-            my $resp = shift;
-            
-            $data->{'imapquota'} = $resp->limit("STORAGE");
-            $data->{'imapquotaused'} = $resp->usage("STORAGE");
-        };
-    
-        $imap->set_untagged_callback('quota', $qf);
-    
-        $ret = $imap->getquotaroot($cn);
-        if($$ret{Status} ne "ok") {
-            y2internal("getquotaroot failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-        }
-    }
-    
-    $imap->logout();
-    return $data;
-}
 ##--------------------------------------
 1
 # EOF

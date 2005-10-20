@@ -157,7 +157,7 @@ sub Restriction {
 BEGIN { $TYPEINFO{PluginPresent} = ["function", "boolean", "any", "any"];}
 sub PluginPresent {
     my $self	= shift;
-    my $config    = shift;
+    my $config  = shift;
     my $data    = shift;
     if ( grep /^suseMailRecipient$/i, @{$data->{'objectclass'}} ) {
         y2milestone( "MailPlugin: Plugin Present");
@@ -180,8 +180,8 @@ BEGIN { $TYPEINFO{Check} = ["function",
 sub Check {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1];
+    my $config	= shift;
+    my $data	= shift;
     
     # attribute conversion
     my @required_attrs		= ();
@@ -226,8 +226,8 @@ BEGIN { $TYPEINFO{Disable} = ["function",
 sub Disable {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1];
+    my $config	= shift;
+    my $data	= shift;
 
     y2internal ("Disable Mail called");
     return $data;
@@ -243,8 +243,8 @@ BEGIN { $TYPEINFO{AddBefore} = ["function",
 sub AddBefore {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1]; # only new data that will be copied to current user map
+    my $config	= shift;
+    my $data	= shift; # only new data that will be copied to current user map
 
     $data	= update_object_classes ($config, $data);
 
@@ -330,8 +330,8 @@ BEGIN { $TYPEINFO{Add} = ["function", ["map", "string", "any"], "any", "any"];}
 sub Add {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1]; # the whole map of current user/group after Users::Edit
+    my $config	= shift;
+    my $data	= shift; # the whole map of current user/group after Users::Edit
 
     y2internal ("Add Mail called");
     y2debug(Dumper($data));
@@ -401,8 +401,8 @@ BEGIN { $TYPEINFO{EditBefore} = ["function",
 sub EditBefore {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1]; # only new data that will be copied to current user map
+    my $config	= shift;
+    my $data	= shift; # only new data that will be copied to current user map
     # data of original user/group are saved as a submap of $config
     # data with key "org_data"
 
@@ -438,8 +438,8 @@ BEGIN { $TYPEINFO{Edit} = ["function",
 sub Edit {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1]; # the whole map of current user/group after Users::Edit
+    my $config	= shift;
+    my $data	= shift; # the whole map of current user/group after Users::Edit
 
     y2internal ("Edit Mail called");
     y2debug(Dumper($data));
@@ -832,8 +832,8 @@ BEGIN { $TYPEINFO{WriteBefore} = ["function", "boolean", "any", "any"];}
 sub WriteBefore {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1];
+    my $config	= shift;
+    my $data	= shift;
 
     y2internal ("WriteBefore Mail called");
     y2debug( Dumper($data) );
@@ -860,32 +860,29 @@ sub WriteBefore {
     }
 
     # is the user being deleted?
-    if ( ($data->{'what'} eq "delete_user" ) && $self->PluginPresent($config, $data) ){
-        cond_IMAP_OP($data, "delete") if $action eq "deleted";
-        # ignore errors here otherwise it might be possible, that a user can't
-        # be deleted at all
+    if ( $action eq "deleted" && $self->PluginPresent($config, $data) ){
+        cond_IMAP_OP($data, "delete","user");
         $error = "";
         return 1;
     }
     # Has the plugin been removed?
-    if ( ($data->{'what'} eq "edit_user" ) && 
-            (grep /^UsersPluginMail$/, @{$data->{'plugins_to_remove'}}) ){
-        cond_IMAP_OP($data, "delete");
+    if ( (grep /^UsersPluginMail$/, @{$data->{'plugins_to_remove'}}) ){
+        cond_IMAP_OP($data, "delete","user");
         # ignore errors here otherwise it might be possible, that the plugin can't
         # be deleted for the user at all
         $error = "";
         return 1;
     }
 
-    if ( ($data->{'what'} eq "edit_user" ) && $self->PluginPresent($config, $data) ) {
+    if ( ($action eq "added" || $action eq "edited") && $self->PluginPresent($config, $data) ) {
         # create Folder if plugin has been added
         if ( ! grep /^suseMailRecipient$/i, @{$data->{'org_user'}->{'objectclass'}} ) {
             y2milestone("creating INBOX");
-            cond_IMAP_OP($data, "add") if $action eq "edited";
+            cond_IMAP_OP($data, "add","user") if $action eq "edited";
             return;
         } else {
             y2milestone("updating INBOX");
-            cond_IMAP_OP($data, "update") if $action eq "edited";
+            cond_IMAP_OP($data, "update","user") if $action eq "edited";
             return;
         }
     }
@@ -898,16 +895,16 @@ BEGIN { $TYPEINFO{Write} = ["function", "boolean", "any", "any"];}
 sub Write {
 
     my $self	= shift;
-    my $config	= $_[0];
-    my $data	= $_[1];
+    my $config	= shift;
+    my $data	= shift;
 
     # this means what was done with a user: added/edited/deleted
     my $action = $config->{"modified"} || "";
     y2internal ("Write Mail called");
     y2debug( Dumper($data) );
-    if ( ($data->{'what'} eq "add_user" ) && $self->PluginPresent($config, $data) ) {
+    if ($self->PluginPresent($config, $data) ) {
         # create Folder if plugin has been added
-        cond_IMAP_OP($data, "add") if $action eq "added";
+        cond_IMAP_OP($data, "add","user") if $action eq "added";
 	return;
     }
     return 1;
