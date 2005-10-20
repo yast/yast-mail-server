@@ -109,12 +109,13 @@ sub get_LDAP_Config {
 sub cond_IMAP_OP {
     my $data   = shift;
     my $op     = shift || "add";
+    my $what   = shift || "user";
     my $errtxt = "";
     my $imapadm;
     my $imaphost;
-    my $imapquota;
-    
-    my $cn = $data->{'cn'};
+    my $uid    = $what eq "user"  ? $data->{'uid'} : ""; 
+    my $fname  = $what eq "group" ? $data->{'cn'}  : "";
+
     if(!defined $data->{'localdeliverytype'} || $data->{'localdeliverytype'} ne 'cyrus') {
         return $data
     }
@@ -130,13 +131,8 @@ sub cond_IMAP_OP {
         #$imapquota  = 10000;
     }
     
-    if ( $data->{'imapquota'} ) {
-        $imapquota = $data->{'imapquota'};
-    }
-    
     # FIXME: we need to ensure, that imapadmpw == rootdnpw!
     my $imapadmpw  = Ldap->bind_pass();
-    
     
     my $imap = new Net::IMAP($imaphost, Debug => 0);
     unless ($imap) {
@@ -145,6 +141,7 @@ sub cond_IMAP_OP {
         return undef;
     }
     
+     
     my $cpb;
     my $capaf = sub {
         my $self = shift;
@@ -172,50 +169,41 @@ sub cond_IMAP_OP {
         $error = "login failed: Serverresponse:$$ret{Status} => $$ret{Text}";
         return undef;
     }
-   
-    if( $op eq "add" ) {
-        $ret = $imap->create($cn);
-        if($$ret{Status} ne "ok" && $$ret{Text} !~ /Mailbox already exists/) {
-            y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
+  
+    # What is the mailbox (folder) 
+    if( $what eq 'user' ) {
+        my $namespace;
+        my $nscb = sub {
+            my $self = shift;
+            $namespace = shift;
+        };
+        
+        $imap->set_untagged_callback('namespace', $nscb);
+        
+        $ret = $imap->namespace();
+        if($$ret{Status} ne "ok") {
+            y2internal("namespace failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+            $error = "namespace failed: Serverresponse:$$ret{Status} => $$ret{Text}";
+            return undef;
         }
         
-        $ret = $imap->setacl($cn, $imapadm, "lrswipcda");
-        if($$ret{Status} ne "ok") {
-            y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
-        }
+        my @users_ns = $namespace->other_users();
         
-        $ret = $imap->setacl($cn, "group:$cn", "lrswipcda");
-        if($$ret{Status} ne "ok") {
-            y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
-        }
+        # UGLY: Access the Namespace-Structure directly, as the access method lowercase the values
+        my $hsep = $namespace->{'Namespaces'}->{'other_users'}->{$users_ns[0]};
+        $fname = "user".$hsep.$uid;
+    }
 
-        $ret = $imap->deleteacl($cn, "anyone");
-        if($$ret{Status} ne "ok") {
-            y2internal("deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-            $errtxt .= "deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-            #return undef;
-        }
-        
-        if( $imapquota ) {
-            $ret = $imap->setquota($cn, ("STORAGE", $imapquota ) );
-            if($$ret{Status} ne "ok") {
-                y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                $errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                #return undef;
-            }
-        }
-    if( $errtxt ne "" ) {
+    if( $op eq "add" ) {
+	$errtxt = create_mbox($imap,$fname,$what,$data);
+        if( $errtxt ne "" ) {
             $error = "add failed: ".$errtxt;
             return undef;
-    }
+        } elsif(  $what eq "user" ) {
+           $errtxt .= subscribe_mbox($imaphost,$uid,$imapadm,$imapadmpw);
+        }
     } elsif( $op eq "delete" ) {
-       $ret = $imap->delete($cn);
+       $ret = $imap->delete($fname);
        if($$ret{Status} ne "ok") {
            y2internal("delete failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
            $error = "delete failed: Serverresponse:$$ret{Status} => $$ret{Text}";
@@ -231,7 +219,7 @@ sub cond_IMAP_OP {
         };
         $imap->set_untagged_callback('list', $listcb);
         
-        $ret = $imap->list("", $cn);
+        $ret = $imap->list("", $fname);
         
         if ($$ret{Status} ne "ok")  {
             y2internal("list failed: Serverresponse:$$ret{Status} => $$ret{Text}");
@@ -239,55 +227,13 @@ sub cond_IMAP_OP {
             return undef;
         } else {
             if( scalar(@__folder) == 0  ) {
-                # Mailbox doesn't exist -> recreate it
-                y2milestone("recreating Mailbox $cn");
-                my $errtxt = "";
-                $ret = $imap->create($cn);
-                if($$ret{Status} ne "ok") {
-                    y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                
-                $ret = $imap->setacl($cn, $imapadm, "lrswipcda");
-                if($$ret{Status} ne "ok") {
-                    y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                $ret = $imap->setacl($cn, "group:$cn", "lrswipcda");
-                if($$ret{Status} ne "ok") {
-                    y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                
-                $ret = $imap->deleteacl($cn, "anyone");
-                if($$ret{Status} ne "ok") {
-                    y2internal("deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                    $errtxt .= "deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                    #return undef;
-                }
-                
-                if( $imapquota && $data->{'imapquota'} > 0 ) {
-                    $ret = $imap->setquota($cn, ("STORAGE", $imapquota ) );
-                    if($$ret{Status} ne "ok") {
-                        y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                        $errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                        #return undef;
-                    }
-                } else {
-                    $ret = $imap->setquota($cn, () );
-                    if($$ret{Status} ne "ok") {
-                        y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                        $errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                        #return undef;
-                    }
-                }
+		$errtxt = create_mbox($imap,$fname,$what,$data);
             }
-        if( $errtxt ne "" ) {
+            if( $errtxt ne "" ) {
                 $error = "update failed: ".$errtxt;
                 return undef;
+            } elsif(  $what eq "user" ) {
+                $errtxt .= subscribe_mbox($imaphost,$uid,$imapadm,$imapadmpw);
             }
         }
     } elsif( $op eq "getquota" ) {
@@ -303,7 +249,7 @@ sub cond_IMAP_OP {
     
         $imap->set_untagged_callback('quota', $qf);
     
-        $ret = $imap->getquotaroot($cn);
+        $ret = $imap->getquotaroot($fname);
         if($$ret{Status} ne "ok") {
             y2internal("getquotaroot failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
         }
@@ -312,6 +258,86 @@ sub cond_IMAP_OP {
     $imap->logout();
     return $data;
 }
+
+sub create_mbox {
+    my $imap  = shift; 
+    my $fname = shift; 
+    my $what  = shift;
+    my $data  = shift;
+    
+    my $ret = $imap->create($fname);
+    if($$ret{Status} ne "ok" && $$ret{Text} !~ /Mailbox already exists/) {
+        y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+        $errtxt .= "create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+        #return undef;
+    }
+    
+    $ret = $imap->setacl($fname, $imapadm, "lrswipcda");
+    if($$ret{Status} ne "ok") {
+        y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+        $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+        #return undef;
+    }
+    if( $what eq "group" ) {       
+        $ret = $imap->setacl($fname, "group:$fname", "lrswipcda");
+        if($$ret{Status} ne "ok") {
+            y2internal("setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+            $errtxt .= "setacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+            #return undef;
+        }
+    }
+    
+    $ret = $imap->deleteacl($fname, "anyone");
+    if($$ret{Status} ne "ok") {
+        y2internal("deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+        $errtxt .= "deleteacl failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+        #return undef;
+    }
+    
+    if( $data->{'imapquota'} ) {
+        $ret = $imap->setquota($fname, ("STORAGE", $data->{'imapquota'} ) );
+        if($$ret{Status} ne "ok") {
+            y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+            $errtxt .= "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+            #return undef;
+        }
+    }
+    return $errtxt;   
+}
+
+sub subscribe_mbox {
+    my $imaphost   = shift;
+    my $uid        = shift;
+    my $imapadm    = shift;
+    my $imapadmpw  = shift;
+    
+    my $errtxt     = "";
+    my $proxy_imap = new Net::IMAP($imaphost, Debug => 0);
+    unless ($proxy_imap) {
+        y2internal("can't connect to $imaphost: $!\n");
+        $errtxt .= "can't connect to $imaphost: $!";
+        return undef;
+    }
+    my $ret = $proxy_imap->authenticate("PLAIN", ( $uid, $imapadm, $imapadmpw));
+    if ( ! $ret ) {
+        y2internal("Authentication failed. Mechanism \"PLAIN\" not available\n");
+        $errtxt .= "Authentication failed. Mechanism \"PLAIN\" not available\n";
+        return undef;
+    } elsif ( $$ret{Status} ne "ok" ) {
+        y2internal("authenticate failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+        $errtxt .= "authenticate failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+        return undef;
+    }
+    $ret = $proxy_imap->subscribe( 'INBOX' );
+    if ( $$ret{Status} ne "ok" ) {
+        y2internal("subscribe failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+        $errtxt .= "subscribe failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+        return undef;
+    }
+    $proxy_imap->logout();
+    return $errtxt;
+}
+
 ##--------------------------------------
 @PluginMail::ISA    = qw(Exporter);
 @PluginMail::EXPORT = qw(
