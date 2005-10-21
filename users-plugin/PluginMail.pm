@@ -195,7 +195,7 @@ sub cond_IMAP_OP {
     }
 
     if( $op eq "add" ) {
-	$errtxt = create_mbox($imap,$fname,$what,$data);
+	$errtxt = create_mbox($imap,$fname,$imapadm,$what,$data);
         if( $errtxt ne "" ) {
             $error = "add failed: ".$errtxt;
             return undef;
@@ -260,11 +260,14 @@ sub cond_IMAP_OP {
 }
 
 sub create_mbox {
-    my $imap  = shift; 
-    my $fname = shift; 
-    my $what  = shift;
-    my $data  = shift;
-    
+    my $imap    = shift; 
+    my $fname   = shift; 
+    my $imapadm = shift;
+    my $what    = shift;
+    my $data    = shift;
+   
+    my $errtxt;
+ 
     my $ret = $imap->create($fname);
     if($$ret{Status} ne "ok" && $$ret{Text} !~ /Mailbox already exists/) {
         y2internal("create failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
