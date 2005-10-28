@@ -165,6 +165,7 @@
     }
     y2milestone("----------------------------------------");
     y2milestone("users plugin started: Mail");
+    y2milestone("config=%1", config);
 
     y2debug ("func=%1", func);
     y2debug ("config=%1", config);
@@ -294,8 +295,9 @@
 	{
             UI::ChangeWidget (`id (`deleteEmail), `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
             UI::ChangeWidget (`id (`editEmail), `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
-	    UI::ChangeWidget(`id(`imapquota), `Enabled,
-                             ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value)));
+            if(data["localdeliverytype"]:"local" == "cyrus" ) {
+               UI::ChangeWidget(`id(`imapquota), `Enabled, ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value)));
+            }
 
 	    ret = UI::UserInput();
 
@@ -377,13 +379,15 @@
 		     remove(data,"susemailacceptaddress");
 		 }
 
-		 if ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value))
-		 {
-		     data["imapquota"] = (integer) UI::QueryWidget(`id(`imapquota), `Value);
-		 }
-		 else
-		 {
-		     data["imapquota"] = -1;
+                 if(data["localdeliverytype"]:"local" == "cyrus" ) {
+		    if ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value))
+		    {
+		       data["imapquota"] = (integer) UI::QueryWidget(`id(`imapquota), `Value);
+		    }
+		    else
+		    {
+		       data["imapquota"] = -1;
+		    }
 		 }
 		 if (data["what"]:"" == "edit_user")
 		 {
