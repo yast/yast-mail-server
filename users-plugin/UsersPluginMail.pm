@@ -101,7 +101,7 @@ sub Error {
 # this will be called at the beggining of Users::Edit
 BEGIN { $TYPEINFO{InternalAttributes} = ["function", ["map", "string", "any"], "any", "any"]; }
 sub InternalAttributes {
-    return [ "localdeliverytype", "mainmaildomain" ];
+    return [ "localdeliverytype", "mainmaildomain", "imapquota", "imapquotaused" ];
 }
 
 # return plugin name, used for GUI (translated)
@@ -431,7 +431,7 @@ sub WriteBefore {
     }
 
     # is the user being deleted?
-    if ( ($data->{'what'} =~ /elete_/ ) && $self->PluginPresent($config, $data) ){
+    if ( ($data->{'what'} =~ /delete_/ ) && $self->PluginPresent($config, $data) ){
         cond_IMAP_OP($config, $data, "delete") if $action eq "deleted";
         # ignore errors here otherwise it might be possible, that a user can't
         # be deleted at all
@@ -448,6 +448,18 @@ sub WriteBefore {
         return 1;
     }
 
+    # Now the plugin stands or will be added
+    # for the groups we hate to make some others
+    if( $config->{'what'} eq 'group' ) {
+      if($data->{'susedeliverytomember'} eq 'yes') {
+	$data->{'memberuid'} = [];
+        foreach my $member (keys %{$data->{'member'}}){
+          $member =~ /uid=(.*?),/; 
+          push @{$data->{'memberuid'}},$1;
+        }
+      }
+    }
+y2internal(Dumper($data));
     if ( ($data->{'what'} =~ /^edit_/ ) && $self->PluginPresent($config, $data) ) {
         # create Folder if plugin has been added
         if ( ! grep /^suseMailRecipient$/i, @{$data->{'org_user'}->{'objectclass'}} ) {
@@ -481,6 +493,7 @@ sub Write {
         cond_IMAP_OP($config, $data, "add") if $action eq "added";
 	return;
     }
+
     return 1;
 }
 
@@ -624,7 +637,7 @@ sub getMainDomain {
     } else {
         $domain = $ret->[0]->{'zonename'}->[0];
     }
-    $data->{'mailmaindomain'} = $domain;
+    $data->{'mainmaildomain'} = $domain;
 
     return $data;
 }
@@ -638,19 +651,16 @@ sub cond_IMAP_OP {
     if(!defined $data->{'localdeliverytype'} || $data->{'localdeliverytype'} ne 'cyrus') {
 	return $data
     }
+    my $imapadm    = "cyrus";
+    my $imaphost   = "localhost";
+    my $imapquota  = "-1";
+
     my $ldapret = get_LDAP_Config();
 
-    my $imapadm;
-    my $imaphost;
-    my $imapquota;
     if(@$ldapret > 0) {
 	$imapadm    = $ldapret->[0]->{'suseimapadmin'}->[0];
 	$imaphost   = $ldapret->[0]->{'suseimapserver'}->[0];
 	#$imapquota  = $ldapret->[0]->{'suseimapdefaultquota'}->[0];
-    } else {
-	$imapadm    = "cyrus";
-	$imaphost   = "localhost";
-	#$imapquota  = 10000;
     }
     
     if ( $data->{'imapquota'} ) {
@@ -762,7 +772,7 @@ sub cond_IMAP_OP {
                 #return undef;
             }
         }
-	if( $imapquota ) {
+	if( $imapquota > -1 ) {
 	    $ret = $imap->setquota($fname, ("STORAGE", $imapquota ) );
 	    if($$ret{Status} ne "ok") {
 		y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");

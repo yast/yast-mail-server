@@ -4,6 +4,7 @@ SUBDIRS = YaPI
 
 yncludedir = @yncludedir@/mail-server
 schemadir  = /etc/openldap/schema
+permissionsdir  = /etc/permissions.d
 
 client_DATA =			\
 	mail-server.ycp		\
@@ -28,6 +29,9 @@ module_DATA =			\
 
 schema_DATA = suse-mailserver.schema
 
-EXTRA_DIST = $(client_DATA) $(ynclude_DATA) $(module_DATA) $(desktop_DATA) $(schema_DATA)
+permissions_DATA = mail-server.perm
+
+EXTRA_DIST = $(client_DATA) $(ynclude_DATA) $(module_DATA) $(desktop_DATA) \
+	     $(schema_DATA) $(permissions_DATA)
 
 include $(top_srcdir)/Makefile.am.common
