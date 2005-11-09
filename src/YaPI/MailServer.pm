@@ -539,8 +539,8 @@ sub ReadMailTransports {
     my %NeededServers  = ();
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
     my $SaslPaswd       = SCR->Read('.mail.postfix.saslpasswd.table');
@@ -551,7 +551,7 @@ sub ReadMailTransports {
     }
 
     my %SearchMap       = (
-                               'base_dn'    => $ldap_map->{'mail_config_dn'},
+                               'base_dn'    => $ldapMap->{'mail_config_dn'},
                                'filter'     => "ObjectClass=suseMailTransport",
                                'scope'      => 2,
                                'map'        => 1,
@@ -594,7 +594,7 @@ sub ReadMailTransports {
 
     #Looking for TLS per site Accounts
     %SearchMap       = (
-                               'base_dn'    => $ldap_map->{'mail_config_dn'},
+                               'base_dn'    => $ldapMap->{'mail_config_dn'},
                                'filter'     => "ObjectClass=suseTLSPerSiteContainer",
                                'scope'      => 2,
                                'map'        => 1,
@@ -676,7 +676,7 @@ sub WriteMailTransports {
    
     # Map for the Transport Entries
     my %Entries        = (); 
-    my $ldap_map       = {}; 
+    my $ldapMap       = {}; 
     my $NeededServers  = {};
 
     # If no changes we haven't to do anything
@@ -687,14 +687,14 @@ sub WriteMailTransports {
 #print STDERR Dumper($MailTransports);
     
     # Make LDAP Connection 
-    $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
     
     # Search hash to find all the Transport Objects
     my %SearchMap       = (
-                               'base_dn' => $ldap_map->{'mail_config_dn'},
+                               'base_dn' => $ldapMap->{'mail_config_dn'},
                                'filter'  => "objectclass=susemailtransport",
                                'map'     => 1,
                                'scope'   => 2,
@@ -713,7 +713,7 @@ sub WriteMailTransports {
        }
        my $Destination =  $Transport->{'Destination'};
           $Destination =~ s#\+#\\+#;
-       my $dn	= 'suseMailTransportDestination='.$Destination.','.$ldap_map->{'mail_config_dn'};
+       my $dn	= 'suseMailTransportDestination='.$Destination.','.$ldapMap->{'mail_config_dn'};
        $Entries{$dn}->{'suseMailTransportDestination'} = $Transport->{'Destination'};
        if(defined $Transport->{'Transport'} ) {
           $Entries{$dn}->{'suseMailTransportNexthop'}  = $Transport->{'Transport'}.':'.$Transport->{'Nexthop'};
@@ -730,8 +730,8 @@ sub WriteMailTransports {
 
     #have a look if our table is OK. If not make it to work!
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
-    check_ldap_configuration('transport_maps',$ldap_map);
-    check_ldap_configuration('smtp_tls_per_site',$ldap_map);
+    check_ldap_configuration('transport_maps',$ldapMap);
+    check_ldap_configuration('smtp_tls_per_site',$ldapMap);
     if( $MailTransports->{Use} ){
 	write_attribute($MainCf,'transport_maps','ldap:/etc/postfix/ldaptransport_maps.cf');
 	write_attribute($MainCf,'smtp_tls_per_site','ldap:/etc/postfix/ldapsmtp_tls_per_site.cf');
@@ -772,7 +772,7 @@ sub WriteMailTransports {
        if( ! defined $NeededServers->{$TLSSite} ) {
              next;
        }
-       my $dn	= 'suseTLSPerSitePeer='.$TLSSite.','.$ldap_map->{'mail_config_dn'};
+       my $dn	= 'suseTLSPerSitePeer='.$TLSSite.','.$ldapMap->{'mail_config_dn'};
        $Entries{$dn}->{'suseTLSPerSiteMode'}           = 'NONE';
        if($MailTransports->{'TLSSites'}->{$TLSSite} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/) {
             $Entries{$dn}->{'suseTLSPerSitePeer'}      = $TLSSite;
@@ -785,7 +785,7 @@ sub WriteMailTransports {
     }
     # Search hash to find all the TLSSites Objects
     %SearchMap       = (
-                               'base_dn' => $ldap_map->{'mail_config_dn'},
+                               'base_dn' => $ldapMap->{'mail_config_dn'},
                                'filter'  => "objectclass=suseTLSPerSiteContainer",
                                'map'     => 1,
                                'scope'   => 2,
@@ -940,8 +940,8 @@ sub ReadMailPrevention {
                           );
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -976,7 +976,7 @@ sub ReadMailPrevention {
 
     #Now we read the access table
     my %SearchMap = (
-                   'base_dn' => $ldap_map->{'mail_config_dn'},
+                   'base_dn' => $ldapMap->{'mail_config_dn'},
                    'filter'  => "ObjectClass=suseMailAccess",
                    'scope'   => 2,
                    'attrs'   => ['suseMailClient','suseMailAction']
@@ -1021,8 +1021,8 @@ sub WriteMailPrevention {
     }
    
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -1090,7 +1090,7 @@ sub WriteMailPrevention {
     }
     #Now we have a look on the access table
     my %SearchMap = (
-                   'base_dn' => $ldap_map->{'mail_config_dn'},
+                   'base_dn' => $ldapMap->{'mail_config_dn'},
                    'filter'  => "ObjectClass=suseMailAccess",
                    'scope'   => 2,
                    'map'     => 1
@@ -1109,7 +1109,7 @@ sub WriteMailPrevention {
     #Now we write the new table
 #print STDERR Dumper([$MailPrevention->{'AccessList'}]);
     foreach my $entry (@{$MailPrevention->{'AccessList'}}) {
-       my $dn  = { 'dn' => "suseMailClient=".$entry->{'MailClient'}.','. $ldap_map->{'mail_config_dn'}};
+       my $dn  = { 'dn' => "suseMailClient=".$entry->{'MailClient'}.','. $ldapMap->{'mail_config_dn'}};
        my $tmp = { 'suseMailClient'   => $entry->{'MailClient'},
                    'suseMailAction'   => $entry->{'MailAction'},
                    'ObjectClass'      => ['suseMailAccess']
@@ -1188,8 +1188,8 @@ sub WriteMailPrevention {
     }
 
     # now we looks if the ldap entries in the main.cf for the access table are OK.
-    check_ldap_configuration('local_recipient_maps',$ldap_map);
-    check_ldap_configuration('access',$ldap_map);
+    check_ldap_configuration('local_recipient_maps',$ldapMap);
+    check_ldap_configuration('access',$ldapMap);
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
     SCR->Write('.mail.postfix.mastercf',undef);
@@ -1250,8 +1250,8 @@ sub ReadMailRelaying {
                           );
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -1270,7 +1270,7 @@ sub ReadMailRelaying {
 
     #Now we have a look on the mynetworks ldaptable
 #    my %SearchMap = (
-##                   'base_dn' => $ldap_map->{'mail_config_dn'},
+##                   'base_dn' => $ldapMap->{'mail_config_dn'},
 #                   'filter'  => "ObjectClass=suseMailMyNetorks",
 #                   'attrs'   => ['suseMailClient']
 #                 );
@@ -1326,8 +1326,8 @@ sub WriteMailRelaying {
     
 #print STDERR Dumper([$MailRelaying]);
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -1429,8 +1429,8 @@ sub ReadMailLocalDelivery {
                             );
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -1509,8 +1509,8 @@ sub WriteMailLocalDelivery {
     }
     
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -1520,7 +1520,9 @@ sub WriteMailLocalDelivery {
     if(  $MailLocalDelivery->{'Type'} ne 'none') {
         write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
         write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
-        write_attribute($MainCf,'alias_maps','/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf');
+        write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf, ldap:/etc/postfix/ldapalias_maps_member.cf');
+        check_ldap_configuration('alias_maps',$ldapMap);
+        check_ldap_configuration('alias_maps_member',$ldapMap);
     }
     if(  $MailLocalDelivery->{'Type'} eq 'local') {
 	write_attribute($MainCf,'mailbox_command','');
@@ -1656,8 +1658,8 @@ sub ReadFetchingMail {
     }
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -1681,8 +1683,8 @@ sub WriteFetchingMail {
     }
    
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
 
@@ -1720,12 +1722,12 @@ sub ReadMailLocalDomains {
                            );
 
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
     my $ret = SCR->Read(".ldap.search", {
-                                          "base_dn"      => $ldap_map->{'dns_config_dn'},
+                                          "base_dn"      => $ldapMap->{'dns_config_dn'},
                                           "filter"       => '(relativeDomainName=@)',
                                           "scope"        => 2,
                                           "not_found_ok" => 1,
@@ -1764,8 +1766,8 @@ sub WriteMailLocalDomains {
     }
     
     # Make LDAP Connection 
-    my $ldap_map = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldap_map ) {
+    my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
+    if( !$ldapMap ) {
          return undef;
     }
     foreach(@{$MailLocalDomains->{'Domains'}}){
@@ -1784,7 +1786,7 @@ sub WriteMailLocalDomains {
 					   "Allowed values are: yes|no.",
                                  code    => "PARAM_CHECK_FAILED" );
       }
-      my $DN = "zoneName=$name,$ldap_map->{'dns_config_dn'}";
+      my $DN = "zoneName=$name,$ldapMap->{'dns_config_dn'}";
       my $retVal = SCR->Read('.ldap.search',{
                                              "base_dn"      => $DN,
                                              "filter"       => '(objectclass=dNSZone)',
@@ -1854,10 +1856,10 @@ sub WriteMailLocalDomains {
     write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
-    check_ldap_configuration('masquerade_domains',$ldap_map);
-    check_ldap_configuration('mydestination',$ldap_map);
-    check_ldap_configuration('local_recipient_maps',$ldap_map);
-    check_ldap_configuration('virtual_alias_maps',$ldap_map);
+    check_ldap_configuration('masquerade_domains',$ldapMap);
+    check_ldap_configuration('mydestination',$ldapMap);
+    check_ldap_configuration('local_recipient_maps',$ldapMap);
+    check_ldap_configuration('virtual_alias_maps',$ldapMap);
     return 1;
 }
 
@@ -2151,6 +2153,7 @@ sub AutoPackages {
     );
     return \%ret;
 }
+
 =item *
 
 C<boolean = ResetMailServer($AdminPassword,$LDAPMap)>
@@ -2293,12 +2296,13 @@ fi';
     write_attribute($MainCf,'content_filter','');
     write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
     write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
-    write_attribute($MainCf,'alias_maps','/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf');
+    write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf, ldap:/etc/postfix/ldapalias_maps_member.cf');
     check_ldap_configuration('masquerade_domains',$ldapMap);
     check_ldap_configuration('mydestination',$ldapMap);
     check_ldap_configuration('local_recipient_maps',$ldapMap);
     check_ldap_configuration('virtual_alias_maps',$ldapMap);
     check_ldap_configuration('alias_maps',$ldapMap);
+    check_ldap_configuration('alias_maps_member',$ldapMap);
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
     SCR->Execute(".target.bash", "touch /var/adm/YaST/yast2-mail-server-used");
@@ -2406,7 +2410,7 @@ sub write_attribute {
 # in the main.cf. If not so the neccesary entries will be created.
 sub check_ldap_configuration {
     my $config      = shift;
-    my $ldap_map    = shift;
+    my $ldapMap    = shift;
 
     my $changes   = 0;
     my %query_filter     = (
@@ -2415,6 +2419,7 @@ sub check_ldap_configuration {
                         'access'              => '(&(objectclass=suseMailAccess)(suseMailClient=%s))',
                         'local_recipient_maps'=> '(&(objectclass=suseMailRecipient)(|(suseMailAcceptAddress=%s)(uid=%s)))',
                         'alias_maps'          => '(&(objectclass=suseMailRecipient)(cn=%s))',
+                        'alias_maps_member'   => '(&(objectclass=suseMailRecipient)(cn=%s)(suseDeliveryToMember=yes))',
                         'mynetworks'          => '(&(objectclass=suseMailMyNetworks)(suseMailClient=%s))',
                         'masquerade_domains'  => '(&(objectclass=suseMailDomain)(zoneName=%s)(suseMailDomainMasquerading=yes))',
                         'mydestination'       => '(&(objectclass=suseMailDomain)(zoneName=%s)(relativeDomainName=@)(!(suseMailDomainType=virtual)))',
@@ -2425,7 +2430,8 @@ sub check_ldap_configuration {
                         'smtp_tls_per_site'   => 'suseTLSPerSiteMode',
                         'access'              => 'suseMailAction',
                         'local_recipient_maps'=> 'uid',
-                        'alias_maps'          => 'suseMailCommand',
+                        'alias_maps'          => 'suseMailCommand,suseMailForwardAddress',
+                        'alias_maps_member'   => 'memberUID',
                         'mynetworks'          => 'suseMailClient',
                         'masquerade_domains'  => 'zoneName',
                         'mydestination'       => 'zoneName',
@@ -2437,21 +2443,23 @@ sub check_ldap_configuration {
                         'access'              => 'one',
                         'local_recipient_maps'=> 'one',
                         'alias_maps'          => 'one',
+                        'alias_maps_member'   => 'one',
                         'mynetworks'          => 'one',
                         'masquerade_domains'  => 'sub',
                         'mydestination'       => 'sub',
                         'virtual_alias_maps'  => 'sub'
                        );
     my %base            = (
-                        'transport_maps'      => $ldap_map->{'mail_config_dn'},
-                        'smtp_tls_per_site'   => $ldap_map->{'mail_config_dn'},
-                        'access'              => $ldap_map->{'mail_config_dn'},
-                        'local_recipient_maps'=> $ldap_map->{'user_config_dn'},
-                        'alias_maps'          => $ldap_map->{'group_config_dn'},
-                        'mynetworks'          => $ldap_map->{'mail_config_dn'},
-                        'masquerade_domains'  => $ldap_map->{'dns_config_dn'},
-                        'mydestination'       => $ldap_map->{'dns_config_dn'},
-                        'virtual_alias_maps'  => $ldap_map->{'dns_config_dn'}
+                        'transport_maps'      => $ldapMap->{'mail_config_dn'},
+                        'smtp_tls_per_site'   => $ldapMap->{'mail_config_dn'},
+                        'access'              => $ldapMap->{'mail_config_dn'},
+                        'local_recipient_maps'=> $ldapMap->{'user_config_dn'},
+                        'alias_maps'          => $ldapMap->{'group_config_dn'},
+                        'alias_maps_member'   => $ldapMap->{'group_config_dn'},
+                        'mynetworks'          => $ldapMap->{'mail_config_dn'},
+                        'masquerade_domains'  => $ldapMap->{'dns_config_dn'},
+                        'mydestination'       => $ldapMap->{'dns_config_dn'},
+                        'virtual_alias_maps'  => $ldapMap->{'dns_config_dn'}
                        );
 
 
@@ -2460,10 +2468,10 @@ sub check_ldap_configuration {
     my $LDAPCF    = SCR->Read('.mail.ldaptable',$config);
 
     #Now we are looking for if all the needed ldap entries are done
-    if(!$LDAPCF->{'server_host'} || $LDAPCF->{'server_host'} ne $ldap_map->{'ldap_server'}) {
+    if(!$LDAPCF->{'server_host'} || $LDAPCF->{'server_host'} ne $ldapMap->{'ldap_server'}) {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'server_port'} || $LDAPCF->{'server_port'} ne $ldap_map->{'ldap_port'}) {
+    if(! $LDAPCF->{'server_port'} || $LDAPCF->{'server_port'} ne $ldapMap->{'ldap_port'}) {
 	 $changes = 1;
     }
     if(! $LDAPCF->{'bind'}  || $LDAPCF->{'bind'} ne 'no') {
@@ -2487,8 +2495,8 @@ sub check_ldap_configuration {
 
     # If we had made changes we have to save it
     if( $changes ) {
-        $LDAPCF->{'server_host'}      = $ldap_map->{'ldap_server'};
-        $LDAPCF->{'server_port'}      = $ldap_map->{'ldap_port'};
+        $LDAPCF->{'server_host'}      = $ldapMap->{'ldap_server'};
+        $LDAPCF->{'server_port'}      = $ldapMap->{'ldap_port'};
         $LDAPCF->{'bind'}             = 'no';
         $LDAPCF->{'timeout'}          = '20';
         $LDAPCF->{'search_base'}      = $base{$config}; 

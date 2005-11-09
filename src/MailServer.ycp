@@ -358,7 +358,7 @@ global boolean Read() {
 	else
 	{
 	    return false;
-	}	
+	}
     }
 
     NetworkDevices::Read();
@@ -541,7 +541,7 @@ global boolean Write() {
 	  else
 	  {
 	      return false;
-	  }		  
+	  } 
       }
       Service::Enable("amavis");
       Service::Enable("clamd");

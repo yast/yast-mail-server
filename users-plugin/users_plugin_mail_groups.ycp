@@ -35,8 +35,8 @@
     string          imapadmpw         = Ldap::bind_pass;
     map<string,any> MailLocalDomains  = (map<string,any>)YaPI::MailServer::ReadMailLocalDomains(imapadmpw);
     map<string,any> MailLocalDelivery = (map<string,any>)YaPI::MailServer::ReadMailLocalDelivery(imapadmpw);
+    boolean         deliverytomember  = false;
     boolean         sharedfolder      = false;
-    boolean         memberdelivery    = false;
 
     /**
      * See RFC 2822, 3.4
@@ -170,6 +170,13 @@
 	string what	= config["what"]:"user";
 	string action	= data["what"]:"";
 
+        if( data["susemailcommand"]:"" != "" ) {
+	    sharedfolder = true;
+        }
+        if(  data["susedeliverytomember"]:"no" == "yes" ) {
+            deliverytomember = true;
+        }
+
 	map<string, any> tmp_data	= $[];
 	list<string> object_class = (list<string>)sort (data["objectclass"]:[]);
 
@@ -233,16 +240,16 @@
 	}
 	shared = `Frame ( _("Delivery of group Mails"),
 		   `VBox(
-	              `Left(`CheckBox( `id(`sharedfolder),  `opt(`disabled), _("Enable Shared Folder"), sharedfolder)),
-	              `Left(`CheckBox( `id(`memberdelivery),`opt(`notify),   _("Enable Delivery to the Members"), memberdelivery))
+	              `Left(`CheckBox( `id(`sharedfolder),     _("Enable Shared Folder"), sharedfolder)),
+	              `Left(`CheckBox( `id(`deliverytomember), _("Enable Delivery to the Members"), deliverytomember))
 		     )
 	         );
 
 	if(data["localdeliverytype"]:"local" == "cyrus" ) {
 	     shared = `Frame ( _("Delivery of group Mails"),
 			    `VBox(
-	                        `Left(`CheckBox( `id(`sharedfolder),   _("Enable Shared Folder"), sharedfolder)),
-	                        `Left(`CheckBox( `id(`memberdelivery),`opt(`notify), _("Enable Delivery to the Members"), memberdelivery))
+	                        `Left(`CheckBox( `id(`sharedfolder),     _("Enable Shared Folder"), sharedfolder)),
+	                        `Left(`CheckBox( `id(`deliverytomember), _("Enable Delivery to the Members"), deliverytomember))
 			         )
 			     );
 	     imap   = `Frame ( _("IMAP Quota"),
@@ -345,15 +352,21 @@
 		}
 		UI::ChangeWidget(`id(`table), `Items, getEMAILList ());
 	    }
-	    if (ret == `memberdelivery)
-	    {
-	    }
-
 	    if ( ret == `next )
 	    {
-		string err = UsersPluginMail::Check (
-		    config,
-		    (map<string,any>) union (data, tmp_data));
+		if((boolean) UI::QueryWidget (`id (`deliverytomember), `Value)){
+		   data["susedeliverytomember"] = "yes";
+		} else {
+		   data["susedeliverytomember"] = "no";
+		}
+		if( (boolean) UI::QueryWidget (`id (`sharedfolder), `Value)) {
+		    data["susemailcommand"] = "\"|/usr/bin/formail -I \\\"From \\\" |/usr/lib/cyrus/bin/deliver -r "+data["cn"]:""+" -a cyrus -m "+data["cn"]:""+"\"";
+		} else {
+		    if( data["susemailcommand"]:"" != "" ) {
+		      data = remove (data, "susemailcommand");
+		    }
+		}
+		string err = UsersPluginMail::Check ( config, (map<string,any>) union (data, tmp_data));
 
 		if (err != "")
 		{

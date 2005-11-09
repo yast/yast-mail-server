@@ -102,6 +102,18 @@ attributetype ( MailAT:15 NAME ( 'suseTLSPerSitePeer' )
         SUBSTR caseIgnoreSubstringsMatch
         SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
 
+attributetype ( MailAT:16 NAME ( 'suseMailForwardAddress' )
+	DESC 'Container for Addresses the mail must be forwarded too. Will be used by the aliases table.'
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{32768} )
+
+attributetype ( MailAT:17 NAME ( 'suseDeliveryToMember' )
+	DESC 'Shows if the member of the group the mails will get'
+        EQUALITY caseIgnoreMatch
+        SUBSTR caseIgnoreSubstringsMatch
+        SYNTAX 1.3.6.1.4.1.1466.115.121.1.15{16} )
+
 
 ##
 ## Objectclass Section
@@ -109,7 +121,8 @@ attributetype ( MailAT:15 NAME ( 'suseTLSPerSitePeer' )
 objectclass ( MailOC:1 NAME 'suseMailRecipient' SUP top AUXILIARY
         DESC 'represents an entry which is able to receive mail'
         MAY ( suseMailAcceptAddress $ suseMailAlias $
-              suseVirtualAddress $ suseMailCommand ) )
+              suseVirtualAddress $ suseMailCommand $ 
+	      suseMailForwardAddress $ suseDeliveryToMember) )
 
 objectclass ( MailOC:2 NAME 'suseMailDomain' SUP top AUXILIARY
         DESC 'To configure behaviour of mail domains'
