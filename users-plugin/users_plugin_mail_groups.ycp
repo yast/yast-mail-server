@@ -35,7 +35,7 @@
     string          imapadmpw         = Ldap::bind_pass;
     map<string,any> MailLocalDomains  = (map<string,any>)YaPI::MailServer::ReadMailLocalDomains(imapadmpw);
     map<string,any> MailLocalDelivery = (map<string,any>)YaPI::MailServer::ReadMailLocalDelivery(imapadmpw);
-    boolean         deliverytomember  = false;
+    boolean         deliverytomember  = true;
     boolean         sharedfolder      = false;
 
     /**
@@ -240,7 +240,6 @@
 	}
 	shared = `Frame ( _("Delivery of group Mails"),
 		   `VBox(
-	              `Left(`CheckBox( `id(`sharedfolder),     _("Enable Shared Folder"), sharedfolder)),
 	              `Left(`CheckBox( `id(`deliverytomember), _("Enable Delivery to the Members"), deliverytomember))
 		     )
 	         );
@@ -248,22 +247,18 @@
 	if(data["localdeliverytype"]:"local" == "cyrus" ) {
 	     shared = `Frame ( _("Delivery of group Mails"),
 			    `VBox(
-	                        `Left(`CheckBox( `id(`sharedfolder),     _("Enable Shared Folder"), sharedfolder)),
 	                        `Left(`CheckBox( `id(`deliverytomember), _("Enable Delivery to the Members"), deliverytomember))
 			         )
 			     );
 	     imap   = `Frame ( _("IMAP Quota"),
 			`VBox(
-				 `HBox(
-				       `IntField (`id(`imapquota), _("in kByte"), 1, 10000000,
-						  intimapquota >= 0 ? intimapquota : 10000),
-				       `HStretch()
-				       ),
-				 `Left(`Label(sformat (_("IMAP quota already in use: %1 kByte"),
-						 data["imapquotaused"]:"0" != nil ? data["imapquotaused"]:"0":"0"))),
-				 `Left(`CheckBox( `id(`enableImpapquota ), `opt(`notify), _("Enable IMAP Quota"),
-						  intimapquota >= 0
-						  ))
+	                        `Left(`CheckBox( `id(`sharedfolder),      `opt(`notify), _("Enable Shared Folder"), sharedfolder)),
+				`Left(`CheckBox( `id(`enableImpapquota ), `opt(`notify), _("Enable IMAP Quota"),    intimapquota >= 0)),
+				`HBox(
+				      `IntField (`id(`imapquota), _("in kByte"), 1, 10000000, intimapquota >= 0 ? intimapquota : 10000),
+				      `HStretch()
+				      ),
+				`Left(`Label(sformat (_("IMAP quota already in use: %1 kByte"), data["imapquotaused"]:"0" != nil ? data["imapquotaused"]:"0":"0")))
 			)
 		);
 	}
@@ -285,7 +280,7 @@
         Wizard::SetDesktopIcon("users");
 
 	// dialog caption
-	Wizard::SetContentsButtons(_("Mail Settings"),
+	Wizard::SetContentsButtons(_("Mail Settings for the group:") + " \"" + data["cn"]:"" +"\"",
 				   contents, help_text, Label::BackButton(), Label::NextButton());
 
 	Wizard::HideAbortButton ();
@@ -297,7 +292,8 @@
             UI::ChangeWidget (`id (`deleteEmail), `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
             UI::ChangeWidget (`id (`editEmail),   `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
 	    if(data["localdeliverytype"]:"local" == "cyrus" ) {
-	       UI::ChangeWidget(`id(`imapquota),  `Enabled, ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value)));
+	       UI::ChangeWidget(`id(`sharedfolder), `Enabled, ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value)));
+	       UI::ChangeWidget(`id(`imapquota),    `Enabled, ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value)));
 	    }
 
 	    ret = UI::UserInput();

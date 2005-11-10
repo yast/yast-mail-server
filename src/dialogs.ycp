@@ -55,14 +55,6 @@ define any AuthorizingDialog () {
        ERROR = ERROR + _("You must enable \"Create Default Configuration Objects\" in\n\"Advanced Configuration\" of the \"YaST2 LDAP-Client\" module.\n") ;
     }
 
-    searchmap["filter"] = "objectclass=suseDnsConfiguration";
-    searchmap["attrs"] = "suseDefaultBase";
-    list modulesDns = (list)SCR::Read (.ldap.search, searchmap);
-    if (modulesDns == nil || modulesDns == []) {
-       ERROR = ERROR + _("You have to enable \"LDAP Support Active\" in the \"YaST2 DNS-Server\" module.\n");
-    }
-    string dns_base = (string)modulesDns[0,"susedefaultbase",0]:"";
-
     if ( ERROR != "" ) {
 	ERROR =  _("Missing LDAP features !\n\n") + ERROR;
 	Popup::Error(ERROR);
@@ -1058,64 +1050,127 @@ term MailLocalDomainsDialog(string CID) {
       }
   });
   if( Name == "" && size(MailServer::MailLocalDomains["Domains"]:[]) > 0) {
-     map Domain = select((list<map>)MailServer::MailLocalDomains["Domains"]:[],0,$[]);
+     map Domain   = select((list<map>)MailServer::MailLocalDomains["Domains"]:[],0,$[]);
      Name         = Domain["Name"]:"";
      Type         = Domain["Type"]:"";
      Masquerading = (boolean)(Domain["Masquerading"]:"" == "yes");
   }
 
   term content = `VBox (
-       `VBox(
-         `Frame(_("Configure Mail Domains"),
-           `HBox(
-               `TextEntry(`id(`Name), `opt(`disabled),    _("Name"), Name),
-	       `HStretch(),
-	       `ComboBox (`id(`Type), _("Type"), MakeSelectedList(Types,Type)),
-	       `VBox(
-	          `Label(""),
-	          `CheckBox(`id(`Masquerading),_("Masquerading"),Masquerading)
-	       ),
-	       `VBox(
-	          `Label(""),
-                  `PushButton(`id(`Change), _("Change"))
-	       )
-           )
-         ),
          `Left(`Label(_("Defined Domains"))),
          `HBox(
-             `Table(`id(`table), `opt(`immediate,`keepSorting,`notify), `header(_("Domain"), _("Type"), _("Masquerading")),Domains)
-//             `Top(`PushButton(`id(`Delete), _("Delete")))
+             `Table(`id(`table), `opt(`immediate,`keepSorting,`notify), `header(_("Domain"), _("Type"), _("Masquerading")),Domains),
+	     `Top(
+		`VBox(
+                  `PushButton(`id(`Add),    _("Add")),
+                  `PushButton(`id(`Change), _("Change")),
+                  `PushButton(`id(`Delete), _("Delete"))
+	        )
+	      )
           )
-       )
-   );
+  );
   return content;
 }
 
-boolean CheckMainDomain() {
-           integer maindomain = 0;
-           integer domains    = 0;
+void ShowMailLocalDomain(string CID, string ACTION) {
 
-	   if(((string)MailServer::MailLocalDelivery["Type"]:"" == "none")) {
-		return true;
-	   }
-           foreach(map Domain, MailServer::MailLocalDomains["Domains"]:[], ``{
-                if( Domain["Type"]:"" == "main" ) {
-                   maindomain = maindomain + 1;
-                }
-                domains = domains + 1;
-           });
-           if( maindomain == 0 ) {
-              Report::Warning(_("There is no main mail domain defined. Please fix it!"));
-	      MailServer::MailLocalDomains["Changed"] = false;
-              if(domains > 0) {
-                return false;
-              }
-           } else if(maindomain > 1 ) {
-              Report::Warning(_("You have defined more then one main mail domain. Please fix it!"));
-	      MailServer::MailLocalDomains["Changed"] = false;
-              return false;
-           }
+  string  Name         = "";
+  string  Type         = "local";
+  boolean Masquerading = true;
+  list<string> Types   = ["main","virtual","local","none"];
+
+  if( ACTION == "change" ) {
+    foreach(map Domain, MailServer::MailLocalDomains["Domains"]:[], ``{
+        if(CID == Domain["Name"]:"" ) {
+              Name         = Domain["Name"]:"";
+              Type         = Domain["Type"]:"";
+              Masquerading = (boolean)(Domain["Masquerading"]:"" == "yes");
+        }
+    });
+  }
+
+  // Create the dialog
+  UI::OpenDialog(`opt(`decorated ), 
+         `Frame(_("Configure Mail Domains"),
+           `VBox(
+               `Left(`TextEntry(`id(`Name), _("Name"), Name)),
+	       `VStretch(),
+	       `Left(`ComboBox (`id(`Type), _("Type"), MakeSelectedList(Types,Type))),
+	       `VStretch(),
+	       `Left(`CheckBox(`id(`Masquerading),_("Masquerading"),Masquerading)),
+	       `HBox(
+	         `PushButton(`id(`cancel),   _("Cancel")),
+	         `PushButton(`id(`ok),   _("OK"))
+	       )
+           )
+         )
+  );
+
+  //Waiting for response
+  any ret       = nil;
+  while(ret != `cancel && ret != `ok )
+  {
+    map event = UI::WaitForEvent();
+    ret       = event["ID"]:nil;
+    if( ret == `ok) {
+      string Name         = (string)UI::QueryWidget(`id(`Name), `Value);
+      string Type         = (string)UI::QueryWidget(`id(`Type), `Value);
+      string Masquerading = "no";
+      MailServer::MailLocalDomains["Changed"] = true;
+      if((boolean)UI::QueryWidget(`id(`Masquerading), `Value)) {
+         Masquerading = "yes";
+      }
+      if( ACTION == "add" ) {
+        MailServer::MailLocalDomains["Domains"] = add (MailServer::MailLocalDomains["Domains"]:[],
+                             $[ "Name"         : Name,
+                                "Type"         : Type,
+                                "Masquerading" : Masquerading
+                              ]);
+      } else {
+        list<map> Domains = (list<map>)  MailServer::MailLocalDomains["Domains"]:[];
+        MailServer::MailLocalDomains["Domains"] = [];
+        foreach(map Domain, Domains, ``{
+          if( CID != Domain["Name"]:"" ) {
+            MailServer::MailLocalDomains["Domains"] = add( MailServer::MailLocalDomains["Domains"]:[], Domain);
+          } else {
+            MailServer::MailLocalDomains["Domains"] = add (MailServer::MailLocalDomains["Domains"]:[],
+                                   $[ "Name"         : Name,
+                                      "Type"         : Type,
+                                      "Masquerading" : Masquerading
+                                    ]);
+          }
+        });
+      }
+    }
+  }
+  UI::CloseDialog();
+}
+
+boolean CheckMainDomain() {
+  integer maindomain = 0;
+  integer domains    = 0;
+
+  if(((string)MailServer::MailLocalDelivery["Type"]:"" == "none")) {
        return true;
+  }
+  foreach(map Domain, MailServer::MailLocalDomains["Domains"]:[], ``{
+       if( Domain["Type"]:"" == "main" ) {
+          maindomain = maindomain + 1;
+       }
+       domains = domains + 1;
+  });
+  if( maindomain == 0 ) {
+     Report::Warning(_("There is no main mail domain defined. Please fix it!"));
+     MailServer::MailLocalDomains["Changed"] = false;
+     if(domains > 0) {
+       return false;
+     }
+  } else if(maindomain > 1 ) {
+     Report::Warning(_("You have defined more then one main mail domain. Please fix it!"));
+     MailServer::MailLocalDomains["Changed"] = false;
+     return false;
+  }
+  return true;
 }
 
 any ComplexDialog() {
@@ -1370,27 +1425,19 @@ any ComplexDialog() {
         } else if(FocusedContent == "MailLocalDomains") {
            CID   = (string)UI::QueryWidget(`id(`table), `CurrentItem);
 	   if(ret == `Change) {
-	     string Name         = (string)UI::QueryWidget(`id(`Name), `Value);
-	     string Type         = (string)UI::QueryWidget(`id(`Type), `Value);
-	     string Masquerading = "no";
-	     if((boolean)UI::QueryWidget(`id(`Masquerading), `Value)) {
-	        Masquerading = "yes";
-	     }
+             ShowMailLocalDomain(CID,"change");
+	   } else if(ret == `Add) {
+             ShowMailLocalDomain(CID,"add");
+	   } else if (ret == `Delete) {
+	     MailServer::MailLocalDomains["Changed"] = true;
 	     list<map> Domains = (list<map>)  MailServer::MailLocalDomains["Domains"]:[];
 	     MailServer::MailLocalDomains["Domains"] = [];
              foreach(map Domain, Domains, ``{
 	        if( CID != Domain["Name"]:"" ) {
                   MailServer::MailLocalDomains["Domains"] = add( MailServer::MailLocalDomains["Domains"]:[], Domain);
-		} else {
-                  MailServer::MailLocalDomains["Domains"] = add (MailServer::MailLocalDomains["Domains"]:[],
-                                         $[ "Name"         : Name,
-                                            "Type"         : Type,
-                                            "Masquerading" : Masquerading
-                                          ]);
-                }
-              });
-	      MailServer::MailLocalDomains["Changed"] = true;
-           }
+		}
+	     });
+	   }
            if(! CheckMainDomain()) {
               FocusedContent = "MailLocalDomains";
               ret = "MailLocalDomains";

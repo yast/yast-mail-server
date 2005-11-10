@@ -166,14 +166,10 @@ global boolean sasl_installed      = false;
  * Help funktion to check the DNS Settings
  */
 
-boolean Check_Mail_Domain() {
-        map LDAPSettings = Ldap::Export();
-        term WarningMsg = `RichText(_("There is no main mail domain defined. Please fix it!") +
-_("<p>Note: You can create and set up the domains with the YaST2 
-DNS server module. In this module, you only can set the properties
-concerning the mail server.
-</p>
-"));
+void Check_Mail_Domain() {
+        map LDAPSettings  = Ldap::Export();
+        string DNSWarning = _("There is no main mail domain defined. Please fix it!");
+
         SCR::Execute (.ldap.bind);
         /* looking if a mail domain exist */
         map searchmap = $[
@@ -198,8 +194,8 @@ concerning the mail server.
 
         if(domains == nil || domains == $[])
         {
-                Popup::LongText(Label::WarningMsg(),WarningMsg,60,12);
-                return false;
+                Popup::Warning(DNSWarning);
+                return;
         }
         boolean is_main_domain = false;
         foreach(string dn, map domain, (map<string,map>) domains,  ``{
@@ -242,15 +238,10 @@ concerning the mail server.
                 else
                 {
                     // user has to decide
-                    Report::Error(_("There is no main mail domain defined. Please fix it!"));
-                    if (counter == 0)
-                    {
-                        // cannot decide cause there is no one available
-                        return false;
-                    }
+                    Report::Error(DNSWarning);
                 }
         }
-        return true;
+        return;
 }
 
 /**
@@ -414,9 +405,7 @@ global boolean Read() {
     /* Error message */
     if(MailLocalDelivery == nil) Report::Warning(_("Cannot read the mail server local delivery settings."));
     if(MailLocalDelivery["Type"]:"" != "none") {
-       if(! Check_Mail_Domain()) {
-         return false;
-       }
+       Check_Mail_Domain();
     }
     sleep(sl);
 
@@ -583,7 +572,7 @@ global boolean Write() {
 	   else
 	   {
 	       return false;
-	   }		   
+	   }
        }
     }
 
@@ -602,16 +591,16 @@ global boolean Write() {
 				     `focus_yes))
 	   {
 	       WFM::CallFunction("sw_single", (["cyrus-imapd"]));
-	       SCR::UnmountAgent(.etc.imapd_conf);	       
+	       SCR::UnmountAgent(.etc.imapd_conf);
 	   }
 	   else
 	   {
 	       return false;
-	   }	
+	   }
        }
        string crypted  = Users::CryptPassword(AdminPassword, "system", "foo");
        SCR::Write(.target.passwd.cyrus, crypted);
-       
+
       list Values = SCR::Dir(.etc.imapd_conf);
       if(!contains(Values,"unixhierarchysep")) {
 	SCR::Write(.etc.imapd_conf.unixhierarchysep,"yes");
