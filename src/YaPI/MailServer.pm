@@ -1794,9 +1794,8 @@ sub WriteMailLocalDomains {
                                              "not_found_ok" => 0
                                             } ); 
 
-      if( defined $retVal && defined $retVal->[0] && 
-          defined $retVal->[0]->{'objectclass'}) 
-        {
+      if( defined $retVal && defined $retVal->[0] && defined $retVal->[0]->{'objectclass'}) 
+      {
             my $found = 0;
             foreach my $ojc ( @{$retVal->[0]->{'objectclass'}} ) {
                 if($ojc =~ /^suseMailDomain$/i) {
@@ -1831,19 +1830,32 @@ sub WriteMailLocalDomains {
                 
                 if( ! SCR->Write('.ldap.modify',{ "dn" => $DN } , $Domains->{$DN})) {
                     my $ldapERR = SCR->Read(".ldap.error");
-                    return $self->SetError(summary => "LDAP add failed",
+                    return $self->SetError(summary => "LDAP modify failed",
                                            code => "SCR_INIT_FAILED",
                                            description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
                 }
             }
 
         } else {
+	  # this is a new domain, we create it. !!! We create only the attributes necessary for mail-server
+          my $serial = `date +%Y%m%d%H%M`;  chomp $serial;
+          my $host   = `cat /etc/HOSTNAME`; chomp $host;
+          my $tmp = { 'Objectclass'                  => [ 'dNSZone','suseMailDomain' ],
+                      'zoneName'                     => $name,
+                      'suseMailDomainType'           => $type,
+                      'suseMailDomainMasquerading'   => $masquerading,
+		      'relativeDomainName'	     => '@',
+		      'dNSClass'	             => 'IN',
+		      'dNSTTL'	                     => '86400',
+		      'sOARecord'                    => $host.'. root.'.$host.'. '.$serial.' 10800 3600 302400 43200'
+                 };
+          if(! SCR->Write('.ldap.add',{ "dn" => $DN } ,$tmp)){
             my $ldapERR = SCR->Read(".ldap.error");
-            return $self->SetError(summary => "LDAP search failed",
-                                   code => "SCR_INIT_FAILED",
+            return $self->SetError(summary     => "LDAP add failed",
+                                   code        => "SCR_WRITE_FAILED",
                                    description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
-            
-        }
+         }
+       }
     }
 
 
@@ -2112,6 +2124,45 @@ sub ReadLDAPDefaults {
     }
     if(@$ldapret > 0) {
         $ldapMap->{'dns_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
+    } else {
+       # We create the DNS config if there is no any.
+       my $DN  = 'ou=DNS,'.$ldapMap->{'ldap_domain'};
+       my $tmp = { objectClass     => [ "top" , "suseDnsConfiguration" ],
+                   cn              => 'defaultDNS',
+		   suseDefaultBase => $DN
+                 };
+       if( ! SCR->Write('.ldap.add', { dn => 'cn=defaultDNS,'.$ldapMap->{'base_config_dn'} }, $tmp ) ) {
+            my $ldapERR = SCR->Read(".ldap.error");
+            return $self->SetError(summary => "LDAP add failed",
+				   code => "SCR_INIT_FAILED",
+				   description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+       }
+       $ldapMap->{'dns_config_dn'} = $DN;
+    }   
+    $ldapret = SCR->Read(".ldap.search", {
+                                          "base_dn"      => $ldapMap->{'dns_config_dn'},
+                                          "filter"       => '(ou=DNS)',
+                                          "scope"        => 0,
+                                          "not_found_ok" => 1,
+                                          "attrs"        => [ 'ou' ]
+                                         });
+    if (! defined $ldapret) {
+        my $ldapERR = SCR->Read(".ldap.error");
+        return $self->SetError(summary => "LDAP search failed!",
+                               description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
+                               code => "LDAP_SEARCH_FAILED");
+    }
+    if(@$ldapret != 1) {
+       # There is no ou=DNS object, we create it.
+       my $tmp = { objectClass => [ 'top' , 'organizationalUnit' ],
+                   ou          => 'DNS'     
+               };
+       if( ! SCR->Write('.ldap.add', { dn => $ldapMap->{'dns_config_dn'}}, $tmp ) ) {
+            my $ldapERR = SCR->Read(".ldap.error");
+            return $self->SetError(summary => "LDAP add failed",
+				   code => "SCR_INIT_FAILED",
+				   description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
+       }
     }
     return $ldapMap;
 }
