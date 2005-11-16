@@ -451,7 +451,7 @@ sub WriteBefore {
     # Now the plugin stands or will be added
     # for the groups we hate to make some others
     if( $config->{'what'} eq 'group' ) {
-      if($data->{'susedeliverytomember'} eq 'yes') {
+      if(defined $data->{'susedeliverytomember'} && $data->{'susedeliverytomember'} eq 'yes') {
 	$data->{'memberuid'} = [];
         foreach my $member (keys %{$data->{'member'}}){
           $member =~ /uid=(.*?),/; 
