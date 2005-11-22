@@ -1,0 +1,13 @@
+/**
+ * File:        dns_zone.scr
+ * Summary:     Agent for rading and writing of LDAP tables for postfix
+ * Author:      Peter Varkoly <varkoly@suse.de>
+ * Access:      read, write
+ *
+ * $Id$
+ *
+ */
+.mail.ldaptable
+
+`ag_mail_ldaptable ()
+

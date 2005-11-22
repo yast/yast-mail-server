@@ -1,0 +1,5 @@
+{
+  import "MailServerTest";
+  MailServerTest::run ();
+}
+
