@@ -459,7 +459,8 @@ sub WriteBefore {
         }
       }
     }
-y2internal(Dumper($data));
+    #DEBUG
+    #y2internal(Dumper($data));
     if ( ($data->{'what'} =~ /^edit_/ ) && $self->PluginPresent($config, $data) ) {
         # create Folder if plugin has been added
         if ( ! grep /^suseMailRecipient$/i, @{$data->{'org_user'}->{'objectclass'}} ) {
@@ -547,10 +548,14 @@ sub addRequiredMailData {
     }
 
     if( $config->{'what'} eq 'group' ) {
-       # we do not need do anithing else for groups
+       # We do not need do anithing else for groups.
        return $data;
     }
 
+    if( ! defined $data->{'uid'} || $data->{'uid'} eq "" ) {
+       # If no uid has been defined yet we have to return.
+       return $data;
+    }
     my $mailaddress = $data->{'uid'}."\@".$data->{mainmaildomain};
     if( defined $data->{susemailacceptaddress} ) {
 	if( ref($data->{susemailacceptaddress}) eq "ARRAY" &&
