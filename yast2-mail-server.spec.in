@@ -33,5 +33,5 @@ Summary:	Configuration of mail-server
 @agentdir@/*
 %dir /etc/openldap/schema/
 /etc/openldap/schema/suse-mailserver.schema
-/etc/permissions.d/mail-server.perm
+/etc/permissions.d/mail-server
 %doc @docdir@
