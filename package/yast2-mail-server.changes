@@ -1,4 +1,18 @@
 -------------------------------------------------------------------
+Wed Nov 23 10:15:54 CET 2005 - varkoly@suse.de
+
+- introduce mail-server.paranoid 
+
+-------------------------------------------------------------------
+Tue Nov 22 13:08:37 CET 2005 - varkoly@suse.de
+
+- New feature: Mail for groups
+- Fixing bugs:
+  - #64470 yast2-mail-server: transport doesn't allow to se... 
+  - #54764 yast2-mail-server has hard requirements
+  - #58700 yast2-mail-server refuses to work without local dns server
+
+-------------------------------------------------------------------
 Mon Aug 23 10:32:12 CEST 2004 - mvidner@suse.cz
 
 - Removed cfg_mail.scr (had been moved to yast2-mail-aliases).
