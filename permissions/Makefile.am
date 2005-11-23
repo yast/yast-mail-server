@@ -2,7 +2,7 @@
 
 permissionsdir  = /etc/permissions.d
 
-permissions_DATA = mail-server
+permissions_DATA = mail-server mail-server.paranoid
 
 EXTRA_DIST = $(permissions_DATA)
 
