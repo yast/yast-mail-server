@@ -871,7 +871,7 @@ sub cond_IMAP_OP {
                         #return undef;
                     }
                 }
-                if( $imapquota ) {
+                if( $imapquota > -1 ) {
                     $ret = $imap->setquota($fname, ("STORAGE", $imapquota ) );
                     if($$ret{Status} ne "ok") {
                 	y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
@@ -908,24 +908,24 @@ sub cond_IMAP_OP {
                     }
                     $proxy_imap->logout();
                 }
-                    } else {
-                        if( defined $data->{'imapquota'} && $data->{'imapquota'} > 0 ) {
-                            $ret = $imap->setquota($fname, ("STORAGE", $data->{'imapquota'} ) );
-                            if($$ret{Status} ne "ok") {
-                                y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                                $error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}";
-                                return undef;
-                            }
-                	} else {
-                	    $ret = $imap->setquota($fname, () );
-                	    if($$ret{Status} ne "ok") {
-                		y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
-                		$error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
-                		return undef;
-                	    }
-                        }
-                    }
-                }
+             } else {
+                 if( defined $data->{'imapquota'} && $data->{'imapquota'} > 0 ) {
+                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'imapquota'} ) );
+                     if($$ret{Status} ne "ok") {
+                         y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+                         $error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}";
+                         return undef;
+                     }
+                 } else {
+                     $ret = $imap->setquota($fname, () );
+                     if($$ret{Status} ne "ok") {
+                 	y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
+                 	$error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n";
+                 	return undef;
+                     }
+                 }
+             }
+         }
     } elsif( $op eq "getquota" ) {
 	my $q_val;
 	my $q_used;
