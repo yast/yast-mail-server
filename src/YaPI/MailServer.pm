@@ -1837,9 +1837,10 @@ sub WriteMailLocalDomains {
             }
 
         } else {
-	  # this is a new domain, we create it. !!! We create only the attributes necessary for mail-server
-          my $serial = `date +%Y%m%d%H%M`;  chomp $serial;
-          my $host   = `cat /etc/HOSTNAME`; chomp $host;
+	  # This is a new domain, we create it. 
+	  # We create all the DNS attributes. `hostname -f` is the NS entry.
+          my $serial = POSIX::strftime("%Y%m%d%H%M",localtime);
+          my $host   = `hostname -f`; chomp $host;
           my $tmp = { 'Objectclass'                  => [ 'dNSZone','suseMailDomain' ],
                       'zoneName'                     => $name,
                       'suseMailDomainType'           => $type,
