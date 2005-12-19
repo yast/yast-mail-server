@@ -17,12 +17,12 @@ textdomain "MailServer";
 
 import "Ldap";
 import "Label";
+import "Package";
 import "Popup";
 import "Progress";
 import "Report";
 import "Summary";
 import "YaPI::MailServer";
-import "Require";
 import "NetworkDevices";
 import "Service";
 import "Users";
@@ -151,7 +151,7 @@ global list<list>  ModulesTreeContent = [ [_("Global Settings"),"GlobalSettings"
  * @return true/false
  */
 define boolean Installed (string package) ``{
-    return Require::AreAllPackagesInstalled ([package]);
+    return Package::Installed (package);
 }
 
 global boolean procmail_installed  = false;
