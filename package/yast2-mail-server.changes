@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Tue Dec 20 09:12:14 CET 2005 - varkoly@suse.de
+
+- Replace Require -> Package 
+
+-------------------------------------------------------------------
 Wed Nov 23 10:15:54 CET 2005 - varkoly@suse.de
 
 - introduce mail-server.paranoid 
