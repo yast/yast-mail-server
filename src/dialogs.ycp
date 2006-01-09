@@ -17,7 +17,6 @@ import "Wizard";
 import "Report";
 import "Service";
 import "Users";
-import "Require";
 import "YaPI::MailServer";
 import "YaPI::LdapServer";
 

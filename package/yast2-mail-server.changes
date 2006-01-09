@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Mon Jan  9 09:55:31 CET 2006 - visnov@suse.cz
+
+- Remove Require import 
+
+-------------------------------------------------------------------
 Tue Dec 20 09:12:14 CET 2005 - varkoly@suse.de
 
 - Replace Require -> Package 
