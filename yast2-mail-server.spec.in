@@ -1,7 +1,7 @@
 @HEADER-COMMENT@
-# neededforbuild yast2-devel-packages yast2-perl-bindings perl-gettext yast2-dns-server yast2-ldap-server -yast2-mail yast2-network yast2-country yast2-installation yast2-dns-server yast2-users perl-Digest-SHA1 yast2-ldap-client yast2-pam
 
 @HEADER@
+BuildRequires:	yast2-devel-packages yast2-dns-server yast2-ldap-server yast2-network
 Requires:	yast2 perl perl-gettext yast2-perl-bindings perl-NetxAP perl-Digest-HMAC yast2-users yast2-ldap-server yast2-ldap-client yast2-ldap yast2-dns-server
 Requires:	yast2-mail-aliases
 
