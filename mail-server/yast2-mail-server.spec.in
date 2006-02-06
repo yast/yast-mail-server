@@ -1,0 +1,37 @@
+@HEADER-COMMENT@
+
+@HEADER@
+BuildRequires:	yast2-devel-packages yast2-dns-server yast2-ldap-server yast2-network
+Requires:	yast2 perl perl-gettext yast2-perl-bindings perl-NetxAP perl-Digest-HMAC yast2-users yast2-ldap-server yast2-ldap-client yast2-ldap yast2-dns-server
+Requires:	yast2-mail-aliases
+
+Conflicts:	yast2-mail
+
+BuildArchitectures:	noarch
+
+Summary:	Configuration of mail-server
+
+%description
+-
+
+@PREP@
+
+@BUILD@
+
+@INSTALL@
+
+@CLEAN@
+
+%files
+%defattr(-,root,root)
+%dir @yncludedir@/mail-server
+@yncludedir@/mail-server/*
+@clientdir@/*
+@moduledir@/*
+@desktopdir@/*
+@scrconfdir@/*
+@agentdir@/*
+%dir /etc/openldap/schema/
+/etc/openldap/schema/suse-mailserver.schema
+/etc/permissions.d/mail-server*
+%doc @docdir@
