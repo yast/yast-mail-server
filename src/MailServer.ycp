@@ -170,6 +170,7 @@ void Check_Mail_Domain() {
         map LDAPSettings  = Ldap::Export();
         string DNSWarning = _("There is no main mail domain defined. Please fix it!");
 
+        SCR::Execute(.ldap);
         SCR::Execute (.ldap.bind);
         /* looking if a mail domain exist */
         map searchmap = $[
@@ -365,6 +366,7 @@ global boolean Read() {
     foreach(string k, map v, (map<string,map>)TMP["dsl"]:$[], {
        PPPCards = add(PPPCards, "dsl"+k);
     });
+
 
     // read  global settings
     if(Abort()) return false;
