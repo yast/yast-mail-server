@@ -1,4 +1,14 @@
 -------------------------------------------------------------------
+Wed Jan 25 21:49:45 CET 2006 - mls@suse.de
+
+- converted neededforbuild to BuildRequires
+
+-------------------------------------------------------------------
+Mon Jan 23 11:43:28 CET 2006 - varkoly@suse.de
+
+- clean up the ldap-scheme  
+
+-------------------------------------------------------------------
 Mon Jan  9 09:55:31 CET 2006 - visnov@suse.cz
 
 - Remove Require import 
