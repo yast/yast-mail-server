@@ -2249,6 +2249,9 @@ fi';
 	# Now we configure the LDAP-Server to be able store the mail server configuration
 	my $schemas = YaPI::LdapServer->ReadSchemaIncludeList();
 	my $SCHEMA  = join "",@{$schemas};
+	if( $SCHEMA !~ /dnszone.schema/ ) {
+	    push @{$schemas},'/etc/openldap/schema/dnszone.schema';
+	}
 	if( $SCHEMA !~ /suse-mailserver.schema/ ) {
 	    push @{$schemas},'/etc/openldap/schema/suse-mailserver.schema';
 	    YaPI::LdapServer->WriteSchemaIncludeList($schemas);
