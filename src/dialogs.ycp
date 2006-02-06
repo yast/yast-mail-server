@@ -307,7 +307,7 @@ void ShowMailTransport(string CID, string ACTION) {
 	      Protocols = add(Protocols,Protocol);
 	    }
 	    Destination = Transport["Destination"]:"";
-	    if( search(Transport["Nexthop"]:"", "\[") > -1) {
+	    if( search(Transport["Nexthop"]:"", "\[") ) {
 	      Server = deletechars(Transport["Nexthop"]:"","[");
 	      Server = deletechars(Server,"]");
 	    } else {
@@ -516,7 +516,7 @@ term MailTransportsDialog() {
 
   foreach(map Transport,Transports, ``{
     TransportID = Transport["Destination"]:"";
-    if( search(Transport["Nexthop"]:"", "\[") > -1) {
+    if( search(Transport["Nexthop"]:"", "\[") ) {
       Server = deletechars(Transport["Nexthop"]:"","[");
       Server = deletechars(Server,"]");
     } else {
