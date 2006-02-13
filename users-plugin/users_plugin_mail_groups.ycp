@@ -9,7 +9,7 @@
  *        This is part GUI of UsersPluginMail - plugin for editing all LDAP
  *        user/group attributes.
  *
- * $Id: users_plugin_mail.ycp 23264 2005-05-03 11:38:44Z choeger $
+ * $Id$
  */
 
 
