@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Tue Feb 21 11:49:18 CET 2006 - varkoly@suse.de
+
+- replace yast2-devel-packages in BuildRequires
+
+-------------------------------------------------------------------
 Mon Feb  6 11:04:31 CET 2006 - varkoly@suse.de
 
 - fixing time stamps
