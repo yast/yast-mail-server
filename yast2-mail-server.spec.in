@@ -1,7 +1,7 @@
 @HEADER-COMMENT@
 
 @HEADER@
-BuildRequires:	docbook-xsl-stylesheets doxygen libxslt perl-XML-Writer yast2-dns-server yast2-ldap-server yast2-network
+BuildRequires:	docbook-xsl-stylesheets doxygen libxslt perl-XML-Writer yast2-dns-server yast2-ldap-server yast2-network yast2-devtools yast2 pkgconfig update-desktop-files
 Requires:	yast2 perl perl-gettext yast2-perl-bindings perl-NetxAP perl-Digest-HMAC yast2-users yast2-ldap-server yast2-ldap-client yast2-ldap yast2-dns-server
 Requires:	yast2-mail-aliases
 
