@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Tue Apr  4 16:41:10 CEST 2006 - varkoly@suse.de
+
+- Fixing UserPlugin: we do not use memberUID
+
+-------------------------------------------------------------------
 Tue Feb 21 17:20:56 CET 2006 - mc@suse.de
 
 - Fix BuildRequires
