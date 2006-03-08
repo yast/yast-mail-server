@@ -30,13 +30,8 @@ YaST::YCP::Import ("SCR");
 ##--------------------------------------
 ##--------------------- global variables
 
-# default object classes of LDAP users
-my @user_object_class                  =
-    ( "SuSEMailRecipient");
-
-# default object classes of LDAP groups
-my @group_object_class                 =
-    ( "top", "posixgroup", "groupofnames");
+# default object classes of MailUser und MailGroup
+my @default_object_class  = ( "SuSEMailRecipient");
 
 # error message, returned when some plugin function fails
 my $error       = "";
@@ -450,15 +445,15 @@ sub WriteBefore {
 
     # Now the plugin stands or will be added
     # for the groups we hate to make some others
-    if( $config->{'what'} eq 'group' ) {
-      if(defined $data->{'susedeliverytomember'} && $data->{'susedeliverytomember'} eq 'yes') {
-	$data->{'memberuid'} = [];
-        foreach my $member (keys %{$data->{'member'}}){
-          $member =~ /uid=(.*?),/; 
-          push @{$data->{'memberuid'}},$1;
-        }
-      }
-    }
+#   if( $config->{'what'} eq 'group' ) {
+#     if(defined $data->{'susedeliverytomember'} && $data->{'susedeliverytomember'} eq 'yes') {
+#       $data->{'memberuid'} = [];
+#       foreach my $member (keys %{$data->{'member'}}){
+#         $member =~ /uid=(.*?),/; 
+#         push @{$data->{'memberuid'}},$1;
+#       }
+#     }
+#   }
     #DEBUG
     #y2internal(Dumper($data));
     if ( ($data->{'what'} =~ /^edit_/ ) && $self->PluginPresent($config, $data) ) {
@@ -524,11 +519,7 @@ sub update_object_classes {
     {
 	@orig_object_class	= @{$data->{"objectclass"}};
     }
-    my @ocs			= @user_object_class;
-    if (($config->{"what"} || "") eq "group") {
-	@ocs			= @group_object_class;
-    }
-    foreach my $oc (@ocs) {
+    foreach my $oc (@default_object_class) {
 	if (!contains (\@orig_object_class, $oc, 1)) {
 	    push @orig_object_class, $oc;
 	}

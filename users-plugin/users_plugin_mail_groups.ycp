@@ -62,6 +62,7 @@
         map<string,any> MailLocalDelivery = (map<string,any>)YaPI::MailServer::ReadMailLocalDelivery(imapadmpw);
         boolean         deliverytomember  = true;
         boolean         sharedfolder      = false;
+        boolean         enableImpapquota  = false;
 
         /**
          * See RFC 2822, 3.4
@@ -164,15 +165,16 @@
         }
 
 
-        string caption        = UsersPluginMail::Name (config, $[]);
-        string what        = config["what"]:"user";
-        string action        = data["what"]:"";
+        string caption = UsersPluginMail::Name (config, $[]);
+        string what    = config["what"]:"user";
+        string action  = data["what"]:"";
 
         if( data["susemailcommand"]:"" != "" ) {
             sharedfolder = true;
         }
         if(  data["susedeliverytomember"]:"no" == "yes" ) {
             deliverytomember = true;
+	    sharedfolder     = false;
         }
 
         map<string, any> tmp_data        = $[];
@@ -245,7 +247,7 @@
         if(data["localdeliverytype"]:"local" == "cyrus" ) {
              shared = `Frame ( _("Delivery of group Mails"),
                             `VBox(
-                                `Left(`CheckBox( `id(`deliverytomember), _("Enable Delivery to the Members"), deliverytomember))
+                                `Left(`CheckBox( `id(`deliverytomember), `opt(`notify), _("Enable Delivery to the Members"), deliverytomember))
                                  )
                              );
              imap   = `Frame ( _("IMAP Quota"),
@@ -287,18 +289,40 @@
         // UI::SetFocus (`id(`table));
         repeat
         {
+	    enableImpapquota = (boolean) UI::QueryWidget(`id(`enableImpapquota), `Value);
+	    sharedfolder     = (boolean) UI::QueryWidget(`id(`sharedfolder), `Value);
+	    deliverytomember = (boolean) UI::QueryWidget(`id(`deliverytomember), `Value);
+
+            if (ret == `deliverytomember)
+	    {
+	       sharedfolder = !deliverytomember;
+	       UI::ChangeWidget (`id (`sharedfolder), `Value, sharedfolder);
+	    }
+            if (ret == `sharedfolder)
+	    {
+	       deliverytomember = !sharedfolder;
+	       UI::ChangeWidget (`id (`deliverytomember), `Value, deliverytomember);
+	    }
+
             UI::ChangeWidget (`id (`deleteEmail), `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
             UI::ChangeWidget (`id (`editEmail),   `Enabled, UI::QueryWidget (`id (`table), `CurrentItem) != nil);
-            if(data["localdeliverytype"]:"local" == "cyrus" ) {
+
+            if(data["localdeliverytype"]:"local" == "cyrus"  && !deliverytomember ) {
                UI::ChangeWidget(`id(`sharedfolder),     `Enabled, true);
-	       if( (boolean) UI::QueryWidget(`id(`sharedfolder), `Value)) {
+	       if( sharedfolder ) {
                   UI::ChangeWidget(`id(`enableImpapquota), `Enabled, true );
-                  UI::ChangeWidget(`id(`imapquota),        `Enabled, ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value)));
+                  UI::ChangeWidget(`id(`imapquota),        `Enabled, enableImpapquota);
                } else {
                   UI::ChangeWidget(`id(`enableImpapquota), `Enabled, false );
                   UI::ChangeWidget(`id(`imapquota),        `Enabled, false );
                }
-            }
+            }  else {
+	       // If there is no cyrus, we have only delivery to member
+	       deliverytomember = true;
+	       UI::ChangeWidget(`id(`deliverytomember), `Value, deliverytomember);
+               UI::ChangeWidget(`id(`enableImpapquota), `Enabled, false );
+               UI::ChangeWidget(`id(`imapquota),        `Enabled, false );
+	    }
 
             ret = UI::UserInput();
 
@@ -359,13 +383,15 @@
                 } else {
                    data["susedeliverytomember"] = "no";
                 }
-                if( (boolean) UI::QueryWidget (`id (`sharedfolder), `Value)) {
-                    data["susemailcommand"] = "\"|/usr/bin/formail -I \\\"From \\\" |/usr/lib/cyrus/bin/deliver -r "+data["cn"]:""+" -a cyrus -m "+data["cn"]:""+"\"";
-                } else {
-                    if( data["susemailcommand"]:"" != "" ) {
-                      data = remove (data, "susemailcommand");
-                    }
-                }
+// We put it everytime into the LDAP, and the ldap filter control if it is visible
+                data["susemailcommand"] = "\"|/usr/bin/formail -I \\\"From \\\" |/usr/lib/cyrus/bin/deliver -r "+data["cn"]:""+" -a cyrus -m "+data["cn"]:""+"\"";
+//               if( (boolean) UI::QueryWidget (`id (`sharedfolder), `Value)) {
+//                   data["susemailcommand"] = "\"|/usr/bin/formail -I \\\"From \\\" |/usr/lib/cyrus/bin/deliver -r "+data["cn"]:""+" -a cyrus -m "+data["cn"]:""+"\"";
+//               } else {
+//                   if( data["susemailcommand"]:"" != "" ) {
+//                     data = remove (data, "susemailcommand");
+//                   }
+//               }
                 string err = UsersPluginMail::Check ( config, (map<string,any>) union (data, tmp_data));
 
                 if (err != "")

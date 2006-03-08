@@ -327,7 +327,7 @@ global boolean Read() {
 				  Label::AbortButton(),
 				  `focus_yes))
 	{
-	    WFM::CallFunction("sw_single", (["postfix"]));
+	    Package::DoInstall(["postfix"]);
 	}
 	else
 	{
@@ -345,7 +345,7 @@ global boolean Read() {
 				  Label::AbortButton(),
 				  `focus_yes))
 	{
-	    WFM::CallFunction("sw_single", (["cyrus-sasl-plain"]));
+	    Package::DoInstall(["cyrus-sasl-plain"]);
 	}
 	else
 	{
@@ -524,7 +524,7 @@ global boolean Write() {
 				    Label::AbortButton(),
 				    `focus_yes))
 	  {
-	      WFM::CallFunction("sw_single", (["clamav","amavisd-new"]));
+	      Package::DoInstall(["clamav","amavisd-new"]);
 	      Service::Start("amavis");
 	      Service::Start("clamd");
 	      y2milestone("Installing amavis");
@@ -569,7 +569,7 @@ global boolean Write() {
 				     Label::AbortButton(),
 				     `focus_yes))
 	   {
-	       WFM::CallFunction("sw_single", (["procmail"]));
+	       Package::DoInstall(["procmail"]);
 	   }
 	   else
 	   {
@@ -592,7 +592,7 @@ global boolean Write() {
 				     Label::AbortButton(),
 				     `focus_yes))
 	   {
-	       WFM::CallFunction("sw_single", (["cyrus-imapd"]));
+	       Package::DoInstall(["cyrus-imapd"]);
 	       SCR::UnmountAgent(.etc.imapd_conf);
 	   }
 	   else
@@ -646,7 +646,7 @@ global boolean Write() {
 				     Label::AbortButton(),
 				     `focus_yes))
 	   {
-	       WFM::CallFunction("sw_single", (["fetchmail"]));
+	       Package::DoInstall(["fetchmail"]);
 	   }
 	   else
 	   {

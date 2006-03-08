@@ -1420,10 +1420,10 @@ sub ReadMailLocalDelivery {
                                 'MailboxSizeLimit'=> '',
                                 'FallBackMailbox' => '',
                                 'SpoolDirectory'  => '',
-                                'QuotaLimit'      => '',
-                                'HardQuotaLimit'  => '',
-                                'ImapIdleTime'    => '',
-                                'PopIdleTime'     => '',
+                                'QuotaLimit'      => 90,
+                                'HardQuotaLimit'  => 0,
+                                'ImapIdleTime'    => 30,
+                                'PopIdleTime'     => 10,
 			        'Security'        => 0,
                                 'AlternateNameSpace'  => ''
                             );
@@ -1520,7 +1520,7 @@ sub WriteMailLocalDelivery {
     if(  $MailLocalDelivery->{'Type'} ne 'none') {
         write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
         write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
-        write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf, ldap:/etc/postfix/ldapalias_maps_member.cf');
+        write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps_member.cf, ldap:/etc/postfix/ldapalias_maps.cf');
         check_ldap_configuration('alias_maps',$ldapMap);
         check_ldap_configuration('alias_maps_member',$ldapMap);
     }
@@ -2486,7 +2486,7 @@ sub check_ldap_configuration {
                         'access'              => 'suseMailAction',
                         'local_recipient_maps'=> 'uid',
                         'alias_maps'          => 'suseMailCommand,suseMailForwardAddress',
-                        'alias_maps_member'   => 'memberUID',
+                        'alias_maps_member'   => 'uid,suseMailForwardAddress',
                         'mynetworks'          => 'suseMailClient',
                         'masquerade_domains'  => 'zoneName',
                         'mydestination'       => 'zoneName',
@@ -2516,6 +2516,9 @@ sub check_ldap_configuration {
                         'mydestination'       => $ldapMap->{'dns_config_dn'},
                         'virtual_alias_maps'  => $ldapMap->{'dns_config_dn'}
                        );
+    my %special_result_attribute = (
+                        'alias_maps_member'   => 'member',
+		       );
 
 
 
@@ -2557,6 +2560,9 @@ sub check_ldap_configuration {
         $LDAPCF->{'search_base'}      = $base{$config}; 
         $LDAPCF->{'query_filter'}     = $query_filter{$config}; 
         $LDAPCF->{'result_attribute'} = $result_attribute{$config}; 
+	if(defined $special_result_attribute{$config}) {
+		$LDAPCF->{'special_result_attribute'} = $special_result_attribute{$config};
+	}
         $LDAPCF->{'scope'}            = $scope{$config}; 
 
 	SCR->Write('.mail.ldaptable',[$config,$LDAPCF]);
