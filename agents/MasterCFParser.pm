@@ -416,7 +416,7 @@ sub serviceExists {
 sub service2line {
     my $srv = shift;
 
-    my $line;
+    my $line = '';
     if( defined $srv->{comment} ) {
 	$line = $srv->{comment};
     } else {
