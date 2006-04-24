@@ -182,7 +182,8 @@ sub ReadGlobalSettings {
 
     my $MainCf    = SCR->Read('.mail.postfix.main.table');
     my $SaslPaswd = SCR->Read('.mail.postfix.saslpasswd.table');
-    if( ! SCR->Read('.mail.postfix.mastercf') ) {
+    if( ! SCR->Read('.mail.postfix.mastercf') )
+    {
          return $self->SetError( summary =>"Couln't open master.cf",
                                  code    => "PARAM_CHECK_FAILED" );
     }
@@ -198,42 +199,59 @@ sub ReadGlobalSettings {
     # Determine if relay host is used
     $GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'} = read_attribute($MainCf,'relayhost');
 
-    if($GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'} ne '') {
+    if($GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'} ne '')
+    {
       # If relay host is used read & set some parameters
             $GlobalSettings{'SendingMail'}{'Type'} = 'relayhost';
         
         # Determine if relay host need sasl authentication
         my $tmp = read_attribute($SaslPaswd,$GlobalSettings{'SendingMail'}{'RelayHost'}{'Name'}); 
-        if( $tmp ) {
+        if( $tmp )
+	{
             ($GlobalSettings{'SendingMail'}{'RelayHost'}{'Account'},$GlobalSettings{'SendingMail'}{'RelayHost'}{'Password'}) 
 	                 = split /:/,$tmp;
         }
-        if($GlobalSettings{'SendingMail'}{'RelayHost'}{'Account'}  ne '') {
+        if($GlobalSettings{'SendingMail'}{'RelayHost'}{'Account'}  ne '')
+	{
            $GlobalSettings{'SendingMail'}{'RelayHost'}{'Auth'} = 1;
         }
-    } else {
+    }
+    else
+    {
 	my $smtpsrv = SCR->Execute('.mail.postfix.mastercf.findService',
 		{ 'service' => 'smtp',
 		  'command' => 'smtp' });
-        if( defined $smtpsrv ) {
+        if( defined $smtpsrv )
+	{
             $GlobalSettings{'SendingMail'}{'Type'} = 'DNS';
-	} else {   
+	}
+	else
+	{   
             $GlobalSettings{'SendingMail'}{'Type'} = 'NONE';
 	}    
     }
-    if( $GlobalSettings{'SendingMail'}{'Type'} ne 'NONE') {
+    if( $GlobalSettings{'SendingMail'}{'Type'} ne 'NONE')
+    {
 	    my $USE_TLS          = read_attribute($MainCf,'smtp_use_tls');
 	    my $ENFORCE_TLS      = read_attribute($MainCf,'smtp_enforce_tls');
 	    my $ENFORCE_PEERNAME = read_attribute($MainCf,'smtp_tls_enforce_peername');
-	    if($USE_TLS eq 'no' && $ENFORCE_TLS ne 'yes') {
+	    if($USE_TLS eq 'no' && $ENFORCE_TLS ne 'yes')
+	    {
                $GlobalSettings{'SendingMail'}{'TLS'} = 'NONE';
-	    } elsif( $ENFORCE_TLS eq 'yes') {
-	      if( $ENFORCE_PEERNAME eq 'no'){
+	    }
+	    elsif( $ENFORCE_TLS eq 'yes')
+	    {
+	      if( $ENFORCE_PEERNAME eq 'no')
+	      {
                  $GlobalSettings{'SendingMail'}{'TLS'} = 'MUST_NOPEERMATCH';
-	      } else {
+	      }
+	      else
+	      {
                  $GlobalSettings{'SendingMail'}{'TLS'} = 'MUST';
 	      } 
-	    } else {
+	    }
+	    else
+	    {
                  $GlobalSettings{'SendingMail'}{'TLS'} = 'MAY';
 	    }
     }	    
@@ -287,7 +305,8 @@ sub WriteGlobalSettings {
     my $GlobalSettings     = shift;
     my $AdminPassword      = shift;
 
-    if(! $GlobalSettings->{'Changed'}){
+    if(! $GlobalSettings->{'Changed'})
+    {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
@@ -302,67 +321,89 @@ sub WriteGlobalSettings {
     my $RelayHostPassword  = $GlobalSettings->{'SendingMail'}{'RelayHost'}{'Password'};
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
     my $SaslPasswd         = SCR->Read('.mail.postfix.saslpasswd.table');
-    if( ! SCR->Read('.mail.postfix.mastercf') ) {
+    if( ! SCR->Read('.mail.postfix.mastercf') )
+    {
          return $self->SetError( summary =>"Couln't open master.cf",
                                  code    => "PARAM_CHECK_FAILED" );
     }
     
     # Parsing attributes 
-    if($MaximumMailSize =~ /[^\d+]/) {
+    if($MaximumMailSize =~ /[^\d+]/)
+    {
          return $self->SetError( summary =>"Maximum Mail Size value may only contain decimal number in byte",
                                  code    => "PARAM_CHECK_FAILED" );
     }
     # If SendingMailType ne NONE we have to have a look 
     # at master.cf if smt is started
-    if($SendingMailType ne 'NONE') {
+    if($SendingMailType ne 'NONE')
+    {
        my $smtpsrv = SCR->Execute('.mail.postfix.mastercf.findService',
                    { 'service' => 'smtp',
                      'command' => 'smtp' });
-       if(! defined $smtpsrv ) {
+       if(! defined $smtpsrv )
+       {
            SCR->Execute('.mail.postfix.mastercf.addService', { 'service' => 'smtp', 'command' => 'smtp' });
        }
     }
     
-    if($SendingMailType eq 'DNS') {
+    if($SendingMailType eq 'DNS')
+    {
         #Make direkt mail sending
         #looking for relayhost setting from the past 
         my $tmp = read_attribute($MainCf,'relayhost');
-        if( $tmp ne '' ) {
+        if( $tmp ne '' )
+	{
             write_attribute($MainCf,'relayhost','');
             write_attribute($SaslPasswd,$tmp,'');
         }
-    } elsif ($SendingMailType eq 'relayhost') {
+    }
+    elsif ($SendingMailType eq 'relayhost')
+    {
         write_attribute($MainCf,'relayhost',$RelayHostName);
-        if($RelayHostAuth){
+        if($RelayHostAuth)
+	{
            write_attribute($SaslPasswd,$RelayHostName,"$RelayHostAccount:$RelayHostPassword");
            write_attribute($MainCf,'smtp_sasl_auth_enable','yes');
            write_attribute($MainCf,'smtp_sasl_password_maps','hash:/etc/postfix/sasl_passwd');
         }
-    } elsif ($SendingMailType eq 'NONE') {
+    }
+    elsif ($SendingMailType eq 'NONE')
+    {
 	SCR->Execute('.mail.postfix.mastercf.deleteService', { 'service' => 'smtp', 'command' => 'smtp' });
-    } else {
+    }
+    else
+    {
       return $self->SetError( summary =>"Unknown mail sending type. Allowed values are:".
                                           " NONE | DNS | relayhost",
                               code    => "PARAM_CHECK_FAILED" );
     }
     #Now we write TLS settings if needed
-    if($SendingMailTLS eq 'NONE') {
+    if($SendingMailTLS eq 'NONE')
+    {
       write_attribute($MainCf,'smtp_use_tls','no');
       write_attribute($MainCf,'smtp_enforce_tls','no');
       write_attribute($MainCf,'smtp_tls_enforce_peername','no');
-    } elsif($SendingMailTLS eq 'MAY') {
+    }
+    elsif($SendingMailTLS eq 'MAY')
+    {
       write_attribute($MainCf,'smtp_use_tls','yes');
       write_attribute($MainCf,'smtp_enforce_tls','no');
       write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
-    } elsif($SendingMailTLS eq 'MUST') {
+    }
+    elsif($SendingMailTLS eq 'MUST')
+    {
       write_attribute($MainCf,'smtp_use_tls','yes');
       write_attribute($MainCf,'smtp_enforce_tls','yes');
       write_attribute($MainCf,'smtp_tls_enforce_peername','yes');
-    } elsif($SendingMailTLS eq 'MUST_NOPEERMATCH') {
+    }
+    elsif($SendingMailTLS eq 'MUST_NOPEERMATCH')
+    {
       write_attribute($MainCf,'smtp_use_tls','yes');
       write_attribute($MainCf,'smtp_enforce_tls','yes');
       write_attribute($MainCf,'smtp_tls_enforce_peername','no');
-    } else {
+    }
+    else
+    {
       return $self->SetError( summary =>"Unknown mail sending TLS type. Allowed values are:".
                                           " NONE | MAY | MUST | MUST_NOPEERMATCH",
                               code    => "PARAM_CHECK_FAILED" );
@@ -540,13 +581,15 @@ sub ReadMailTransports {
 
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
     my $SaslPaswd       = SCR->Read('.mail.postfix.saslpasswd.table');
     my $MainCf          = SCR->Read('.mail.postfix.main.table');
     my $transport_maps  = read_attribute($MainCf,'transport_maps');
-    if($transport_maps !~ /ldap:\/etc\/postfix\/ldaptransport_maps.cf/) {
+    if($transport_maps !~ /ldap:\/etc\/postfix\/ldaptransport_maps.cf/)
+    {
     	$MailTransports{'Use'} = YaST::YCP::Boolean(0);
     }
 
@@ -564,18 +607,25 @@ sub ReadMailTransports {
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
 
     # filling up our array
-    foreach my $dn (keys %{$ret}){
+    foreach my $dn (keys %{$ret})
+    {
        my $Transport       = {};
        $Transport->{'Destination'}     = $ret->{$dn}->{'susemailtransportdestination'}->[0];
-       if( $ret->{$dn}->{'susemailtransportnexthop'}->[0] =~ /:/) {
+       if( $ret->{$dn}->{'susemailtransportnexthop'}->[0] =~ /:/)
+       {
          ($Transport->{'Transport'},$Transport->{'Nexthop'}) = split /:/,$ret->{$dn}->{'susemailtransportnexthop'}->[0];
-       } else {
+       }
+       else
+       {
          $Transport->{'Nexthop'}         = $ret->{$dn}->{'susemailtransportnexthop'}->[0];
        }
        push @{$MailTransports{'Transports'}}, $Transport;
-       if( $Transport->{'Nexthop'} =~ /\[(.*)\]/ ){
+       if( $Transport->{'Nexthop'} =~ /\[(.*)\]/ )
+       {
             $NeededServers{$1} = 1;
-       } else {
+       }
+       else
+       {
             $NeededServers{$Transport->{'Nexthop'}} = 1;
        }
     }
@@ -586,7 +636,8 @@ sub ReadMailTransports {
        my $SASLPasswd     = '';
        #Looking the type of TSL
        my $tmp = read_attribute($SaslPaswd,$Server);
-       if($tmp) {
+       if($tmp)
+       {
            my @SASLAccount = split /:/, $tmp;
            $MailTransports{'SASLAccounts'}->{$Server} = \@SASLAccount;
        }
@@ -605,7 +656,8 @@ sub ReadMailTransports {
     $ret = SCR->Read('.ldap.search',\%SearchMap);
 
     # filling up our array
-    foreach my $dn (keys %{$ret}){
+    foreach my $dn (keys %{$ret})
+    {
        my $TLSMode         = $ret->{$dn}->{'susetlspersitemode'}->[0] || "NONE";
        my $TLSSite         = $ret->{$dn}->{'susetlspersitepeer'}->[0] ;
        $MailTransports{'TLSSites'}->{$TLSSite} = $TLSMode;
@@ -680,7 +732,8 @@ sub WriteMailTransports {
     my $NeededServers  = {};
 
     # If no changes we haven't to do anything
-    if(! $MailTransports->{'Changed'}){
+    if(! $MailTransports->{'Changed'})
+    {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
@@ -688,7 +741,8 @@ sub WriteMailTransports {
     
     # Make LDAP Connection 
     $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
     
@@ -704,8 +758,10 @@ sub WriteMailTransports {
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
 
     # Now let's work
-    foreach my $Transport (@{$MailTransports->{'Transports'}}){
-       if( $Transport->{'Destination'} =~ /[^-\w\*\.\@\+]/ ) {
+    foreach my $Transport (@{$MailTransports->{'Transports'}})
+    {
+       if( $Transport->{'Destination'} =~ /[^-\w\*\.\@\+]/ )
+       {
 	    return $self->SetError( summary     => 'Wrong Value for Mail Transport Destination. '.
 	                                           'This field may contain only the charaters [-a-zA-Z.*@]',
 				    code        => 'PARAM_CHECK_FAILED'
@@ -715,14 +771,20 @@ sub WriteMailTransports {
           $Destination =~ s#\+#\\+#;
        my $dn	= 'suseMailTransportDestination='.$Destination.','.$ldapMap->{'mail_config_dn'};
        $Entries{$dn}->{'suseMailTransportDestination'} = $Transport->{'Destination'};
-       if(defined $Transport->{'Transport'} ) {
+       if(defined $Transport->{'Transport'} )
+       {
           $Entries{$dn}->{'suseMailTransportNexthop'}  = $Transport->{'Transport'}.':'.$Transport->{'Nexthop'};
-       } else {
+       }
+       else
+       {
           $Entries{$dn}->{'suseMailTransportNexthop'}  = $Transport->{'Nexthop'};
        }
-       if( $Transport->{'Nexthop'} =~ /\[(.*)\]/ ){
+       if( $Transport->{'Nexthop'} =~ /\[(.*)\]/ )
+       {
             $NeededServers->{$1} = 1;
-       } else {
+       }
+       else
+       {
             $NeededServers->{$Transport->{'Nexthop'}} = 1;
        }
     }
@@ -732,18 +794,23 @@ sub WriteMailTransports {
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
     check_ldap_configuration('transport_maps',$ldapMap);
     check_ldap_configuration('smtp_tls_per_site',$ldapMap);
-    if( $MailTransports->{Use} ){
+    if( $MailTransports->{Use} )
+    {
 	write_attribute($MainCf,'transport_maps','ldap:/etc/postfix/ldaptransport_maps.cf');
 	write_attribute($MainCf,'smtp_tls_per_site','ldap:/etc/postfix/ldapsmtp_tls_per_site.cf');
-    } else {
+    }
+    else
+    {
 	write_attribute($MainCf,'transport_maps','');
 	write_attribute($MainCf,'smtp_tls_per_site','');
     }
 
     # If there is no ERROR we do the changes
     # First we clean all the transport lists
-    foreach my $key (keys %{$ret}){
-       if(! SCR->Write('.ldap.delete',{'dn'=>$key})){
+    foreach my $key (keys %{$ret})
+    {
+       if(! SCR->Write('.ldap.delete',{'dn'=>$key}))
+       {
           my $ldapERR = SCR->Read(".ldap.error");
           return $self->SetError(summary     => "LDAP delete failed",
                                  code        => "SCR_WRITE_FAILED",
@@ -751,13 +818,15 @@ sub WriteMailTransports {
        }
     }
 
-    foreach my $dn (keys %Entries){
+    foreach my $dn (keys %Entries)
+    {
        my $DN  = { 'dn' => $dn };
        my $tmp = { 'Objectclass'                  => [ 'suseMailTransport' ],
                    'suseMailTransportDestination' => $Entries{$dn}->{'suseMailTransportDestination'},
                    'suseMailTransportNexthop'     => $Entries{$dn}->{'suseMailTransportNexthop'}
                  };
-       if(! SCR->Write('.ldap.add',$DN,$tmp)){
+       if(! SCR->Write('.ldap.add',$DN,$tmp))
+       {
           my $ldapERR = SCR->Read(".ldap.error");
           return $self->SetError(summary     => "LDAP add failed",
                                  code        => "SCR_WRITE_FAILED",
@@ -768,16 +837,22 @@ sub WriteMailTransports {
 
     #Creating the new TLS per Site entries
     %Entries = ();
-    foreach my $TLSSite (keys %{$MailTransports->{'TLSSites'}}){
-       if( ! defined $NeededServers->{$TLSSite} ) {
+    foreach my $TLSSite (keys %{$MailTransports->{'TLSSites'}})
+    {
+       if( ! defined $NeededServers->{$TLSSite} )
+       {
              next;
        }
        my $dn	= 'suseTLSPerSitePeer='.$TLSSite.','.$ldapMap->{'mail_config_dn'};
        $Entries{$dn}->{'suseTLSPerSiteMode'}           = 'NONE';
-       if($MailTransports->{'TLSSites'}->{$TLSSite} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/) {
+
+       if($MailTransports->{'TLSSites'}->{$TLSSite} =~ /NONE|MAY|MUST|MUST_NOPEERMATCH/)
+       {
             $Entries{$dn}->{'suseTLSPerSitePeer'}      = $TLSSite;
             $Entries{$dn}->{'suseTLSPerSiteMode'}      = $MailTransports->{'TLSSites'}->{$TLSSite};
-       } else {
+       }
+       else
+       {
 	    return $self->SetError( summary     => 'Wrong Value for suseTLSPerSiteMode',
 				    code        => 'PARAM_CHECK_FAILED'
 				  );
@@ -793,8 +868,10 @@ sub WriteMailTransports {
                           );
     $ret = SCR->Read('.ldap.search',\%SearchMap);
     # First we clean all the TLSSites
-    foreach my $key (keys %{$ret}){
-       if(! SCR->Write('.ldap.delete',{'dn'=>$key})){
+    foreach my $key (keys %{$ret})
+    {
+       if(! SCR->Write('.ldap.delete',{'dn'=>$key}))
+       {
           my $ldapERR = SCR->Read(".ldap.error");
           return $self->SetError(summary     => "LDAP delete failed",
                                  code        => "SCR_WRITE_FAILED",
@@ -802,13 +879,15 @@ sub WriteMailTransports {
        }
     }
     #And now we add the new TLSSites
-    foreach my $dn (keys %Entries){
+    foreach my $dn (keys %Entries)
+    {
        my $DN  = { 'dn' => $dn };
        my $tmp = { 'Objectclass'                  => [ 'suseTLSPerSiteContainer' ],
                    'suseTLSPerSiteMode'           => $Entries{$dn}->{'suseTLSPerSiteMode'},
                    'suseTLSPerSitePeer'           => $Entries{$dn}->{'suseTLSPerSitePeer'}
                  };
-       if(! SCR->Write('.ldap.add',$DN,$tmp)){
+       if(! SCR->Write('.ldap.add',$DN,$tmp))
+       {
           my $ldapERR = SCR->Read(".ldap.error");
           return $self->SetError(summary     => "LDAP add failed",
                                  code        => "SCR_WRITE_FAILED",
@@ -823,19 +902,25 @@ sub WriteMailTransports {
     my $SaslPasswd    = SCR->Read('.mail.postfix.saslpasswd.table');
 
     my $RelayHost = read_attribute($MainCf,'relayhost');
-    foreach(@{$OldSaslPasswd}){
-      if($_->{"key"} eq $RelayHost) {
+    foreach(@{$OldSaslPasswd})
+    {
+      if($_->{"key"} eq $RelayHost)
+      {
          next;
-      } elsif( ! defined $MailTransports->{'SASLAccounts'}->{$_->{"key"}}) {
+      }
+      elsif( ! defined $MailTransports->{'SASLAccounts'}->{$_->{"key"}})
+      {
          write_attribute($SaslPasswd,$_->{"key"},"");
       }
     }
-    foreach(keys %{$MailTransports->{'SASLAccounts'}}) {
+    foreach(keys %{$MailTransports->{'SASLAccounts'}})
+    {
          my $Account  = $MailTransports->{'SASLAccounts'}->{$_}->[0];
          my $Password = $MailTransports->{'SASLAccounts'}->{$_}->[1];
          write_attribute($SaslPasswd,$_,"$Account:$Password");
     }
-    if( scalar(keys(%{$MailTransports->{'SASLAccounts'}})) > 0 ) {
+    if( scalar(keys(%{$MailTransports->{'SASLAccounts'}})) > 0 )
+    {
          write_attribute($MainCf,'smtp_sasl_auth_enable','yes');
          write_attribute($MainCf,'smtp_sasl_password_maps','hash:/etc/postfix/sasl_passwd');
     }
@@ -941,34 +1026,43 @@ sub ReadMailPrevention {
 
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
     # First we read the main.cf and master.cf 
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
-    if( ! SCR->Read('.mail.postfix.mastercf') ) {
+    if( ! SCR->Read('.mail.postfix.mastercf') )
+    {
          return $self->SetError( summary =>"Couln't open master.cf",
                                  code    => "PARAM_CHECK_FAILED" );
     }
 
     # We ar looking for the BasicProtection Basic Prevention
     my $smtpd_helo_restrictions = read_attribute($MainCf,'smtpd_helo_restrictions');
-    if( $smtpd_helo_restrictions !~ /reject_invalid_hostname/ ) {
+    if( $smtpd_helo_restrictions !~ /reject_invalid_hostname/ )
+    {
        my $smtpd_helo_required  = read_attribute($MainCf,'smtpd_helo_required');
-       if( $smtpd_helo_required =~ /no/ ) {
+       if( $smtpd_helo_required =~ /no/ )
+       {
          $MailPrevention{'BasicProtection'} =  'off';    
-       } else {
+       }
+       else
+       {
          $MailPrevention{'BasicProtection'} =  'medium';
        }
     }
 
     # If the BasicProtection Basic Prevention is not off we collect the list of the RBL hosts
-    if($MailPrevention{'BasicProtection'} ne 'off') {
+    if($MailPrevention{'BasicProtection'} ne 'off')
+    {
        my $smtpd_client_restrictions = read_attribute($MainCf,'smtpd_client_restrictions');
-       foreach(split /, |,/, $smtpd_client_restrictions){
-          if(/reject_rbl_client (.*)/){
+       foreach(split /, |,/, $smtpd_client_restrictions)
+       {
+          if(/reject_rbl_client (.*)/)
+	  {
 	    push @{$MailPrevention{'RBLList'}}, $1;
 	  }
        }
@@ -982,7 +1076,8 @@ sub ReadMailPrevention {
                    'attrs'   => ['suseMailClient','suseMailAction']
                  );
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
-    foreach my $entry (@{$ret}){  
+    foreach my $entry (@{$ret})
+    {  
        my $AccessEntry = {};
        $AccessEntry->{'MailClient'} = $entry->{'susemailclient'}->[0];
        $AccessEntry->{'MailAction'} = $entry->{'susemailaction'}->[0];
@@ -996,9 +1091,10 @@ sub ReadMailPrevention {
     my $vscan = SCR->Execute('.mail.postfix.mastercf.findService',
 		{ 'service' => 'localhost:10025',
 		  'command' => 'smtpd'} );
-    if( defined $smtp->[0] && defined $smtp->[0]->{'options'} ) { 
-	if( $smtp->[0]->{'options'}->{'content_filter'} eq 'smtp:[localhost]:10024'
-	    && $vscan ) {
+    if( defined $smtp->[0] && defined $smtp->[0]->{'options'} )
+    { 
+	if( $smtp->[0]->{'options'}->{'content_filter'} eq 'smtp:[localhost]:10024' && $vscan )
+	{
 	    $MailPrevention{'VirusScanning'} = YaST::YCP::Boolean(1);
 	}
     }
@@ -1015,67 +1111,88 @@ sub WriteMailPrevention {
     my $MailPrevention  = shift;
     my $AdminPassword   = shift;
 
-    if(! $MailPrevention->{'Changed'}){
+    if(! $MailPrevention->{'Changed'})
+    {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
    
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
     # First we read the main.cf
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 
-    if( ! SCR->Read('.mail.postfix.mastercf') ) {
+    if( ! SCR->Read('.mail.postfix.mastercf') )
+    {
          return $self->SetError( summary =>"Couln't open master.cf",
                                  code    => "PARAM_CHECK_FAILED" );
     }
 
     #Collect the RBL host list
     my $clnt_restrictions = '';
-    foreach(@{$MailPrevention->{'RBLList'}}){
-      if($clnt_restrictions eq '') {
+    foreach(@{$MailPrevention->{'RBLList'}})
+    {
+      if($clnt_restrictions eq '')
+      {
           $clnt_restrictions="reject_rbl_client $_";
-      } else {
+      }
+      else
+      {
           $clnt_restrictions="$clnt_restrictions, reject_rbl_client $_";
       }
     }
 
     my $smtpd_recipient_restrictions = read_attribute($MainCf,'smtpd_recipient_restrictions');
-    if( $smtpd_recipient_restrictions =~ /permit_sasl_authenticated/) {
+    if( $smtpd_recipient_restrictions =~ /permit_sasl_authenticated/)
+    {
         $smtpd_recipient_restrictions = "permit_sasl_authenticated, ";
-    } else {
+    }
+    else
+    {
         $smtpd_recipient_restrictions = "";
     }
     write_attribute($MainCf,'smtpd_recipient_restrictions',$smtpd_recipient_restrictions.'permit_auth_destination, permit_mynetworks, reject_unauth_destination, reject');
-    if($MailPrevention->{'BasicProtection'} eq 'hard') {
+    if($MailPrevention->{'BasicProtection'} eq 'hard')
+    {
       #Write hard settings 
        write_attribute($MainCf,'smtpd_sender_restrictions','ldap:/etc/postfix/ldapaccess.cf, reject_unknown_sender_domain');   
        write_attribute($MainCf,'smtpd_helo_required','yes');   
        write_attribute($MainCf,'smtpd_helo_restrictions','permit_mynetworks, reject_invalid_hostname');   
        write_attribute($MainCf,'strict_rfc821_envelopes','yes');   
        write_attribute($MainCf,'local_recipient_maps','$alias_maps, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
-       if( $clnt_restrictions ne '') {
+       if( $clnt_restrictions ne '')
+       {
           write_attribute($MainCf,'smtpd_client_restrictions',"permit_mynetworks, $clnt_restrictions, ldap:/etc/postfix/ldapaccess.cf, reject_unknown_client");
-       }  else {
+       }
+       else
+       {
           write_attribute($MainCf,'smtpd_client_restrictions','permit_mynetworks, ldap:/etc/postfix/ldapaccess.cf, reject_unknown_client');
        }
-    } elsif($MailPrevention->{'BasicProtection'} eq 'medium') {
+    }
+    elsif($MailPrevention->{'BasicProtection'} eq 'medium')
+    {
       #Write medium settings  
        write_attribute($MainCf,'smtpd_sender_restrictions','ldap:/etc/postfix/ldapaccess.cf, reject_unknown_sender_domain');   
        write_attribute($MainCf,'smtpd_helo_required','yes');   
        write_attribute($MainCf,'smtpd_helo_restrictions','');   
        write_attribute($MainCf,'strict_rfc821_envelopes','no');   
        write_attribute($MainCf,'local_recipient_maps','$alias_maps, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
-       if( $clnt_restrictions ne '') {
+       if( $clnt_restrictions ne '')
+       {
           write_attribute($MainCf,'smtpd_client_restrictions',"$clnt_restrictions, ldap:/etc/postfix/ldapaccess.cf");
-       }  else {
+       }
+       else
+       {
           write_attribute($MainCf,'smtpd_client_restrictions','ldap:/etc/postfix/ldapaccess.cf');
        }
-    } elsif($MailPrevention->{'BasicProtection'} eq 'off') {
+    }
+    elsif($MailPrevention->{'BasicProtection'} eq 'off')
+    {
       # Write off settings  
        write_attribute($MainCf,'smtpd_sender_restrictions','ldap:/etc/postfix/ldapaccess.cf');   
        write_attribute($MainCf,'smtpd_helo_required','no');   
@@ -1083,7 +1200,9 @@ sub WriteMailPrevention {
        write_attribute($MainCf,'strict_rfc821_envelopes','no');   
        write_attribute($MainCf,'smtpd_client_restrictions','ldap:/etc/postfix/ldapaccess.cf');
        write_attribute($MainCf,'local_recipient_maps','$alias_maps, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
-    } else {
+    }
+    else
+    {
       # Error no such value
          return $self->SetError( summary =>"Unknown BasicProtection mode. Allowed values are: hard, medium, off",
                                  code    => "PARAM_CHECK_FAILED" );
@@ -1097,8 +1216,10 @@ sub WriteMailPrevention {
                  );
     my $ret = SCR->Read('.ldap.search',\%SearchMap);
     #First we clean the access table
-    foreach my $key (keys %{$ret}){
-       if(! SCR->Write('.ldap.delete',{'dn'=>$key})){
+    foreach my $key (keys %{$ret})
+    {
+       if(! SCR->Write('.ldap.delete',{'dn'=>$key}))
+       {
           my $ldapERR = SCR->Read(".ldap.error");
           return $self->SetError(summary     => "LDAP delete failed",
                                  code        => "SCR_WRITE_FAILED",
@@ -1108,24 +1229,28 @@ sub WriteMailPrevention {
 
     #Now we write the new table
 #print STDERR Dumper([$MailPrevention->{'AccessList'}]);
-    foreach my $entry (@{$MailPrevention->{'AccessList'}}) {
+    foreach my $entry (@{$MailPrevention->{'AccessList'}})
+    {
        my $dn  = { 'dn' => "suseMailClient=".$entry->{'MailClient'}.','. $ldapMap->{'mail_config_dn'}};
        my $tmp = { 'suseMailClient'   => $entry->{'MailClient'},
                    'suseMailAction'   => $entry->{'MailAction'},
                    'ObjectClass'      => ['suseMailAccess']
                  };
-       if(! SCR->Write('.ldap.add',$dn,$tmp)){
-        my $ldapERR = SCR->Read(".ldap.error");
-        return $self->SetError(summary => "LDAP add failed",
+       if(! SCR->Write('.ldap.add',$dn,$tmp))
+       {
+          my $ldapERR = SCR->Read(".ldap.error");
+          return $self->SetError(summary => "LDAP add failed",
                                code => "SCR_INIT_FAILED",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
        }
     }
 
     SCR->Read('.mail.postfix.mastercf');
-    if( $MailPrevention->{'VirusScanning'} ){
+    if( $MailPrevention->{'VirusScanning'} )
+    {
 	my $err = activate_virus_scanner();
-	if( $err ne "" ) {
+	if( $err ne "" )
+	{
 	    return $self->SetError(summary => "activating virus scanner failed",
 				   code => "VIRUS_SCANNER_FAILED",
 				   description => "activating the virus scanner failed: $err");
@@ -1137,7 +1262,9 @@ sub WriteMailPrevention {
    		{ 'service' => 'smtp',
 		  'command' => 'smtpd',
 		  'options' => { 'content_filter' => 'smtp:[localhost]:10024' } } );
-        } else {
+        }
+	else
+	{
              SCR->Execute('.mail.postfix.mastercf.addService',
    		{ 'service' => 'smtp',
 		  'command' => 'smtpd',
@@ -1164,7 +1291,9 @@ sub WriteMailPrevention {
 		  'wakeup'  => '-',
 		  'maxproc' => '-',
 		  'options' => { 'content_filter' => '' } } );
-    } else {
+    }
+    else
+    {
       SCR->Execute('.mail.postfix.mastercf.deleteService',
           { 'service' => 'localhost:10025', 'command' => 'smtpd' });
       SCR->Execute('.mail.postfix.mastercf.modifyService', 
@@ -1251,7 +1380,8 @@ sub ReadMailRelaying {
 
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
@@ -1262,8 +1392,10 @@ sub ReadMailRelaying {
     # my $TrustedNetworks    = read_attribute($MainCf,'mynetworks');
     my $TrustedNetworks = `postconf -h mynetworks`;
     chomp $TrustedNetworks;
-    foreach(split /, |,| /, $TrustedNetworks) { 
-       if(! /ldapmynetworks/ && /\w+/) {
+    foreach(split /, |,| /, $TrustedNetworks)
+    { 
+       if(! /ldapmynetworks/ && /\w+/)
+       {
           push @{$MailRelaying{'TrustedNetworks'}}, $_;
        }
     }
@@ -1287,18 +1419,23 @@ sub ReadMailRelaying {
     my $smtpd_use_tls                = read_attribute($MainCf,'smtpd_use_tls');
     my $smtpd_enforce_tls            = read_attribute($MainCf,'smtpd_enforce_tls');
     my $smtpd_tls_auth_only          = read_attribute($MainCf,'smtpd_tls_auth_only');
-    if($smtpd_use_tls eq 'no') {
+    if($smtpd_use_tls eq 'no')
+    {
        $MailRelaying{'SMTPDTLSMode'} = 'none';
     }
-    if($smtpd_enforce_tls eq 'yes') {
+    if($smtpd_enforce_tls eq 'yes')
+    {
        $MailRelaying{'SMTPDTLSMode'} = 'enforce';
     }
-    if($smtpd_tls_auth_only eq 'yes') {
+    if($smtpd_tls_auth_only eq 'yes')
+    {
        $MailRelaying{'SMTPDTLSMode'} = 'auth_only';
     } 
-    if($smtpd_sasl_auth_enable eq 'yes') {
+    if($smtpd_sasl_auth_enable eq 'yes')
+    {
        $MailRelaying{'RequireSASL'}  = 1;
-       if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/) {
+       if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/)
+       {
          $self->SetError( summary => 'Postfix configuration mistake: smtpd_sasl_auth_enable is yes, but '.
                                      'smtpd_recipient_restrictions doesn\'t contain permit_sasl_authenticated.',
                                  code    => "PARAM_CHECK_FAILED" );
@@ -1319,7 +1456,8 @@ sub WriteMailRelaying {
     my $AdminPassword   = shift;
    
     #If nothing to do we don't do antithing
-    if(! $MailRelaying->{'Changed'}){
+    if(! $MailRelaying->{'Changed'})
+    {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
@@ -1327,7 +1465,8 @@ sub WriteMailRelaying {
 #print STDERR Dumper([$MailRelaying]);
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
@@ -1336,24 +1475,33 @@ sub WriteMailRelaying {
 
     # now we collent the trusted networks;
     my $TrustedNetworks    = '';
-    foreach(@{$MailRelaying->{'TrustedNetworks'}}){
-      if( $TrustedNetworks ne '' ) {
+    foreach(@{$MailRelaying->{'TrustedNetworks'}})
+    {
+      if( $TrustedNetworks ne '' )
+      {
         $TrustedNetworks = $TrustedNetworks.', '.$_
-      } else {
+      }
+      else
+      {
         $TrustedNetworks = $_;
       }
     }
     write_attribute($MainCf,'mynetworks',$TrustedNetworks);
 
     my $smtpd_recipient_restrictions = read_attribute($MainCf,'smtpd_recipient_restrictions');      
-    if($MailRelaying->{'RequireSASL'}) {
+    if($MailRelaying->{'RequireSASL'})
+    {
        write_attribute($MainCf,'smtpd_sasl_auth_enable','yes');
-      if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/) {
+      if( $smtpd_recipient_restrictions !~ /permit_sasl_authenticated/)
+      {
           $smtpd_recipient_restrictions = 'permit_sasl_authenticated, '.$smtpd_recipient_restrictions;
           write_attribute($MainCf,'smtpd_recipient_restrictions',$smtpd_recipient_restrictions);
       }
-    } else {
-      if( $smtpd_recipient_restrictions =~ s/permit_sasl_authenticated//) {
+    }
+    else
+    {
+      if( $smtpd_recipient_restrictions =~ s/permit_sasl_authenticated//)
+      {
         $smtpd_recipient_restrictions =~ s/,\s*,/,/;
 	$smtpd_recipient_restrictions =~ s/^\s*,\s*//;
         write_attribute($MainCf,'smtpd_recipient_restrictions',$smtpd_recipient_restrictions);
@@ -1362,46 +1510,87 @@ sub WriteMailRelaying {
     }
 
     #now we write TLS settings for the smtpd daemon
-    if($MailRelaying->{'SMTPDTLSMode'} eq 'none') {
+    if($MailRelaying->{'SMTPDTLSMode'} eq 'none')
+    {
         write_attribute($MainCf,'smtpd_use_tls','no');
         write_attribute($MainCf,'smtp_enforce_tls','no');
         write_attribute($MainCf,'smtpd_tls_auth_only','no');
-    } elsif($MailRelaying->{'SMTPDTLSMode'} eq 'use') {
+    }
+    elsif($MailRelaying->{'SMTPDTLSMode'} eq 'use')
+    {
         write_attribute($MainCf,'smtpd_use_tls','yes');
         write_attribute($MainCf,'smtp_enforce_tls','no');
         write_attribute($MainCf,'smtpd_tls_auth_only','no');
-    } elsif($MailRelaying->{'SMTPDTLSMode'} eq 'enforce') {
+    }
+    elsif($MailRelaying->{'SMTPDTLSMode'} eq 'enforce')
+    {
         write_attribute($MainCf,'smtpd_use_tls','yes');
         write_attribute($MainCf,'smtp_enforce_tls','yes');
         write_attribute($MainCf,'smtpd_tls_auth_only','no');
-    } elsif($MailRelaying->{'SMTPDTLSMode'} eq 'auth_only') {
+    }
+    elsif($MailRelaying->{'SMTPDTLSMode'} eq 'auth_only')
+    {
         write_attribute($MainCf,'smtpd_use_tls','yes');
         write_attribute($MainCf,'smtp_enforce_tls','no');
         write_attribute($MainCf,'smtpd_tls_auth_only','yes');
-    } else {
+    }
+    else
+    {
          return $self->SetError( summary => 'Bad value for SMTPDTLSMode. Avaiable values are:'.
                                             "\nnone use enforce auth_only",
                                  code    => "PARAM_CHECK_FAILED" );
     }
-    if($MailRelaying->{'SMTPDTLSMode'} ne 'none') {
+    # Searching for the tlsmanager service
+    if( ! SCR->Read('.mail.postfix.mastercf') )
+    {
+       return $self->SetError( summary =>"Couln't open master.cf",
+                               code    => "PARAM_CHECK_FAILED" );
+    }
+    my $tlsmgr = SCR->Execute('.mail.postfix.mastercf.findService',
+                   { 'service' => 'tlsmgr',
+                     'command' => 'tlsmgr' });
+    if($MailRelaying->{'SMTPDTLSMode'} ne 'none')
+    {
       my $size = SCR->Read(".target.size", '/etc/ssl/servercerts/servercert.pem');
-      if ($size <= 0) {
+      if ($size <= 0)
+      {
           return $self->SetError(summary => "Common server certificate not found.",
                                  code => "PARAM_CHECK_FAILED");
       }
       $size = SCR->Read(".target.size", '/etc/ssl/servercerts/serverkey.pem');
-      if ($size <= 0) {
+      if ($size <= 0)
+      {
           return $self->SetError(summary => "Common private key not found.",
                                  code => "PARAM_CHECK_FAILED");
       }
       write_attribute($MainCf,'smtpd_tls_cert_file','/etc/ssl/servercerts/servercert.pem');
       write_attribute($MainCf,'smtpd_tls_key_file','/etc/ssl/servercerts/serverkey.pem');
-      if(SCR->Read(".target.size", '/etc/ssl/certs/YaST-CA.pem') > 0) {
+      if(SCR->Read(".target.size", '/etc/ssl/certs/YaST-CA.pem') > 0)
+      {
           #write_attribute($MainCf,'smtpd_tls_CAfile','/etc/ssl/certs/YaST-CA.pem');
           write_attribute($MainCf,'smtpd_tls_CApath','/etc/ssl/certs');
       }
+      if(! defined $tlsmgr )
+      {
+           SCR->Execute('.mail.postfix.mastercf.addService',
+	   { 'service' => 'tlsmgr',
+	     'type'    => 'unix',
+	     'private' => '-',
+	     'unpriv'  => '-',
+	     'chroot'  => 'n',
+	     'wakeup'  => '1000?',
+	     'maxproc' => '1',
+	     'command' => 'tlsmgr' });
+      }
     }
-
+    else
+    {
+      if( defined $tlsmgr )
+      {
+         SCR->Execute('.mail.postfix.mastercf.deleteService', {'service' => 'tlsmgr','command' => 'tlsmgr'});
+      }
+    }
+    SCR->Write('.mail.postfix.mastercf',undef);
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
 
@@ -1430,7 +1619,8 @@ sub ReadMailLocalDelivery {
 
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
@@ -1445,37 +1635,56 @@ sub ReadMailLocalDelivery {
     my $LocalTransport     = read_attribute($MainCf,'local_transport');
     my $mydestination      = read_attribute($MainCf,'mydestination');
     
-    if( $mydestination eq '' ) {
+    if( $mydestination eq '' )
+    {
 	$MailLocalDelivery{'Type'}      = 'none';
-    }elsif( $MailboxCommand eq '' && $MailboxTransport eq '') {
+    }
+    elsif( $MailboxCommand eq '' && $MailboxTransport eq '')
+    {
        $MailLocalDelivery{'Type'}      = 'local';
-       if( $MailboxSizeLimit =~ /^\d+$/ ) {
+       if( $MailboxSizeLimit =~ /^\d+$/ )
+       {
             $MailLocalDelivery{'MailboxSizeLimit'}  = $MailboxSizeLimit;
        } 
-       if( $HomeMailbox ne '' ) {
+       if( $HomeMailbox ne '' )
+       {
            $MailLocalDelivery{'SpoolDirectory'} = '$HOME/'.$HomeMailbox;
-       } elsif ( $MailSpoolDirectory ne '' ) {
+       }
+       elsif ( $MailSpoolDirectory ne '' )
+       {
            $MailLocalDelivery{'SpoolDirectory'} = $MailSpoolDirectory;
-       } else {
+       }
+       else
+       {
            $MailLocalDelivery{'SpoolDirectory'} = '/var/spool/mail';
        }
-    } elsif($MailboxCommand =~ /\/usr\/bin\/procmail/) {
+    }
+    elsif($MailboxCommand =~ /\/usr\/bin\/procmail/)
+    {
         $MailLocalDelivery{'Type'} = 'procmail';
-    } elsif($MailboxTransport =~ /lmtp:unix:\/var\/lib\/imap\/socket\/lmtp/) {
+    }
+    elsif($MailboxTransport =~ /lmtp:unix:\/var\/lib\/imap\/socket\/lmtp/)
+    {
         $MailLocalDelivery{'Type'} = 'cyrus';
         $MailLocalDelivery{'MailboxSizeLimit'}         = SCR->Read('.etc.imapd_conf.autocreatequota') || 0;
         $MailLocalDelivery{'QuotaLimit'}               = SCR->Read('.etc.imapd_conf.quotawarn') || 0;
         $MailLocalDelivery{'ImapIdleTime'}             = SCR->Read('.etc.imapd_conf.timeout') || 0;
         $MailLocalDelivery{'PopIdleTime'}              = SCR->Read('.etc.imapd_conf.poptimeout') || 0;
         $MailLocalDelivery{'FallBackMailbox'}          = SCR->Read('.etc.imapd_conf.lmtp_luser_relay') || '';
-        if(  SCR->Read('.etc.imapd_conf.altnamespace') eq 'yes' ) {
+        if(  SCR->Read('.etc.imapd_conf.altnamespace') eq 'yes' )
+	{
             $MailLocalDelivery{'AlternateNameSpace'}   = 1; 
-        } else {
+        }
+	else
+	{
             $MailLocalDelivery{'AlternateNameSpace'}   = 0; 
         }
-        if(  SCR->Read('.etc.imapd_conf.lmtp_overquota_perm_failure') eq 'yes' ) {
+        if(  SCR->Read('.etc.imapd_conf.lmtp_overquota_perm_failure') eq 'yes' )
+	{
             $MailLocalDelivery{'HardQuotaLimit'}       = 1; 
-        } else {
+        }
+	else
+	{
             $MailLocalDelivery{'HardQuotaLimit'}       = 0; 
         }
 	SCR->Read('.mail.cyrusconf');
@@ -1486,10 +1695,13 @@ sub ReadMailLocalDelivery {
 	    SCR->Execute('.mail.cyrusconf.serviceEnabled','imaps') &&
 	    SCR->Execute('.mail.cyrusconf.serviceExists','pop3s') &&
 	    SCR->Execute('.mail.cyrusconf.serviceEnabled','pop3s') &&
-	    SCR->Read(".target.size", '/etc/ssl/certs/YaST-CA.pem') > 0 ) {
+	    SCR->Read(".target.size", '/etc/ssl/certs/YaST-CA.pem') > 0 )
+	{
 	    $MailLocalDelivery{'Security'} = 1;
 	}
-    } else {
+    }
+    else
+    {
         $MailLocalDelivery{'Type'} = 'none';
     }
     return \%MailLocalDelivery;
@@ -1503,53 +1715,69 @@ sub WriteMailLocalDelivery {
     my $AdminPassword     = shift;
 
     #If nothing to do we don't do antithing
-    if(! $MailLocalDelivery->{'Changed'}){
+    if(! $MailLocalDelivery->{'Changed'})
+    {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
     
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
     # First we read the main.cf
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
 #print STDERR Dumper([$MailLocalDelivery]);   
-    if(  $MailLocalDelivery->{'Type'} ne 'none') {
+    if(  $MailLocalDelivery->{'Type'} ne 'none')
+    {
         write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
         write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
         write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps_member.cf, ldap:/etc/postfix/ldapalias_maps.cf');
         check_ldap_configuration('alias_maps',$ldapMap);
         check_ldap_configuration('alias_maps_member',$ldapMap);
     }
-    if(  $MailLocalDelivery->{'Type'} eq 'local') {
+    if(  $MailLocalDelivery->{'Type'} eq 'local')
+    {
 	write_attribute($MainCf,'mailbox_command','');
 	write_attribute($MainCf,'mailbox_transport','');
-	if($MailLocalDelivery->{'MailboxSizeLimit'} =~ /^\d+$/) {
+	if($MailLocalDelivery->{'MailboxSizeLimit'} =~ /^\d+$/)
+	{
 	     write_attribute($MainCf,'mailbox_size_limit',$MailLocalDelivery->{'MailboxSizeLimit'});     
-	} else {
+	}
+	else
+	{
             return $self->SetError( summary => 'Maximum Mailbox Size value may only contain decimal number in byte',
                                       code    => "PARAM_CHECK_FAILED" );
 	}
-	if($MailLocalDelivery->{'SpoolDirectory'} =~ /\$HOME\/(.*)/) {
+	if($MailLocalDelivery->{'SpoolDirectory'} =~ /\$HOME\/(.*)/)
+	{
 	   write_attribute($MainCf,'home_mailbox',$1);
 	   write_attribute($MainCf,'mail_spool_directory','');
-	} elsif(-e $MailLocalDelivery->{'SpoolDirectory'}) {
+	}
+	elsif(-e $MailLocalDelivery->{'SpoolDirectory'})
+	{
 	   write_attribute($MainCf,'home_mailbox','');
 	   write_attribute($MainCf,'mail_spool_directory',$MailLocalDelivery->{'SpoolDirectory'});
-	} else {
+	}
+	else
+	{
             return $self->SetError( summary => 'Bad value for SpoolDirectory. Possible values are:'.
 	                                       '"$HOME/<path>" or a path to an existing directory.',
                                       code  => "PARAM_CHECK_FAILED" );
 	}
-    } elsif( $MailLocalDelivery->{'Type'} eq 'procmail') {
+    }
+    elsif( $MailLocalDelivery->{'Type'} eq 'procmail')
+    {
         write_attribute($MainCf,'home_mailbox','');     
 	write_attribute($MainCf,'mail_spool_directory','');
 	write_attribute($MainCf,'mailbox_command','/usr/bin/procmail');
 	write_attribute($MainCf,'mailbox_transport','');
-    } elsif( $MailLocalDelivery->{'Type'} eq 'cyrus') {
+    }
+    elsif( $MailLocalDelivery->{'Type'} eq 'cyrus')
+    {
         write_attribute($MainCf,'home_mailbox','');
 	write_attribute($MainCf,'mail_spool_directory','');
 	write_attribute($MainCf,'mailbox_command','');
@@ -1558,71 +1786,98 @@ sub WriteMailLocalDelivery {
         SCR->Write('.etc.imapd_conf.quotawarn',$MailLocalDelivery->{'QuotaLimit'});
         SCR->Write('.etc.imapd_conf.timeout',$MailLocalDelivery->{'ImapIdleTime'});
         SCR->Write('.etc.imapd_conf.poptimeout',$MailLocalDelivery->{'PopIdleTime'});
-        if($MailLocalDelivery->{'FallBackMailbox'} ne ''  ) {
+        if($MailLocalDelivery->{'FallBackMailbox'} ne ''  )
+	{
            SCR->Write('.etc.imapd_conf.lmtp_luser_relay',$MailLocalDelivery->{'FallBackMailbox'});
-        } else {
+        }
+	else
+	{
            SCR->Write('.etc.imapd_conf.lmtp_luser_relay',undef);
         }
-        if( $MailLocalDelivery->{'AlternateNameSpace'} ) {
+        if( $MailLocalDelivery->{'AlternateNameSpace'} )
+	{
 	    SCR->Write('.etc.imapd_conf.altnamespace','yes');
-	} else {
+	}
+	else
+	{
 	    SCR->Write('.etc.imapd_conf.altnamespace','no');
 	}
-        if( $MailLocalDelivery->{'HardQuotaLimit'} ) {
+        if( $MailLocalDelivery->{'HardQuotaLimit'} )
+	{
 	    SCR->Write('.etc.imapd_conf.lmtp_overquota_perm_failure','yes');
-        } else {
+        }
+	else
+	{
 	    SCR->Write('.etc.imapd_conf.lmtp_overquota_perm_failure','no');
         }
-        if($MailLocalDelivery->{'Security'} ) {
+        if($MailLocalDelivery->{'Security'} )
+	{
 	  my $size = SCR->Read(".target.size", '/etc/ssl/servercerts/servercert.pem');
-          if ($size <= 0) {
+          if ($size <= 0)
+	  {
               return $self->SetError(summary => "Common server certificate not found.",
                                      code => "PARAM_CHECK_FAILED");
           }
           $size = SCR->Read(".target.size", '/etc/ssl/servercerts/serverkey.pem');
-          if ($size <= 0) {
+          if ($size <= 0)
+	  {
               return $self->SetError(summary => "Common private key not found.",
                                      code => "PARAM_CHECK_FAILED");
           }
           system("setfacl -m g:mail:r /etc/ssl/servercerts/serverkey.pem");
           SCR->Write('.etc.imapd_conf.tls_cert_file','/etc/ssl/servercerts/servercert.pem');
           SCR->Write('.etc.imapd_conf.tls_key_file','/etc/ssl/servercerts/serverkey.pem');
-          if(SCR->Read(".target.size", '/etc/ssl/certs/YaST-CA.pem') > 0) {
+          if(SCR->Read(".target.size", '/etc/ssl/certs/YaST-CA.pem') > 0)
+	  {
               #SCR->Write('.etc.imapd_conf.tls_ca_file','/etc/ssl/certs/YaST-CA.pem');
               SCR->Write('.etc.imapd_conf.tls_ca_path','/etc/ssl/certs');
           }
 	  SCR->Read('.mail.cyrusconf');
 	  if( SCR->Execute('.mail.cyrusconf.serviceExists', 'imaps') &&
-	      ! SCR->Execute('.mail.cyrusconf.serviceEnabled', 'imaps') ) {
+	      ! SCR->Execute('.mail.cyrusconf.serviceEnabled', 'imaps') )
+	  {
 	      SCR->Execute('.mail.cyrusconf.toggleService', 'imaps');
-	  } elsif( ! SCR->Execute('.mail.cyrusconf.serviceExists', 'imaps') ) {
+	  }
+	  elsif( ! SCR->Execute('.mail.cyrusconf.serviceExists', 'imaps') )
+	  {
 	      SCR->Execute('.mail.cyrusconf.addService', { sname => "imaps",
 							   sarg  => "imapd -s",
 							   sport => "imaps" });
 	  }
 	  if( SCR->Execute('.mail.cyrusconf.serviceExists', 'pop3s') &&
-	      ! SCR->Execute('.mail.cyrusconf.serviceEnabled', 'pop3s') ) {
+	      ! SCR->Execute('.mail.cyrusconf.serviceEnabled', 'pop3s') )
+	  {
 	      SCR->Execute('.mail.cyrusconf.toggleService', 'pop3s');
-	  } elsif( ! SCR->Execute('.mail.cyrusconf.serviceExists', 'pop3s') ) {
+	  }
+	  elsif( ! SCR->Execute('.mail.cyrusconf.serviceExists', 'pop3s') )
+	  {
 	      SCR->Execute('.mail.cyrusconf.addService', { sname => "pop3s",
 							   sarg  => "pop3d -s",
 							   sport => "pop3s" });
 	  }
-      } else {
+      }
+      else
+      {
 	  SCR->Read('.mail.cyrusconf');
 	  if( SCR->Execute('.mail.cyrusconf.serviceExists', 'imaps') &&
-	      SCR->Execute('.mail.cyrusconf.serviceEnabled', 'imaps') ) {
+	      SCR->Execute('.mail.cyrusconf.serviceEnabled', 'imaps') )
+	  {
 	      SCR->Execute('.mail.cyrusconf.toggleService', 'imaps');
 	  }
 	  if( SCR->Execute('.mail.cyrusconf.serviceExists', 'pop3s') &&
-	      SCR->Execute('.mail.cyrusconf.serviceEnabled', 'pop3s') ) {
+	      SCR->Execute('.mail.cyrusconf.serviceEnabled', 'pop3s') )
+	  {
 	      SCR->Execute('.mail.cyrusconf.toggleService', 'pop3s');
 	  }
       }
-    } elsif(  $MailLocalDelivery->{'Type'} eq 'none') {
+    }
+    elsif(  $MailLocalDelivery->{'Type'} eq 'none')
+    {
         write_attribute($MainCf,'mydestination','');
         write_attribute($MainCf,'virtual_alias_maps','');
-    } else {
+    }
+    else
+    {
         return $self->SetError( summary => 'Bad value for MailLocalDeliveryType. Possible values are:'.
                                            '"none", "local", "procmail" or "cyrus".',
                                   code  => "PARAM_CHECK_FAILED" );
@@ -1653,13 +1908,15 @@ sub ReadFetchingMail {
     my $FetchingInterval        = SCR->Read('.sysconfig.fetchmail.FETCHMAIL_POLLING_INTERVAL') || 0; 
     $FetchingMail{'FetchingInterval'} = $FetchingInterval / 60;
 
-    if(! Service->Enabled('fetchmail')) {
+    if(! Service->Enabled('fetchmail'))
+    {
         $FetchingMail{'FetchMailSteady'} = 0;
     }
 
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
@@ -1677,33 +1934,42 @@ sub WriteFetchingMail {
     my $AdminPassword   = shift;
 
     #If nothing to do we don't do antithing
-    if(! $FetchingMail->{'Changed'}){
+    if(! $FetchingMail->{'Changed'})
+    {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
    
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
 
 #print STDERR Dumper([$FetchingMail]);  
-    if($FetchingMail->{'Interface'} ne '') {
+    if($FetchingMail->{'Interface'} ne '')
+    {
        NetworkDevices->Read();
-       if($FetchingMail->{'FetchByDialIn'}) {
+       if($FetchingMail->{'FetchByDialIn'})
+       {
           NetworkDevices->SetValue($FetchingMail->{'Interface'},'RUN_POLL_TCPIP','yes');
-       } else {
+       }
+       else
+       {
           NetworkDevices->SetValue($FetchingMail->{'Interface'},'RUN_POLL_TCPIP','no');
        }
        NetworkDevices->Write('ppp|ipp|dsl');
     }
-    if($FetchingMail->{'FetchMailSteady'}) {
+    if($FetchingMail->{'FetchMailSteady'})
+    {
        my $FetchingInterval = $FetchingMail->{'FetchingInterval'} * 60;
        SCR->Write('.sysconfig.fetchmail.FETCHMAIL_POLLING_INTERVAL',$FetchingInterval);
        SCR->Write('.sysconfig.fetchmail',undef);
        Service->Enable('fetchmail');
-    } else {
+    }
+    else
+    {
        Service->Disable('fetchmail');
     }
 
@@ -1723,7 +1989,8 @@ sub ReadMailLocalDomains {
 
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
     my $ret = SCR->Read(".ldap.search", {
@@ -1733,15 +2000,18 @@ sub ReadMailLocalDomains {
                                           "not_found_ok" => 1,
                                           "attrs"        => [ 'zoneName', 'suseMailDomainMasquerading', 'suseMailDomainType' ]
                                          });
-    if (! defined $ret) {
+    if (! defined $ret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
                                code => "LDAP_SEARCH_FAILED");
     }
-    foreach(@{$ret}) {
+    foreach(@{$ret})
+    {
        my $domain = {};
-       if( $_->{'zonename'}->[0] !~ /in-addr.arpa$/i){
+       if( $_->{'zonename'}->[0] !~ /in-addr.arpa$/i)
+       {
          $domain->{'Name'}         = $_->{'zonename'}->[0];
          $domain->{'Type'}         = $_->{'susemaildomaintype'}->[0]         || 'none';
          $domain->{'Masquerading'} = $_->{'susemaildomainmasquerading'}->[0] || 'yes';
@@ -1760,27 +2030,32 @@ sub WriteMailLocalDomains {
     my $Domains          = {};
 
     #If nothing to do we don't do antithing
-    if(! $MailLocalDomains->{'Changed'}){
+    if(! $MailLocalDomains->{'Changed'})
+    {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
     
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
-    if( !$ldapMap ) {
+    if( !$ldapMap )
+    {
          return undef;
     }
-    foreach(@{$MailLocalDomains->{'Domains'}}){
+    foreach(@{$MailLocalDomains->{'Domains'}})
+    {
       my $name          = $_->{'Name'};
       my $type          = $_->{'Type'} || 'local';
       my $masquerading  = $_->{'Masquerading'} || 'yes';
-      if($type !~ /local|virtual|main|none/) {
+      if($type !~ /local|virtual|main|none/)
+      {
          return $self->SetError( summary =>"Invalid mail local domain type.".
 	                                   " Domain: $name; Type $type".
 					   "Allowed values are: local|virtual|main.",
                                  code    => "PARAM_CHECK_FAILED" );
       }
-      if($masquerading !~ /yes|no/) {
+      if($masquerading !~ /yes|no/)
+      {
          return $self->SetError( summary =>"Invalid mail local domain masquerading value.".
 	                                   " Domain: $name; Masquerading: $masquerading".
 					   "Allowed values are: yes|no.",
@@ -1797,30 +2072,37 @@ sub WriteMailLocalDomains {
       if( defined $retVal && defined $retVal->[0] && defined $retVal->[0]->{'objectclass'}) 
       {
             my $found = 0;
-            foreach my $ojc ( @{$retVal->[0]->{'objectclass'}} ) {
+            foreach my $ojc ( @{$retVal->[0]->{'objectclass'}} )
+	    {
                 if($ojc =~ /^suseMailDomain$/i) {
                     $found = 1;
                     last;
                 }
             }
-            if($found && $type eq 'none') {
+            if($found && $type eq 'none')
+	    {
                 # delete objectclass
 
                 $Domains->{$DN}->{'objectclass'}                = ['dNSZone'];
                 $Domains->{$DN}->{'suseMailDomainType'}         = [];
                 $Domains->{$DN}->{'suseMailDomainMasquerading'} = [];
 
-                if( ! SCR->Write('.ldap.modify',{ "dn" => $DN } , $Domains->{$DN})) {
+                if( ! SCR->Write('.ldap.modify',{ "dn" => $DN } , $Domains->{$DN}))
+		{
                     my $ldapERR = SCR->Read(".ldap.error");
                     return $self->SetError(summary => "LDAP add failed",
                                            code => "SCR_INIT_FAILED",
                                            description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'});
                 }
 
-            } elsif (!$found && $type eq 'none') {
+            }
+	    elsif (!$found && $type eq 'none')
+	    {
                 # do nothing
 
-            } else {
+            }
+	    else
+	    {
                 # modify
 
                 $Domains->{$DN}->{'objectclass'}                = ['dNSZone','suseMailDomain'];
@@ -1828,7 +2110,8 @@ sub WriteMailLocalDomains {
                 $Domains->{$DN}->{'suseMailDomainType'}         = $type;
                 $Domains->{$DN}->{'suseMailDomainMasquerading'} = $masquerading;
                 
-                if( ! SCR->Write('.ldap.modify',{ "dn" => $DN } , $Domains->{$DN})) {
+                if( ! SCR->Write('.ldap.modify',{ "dn" => $DN } , $Domains->{$DN}))
+		{
                     my $ldapERR = SCR->Read(".ldap.error");
                     return $self->SetError(summary => "LDAP modify failed",
                                            code => "SCR_INIT_FAILED",
@@ -1836,7 +2119,9 @@ sub WriteMailLocalDomains {
                 }
             }
 
-        } else {
+        }
+	else
+	{
 	  # This is a new domain, we create it. 
 	  # We create all the DNS attributes. `hostname -f` is the NS entry.
           my $serial = POSIX::strftime("%Y%m%d%H%M",localtime);
@@ -1915,13 +2200,17 @@ sub ReadLDAPDefaults {
     my $ldapret       = undef;
     my $first_use     = 0;
 
-    if(Ldap->Read()) {
+    if(Ldap->Read())
+    {
         $ldapMap = Ldap->Export();
-        if(defined $ldapMap->{'ldap_server'} && $ldapMap->{'ldap_server'} ne "") {
+        if(defined $ldapMap->{'ldap_server'} && $ldapMap->{'ldap_server'} ne "")
+	{
             my $dummy = $ldapMap->{'ldap_server'};
             $ldapMap->{'ldap_server'} = Ldap->GetFirstServer("$dummy");
             $ldapMap->{'ldap_port'} = Ldap->GetFirstPort("$dummy");
-        } else {
+        }
+	else
+	{
             return $self->SetError( summary => "No LDAP Server configured",
                                     code => "HOST_NOT_FOUND");
         }
@@ -1929,13 +2218,15 @@ sub ReadLDAPDefaults {
 #print STDERR Dumper([$ldapMap]);
     # Now we try to bind to the LDAP
     if (! SCR->Execute(".ldap", {"hostname" => $ldapMap->{'ldap_server'},
-                                 "port"     => $ldapMap->{'ldap_port'}})) {
+                                 "port"     => $ldapMap->{'ldap_port'}}))
+    {
         return $self->SetError(summary => "LDAP init failed",
                                code => "SCR_INIT_FAILED");
     }
 
     $ldapMap->{'bind_pw'} = $AdminPassword;
-    if(! SCR->Execute('.ldap.bind',$ldapMap)) {
+    if(! SCR->Execute('.ldap.bind',$ldapMap))
+    {
          my $ldapERR = SCR->Read('.ldap.error');
          return $self->SetError(summary     => "LDAP bind failed!",
                                 description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
@@ -1950,15 +2241,19 @@ sub ReadLDAPDefaults {
 	"not_found_ok" => 1,
 	"attrs"        => [ 'suseDefaultBase' ]
 	});
-    if (! defined $ldapret) {
+    if (! defined $ldapret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
                                code => "LDAP_SEARCH_FAILED");
     }
-    if(@$ldapret > 0) {
+    if(@$ldapret > 0)
+    {
         $ldapMap->{'mail_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
-    } else {
+    }
+    else
+    {
 	# mailconfiguration does not yet exist, so create it
 	my $configOBJ;
 	my $CONFIG_BASE = "cn=Mailserver,".$ldapMap->{'base_config_dn'};
@@ -1972,7 +2267,8 @@ sub ReadLDAPDefaults {
 	$configOBJ->{$CONFIG_BASE}->{'suseImapUseSsl'} = "FALSE";
 	$configOBJ->{$CONFIG_BASE}->{'suseImapDefaultQuota'} = 10000;
 	$ldapMap->{'bind_pw'} = $AdminPassword;
-	if (! SCR->Execute(".ldap.bind", $ldapMap) ) {
+	if (! SCR->Execute(".ldap.bind", $ldapMap) )
+	{
 	    my $ldapERR = SCR->Read(".ldap.error");
 	    return $self->SetError(summary => "LDAP bind failed",
 				   code => "SCR_INIT_FAILED",
@@ -1980,7 +2276,8 @@ sub ReadLDAPDefaults {
 	}
 	if( ! SCR->Write('.ldap.add',
 			 { "dn" => $CONFIG_BASE },
-			 $configOBJ->{$CONFIG_BASE} ) ) {
+			 $configOBJ->{$CONFIG_BASE} ) )
+	{
             my $ldapERR = SCR->Read(".ldap.error");
             return $self->SetError(summary => "LDAP add failed",
 				   code => "SCR_INIT_FAILED",
@@ -1998,20 +2295,23 @@ sub ReadLDAPDefaults {
 	"not_found_ok" => 1,
 	"attrs"        => [ 'ou' ]
 	});
-    if (! defined $ldapret) {
+    if (! defined $ldapret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
                                code => "LDAP_SEARCH_FAILED");
     }
-    if( @$ldapret == 0) {
+    if( @$ldapret == 0)
+    {
 	# create it
 	my $configOBJ;
 	my $uBase = "ou=Mailserver,".$ldapMap->{'ldap_domain'};
 	$configOBJ->{$uBase}->{'objectClass'} = 'organizationalUnit';
 	$configOBJ->{$uBase}->{'ou'} = 'Mailserver';
 	$ldapMap->{'bind_pw'} = $AdminPassword;
-	if (! SCR->Execute(".ldap.bind", $ldapMap) ) {
+	if (! SCR->Execute(".ldap.bind", $ldapMap) )
+	{
 	    my $ldapERR = SCR->Read(".ldap.error");
 	    return $self->SetError(summary => "LDAP bind failed",
 				   code => "SCR_INIT_FAILED",
@@ -2019,7 +2319,8 @@ sub ReadLDAPDefaults {
 	}
 	if( ! SCR->Write('.ldap.add',
 			 { "dn" => $uBase },
-			 $configOBJ->{$uBase} ) ) {
+			 $configOBJ->{$uBase} ) )
+	{
             my $ldapERR = SCR->Read(".ldap.error");
             return $self->SetError(summary => "LDAP add failed",
 				   code => "SCR_INIT_FAILED",
@@ -2035,22 +2336,28 @@ sub ReadLDAPDefaults {
 	"scope"        => 2,
 	"not_found_ok" => 1
 	});
-    if (! defined $ldapret) {
+    if (! defined $ldapret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
                                code => "LDAP_SEARCH_FAILED");
     }
-    if( @$ldapret > 0) {
+    if( @$ldapret > 0)
+    {
 	# 
 	my $foundplugin = 0;
-	if( defined $ldapret->[0]->{'suseplugin'} ) {
-	    foreach my $sp ( @{$ldapret->[0]->{'suseplugin'}} ) {
+	if( defined $ldapret->[0]->{'suseplugin'} )
+	{
+	    foreach my $sp ( @{$ldapret->[0]->{'suseplugin'}} )
+	    {
 		$foundplugin = 1 if lc($sp) eq "userspluginmail";
 	    }
-	    if( ! $foundplugin ) {
+	    if( ! $foundplugin )
+	    {
 		$ldapMap->{'bind_pw'} = $AdminPassword;
-		if (! SCR->Execute(".ldap.bind", $ldapMap) ) {
+		if (! SCR->Execute(".ldap.bind", $ldapMap) )
+		{
 		    my $ldapERR = SCR->Read(".ldap.error");
 		    return $self->SetError(summary => "LDAP bind failed",
 					   code => "SCR_INIT_FAILED",
@@ -2061,7 +2368,8 @@ sub ReadLDAPDefaults {
 		push @$pluginlist, 'UsersPluginMail';
 		if( ! SCR->Write('.ldap.modify',
 				 { "dn" => $dn },
-				 { 'susePlugin' => $pluginlist } ) ) {
+				 { 'susePlugin' => $pluginlist } ) )
+		{
 		    my $ldapERR = SCR->Read(".ldap.error");
 		    return $self->SetError(summary => "LDAP modify failed",
 					   code => "SCR_INIT_FAILED",
@@ -2069,7 +2377,9 @@ sub ReadLDAPDefaults {
 		}
 	    }
 	}
-    } else {
+    }
+    else
+    {
         return $self->SetError(summary => "Plugintemplate not found",
                                description => "The entry cn=userTemplate,$ldapMap->{'base_config_dn'} is missing in the LDAP server.",
                                code => "MAIL_PLUGIN_TEMPLATE_NOT_FOUND");
@@ -2083,13 +2393,15 @@ sub ReadLDAPDefaults {
                                           "not_found_ok" => 1,
                                           "attrs"        => [ 'suseDefaultBase' ]
                                          });
-    if (! defined $ldapret) {
+    if (! defined $ldapret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
                                code => "LDAP_SEARCH_FAILED");
     }
-    if(@$ldapret > 0) {
+    if(@$ldapret > 0)
+    {
         $ldapMap->{'user_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
     }
     # now we search group base
@@ -2100,13 +2412,15 @@ sub ReadLDAPDefaults {
                                           "not_found_ok" => 1,
                                           "attrs"        => [ 'suseDefaultBase' ]
                                          });
-    if (! defined $ldapret) {
+    if (! defined $ldapret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
                                code => "LDAP_SEARCH_FAILED");
     }
-    if(@$ldapret > 0) {
+    if(@$ldapret > 0)
+    {
         $ldapMap->{'group_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
     }
     # now we search DNS base
@@ -2117,7 +2431,8 @@ sub ReadLDAPDefaults {
                                           "not_found_ok" => 1,
                                           "attrs"        => [ 'suseDefaultBase' ]
                                          });
-    if (! defined $ldapret) {
+    if (! defined $ldapret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
@@ -2125,14 +2440,17 @@ sub ReadLDAPDefaults {
     }
     if(@$ldapret > 0) {
         $ldapMap->{'dns_config_dn'} = $ldapret->[0]->{'susedefaultbase'}->[0];
-    } else {
+    }
+    else
+    {
        # We create the DNS config if there is no any.
        my $DN  = 'ou=DNS,'.$ldapMap->{'ldap_domain'};
        my $tmp = { objectClass     => [ "top" , "suseDnsConfiguration" ],
                    cn              => 'defaultDNS',
 		   suseDefaultBase => $DN
                  };
-       if( ! SCR->Write('.ldap.add', { dn => 'cn=defaultDNS,'.$ldapMap->{'base_config_dn'} }, $tmp ) ) {
+       if( ! SCR->Write('.ldap.add', { dn => 'cn=defaultDNS,'.$ldapMap->{'base_config_dn'} }, $tmp ) )
+       {
             my $ldapERR = SCR->Read(".ldap.error");
             return $self->SetError(summary => "LDAP add failed",
 				   code => "SCR_INIT_FAILED",
@@ -2147,18 +2465,21 @@ sub ReadLDAPDefaults {
                                           "not_found_ok" => 1,
                                           "attrs"        => [ 'ou' ]
                                          });
-    if (! defined $ldapret) {
+    if (! defined $ldapret)
+    {
         my $ldapERR = SCR->Read(".ldap.error");
         return $self->SetError(summary => "LDAP search failed!",
                                description => $ldapERR->{'code'}." : ".$ldapERR->{'msg'},
                                code => "LDAP_SEARCH_FAILED");
     }
-    if(@$ldapret != 1) {
+    if(@$ldapret != 1)
+    {
        # There is no ou=DNS object, we create it.
        my $tmp = { objectClass => [ 'top' , 'organizationalUnit' ],
                    ou          => 'DNS'     
                };
-       if( ! SCR->Write('.ldap.add', { dn => $ldapMap->{'dns_config_dn'}}, $tmp ) ) {
+       if( ! SCR->Write('.ldap.add', { dn => $ldapMap->{'dns_config_dn'}}, $tmp ) ) 
+       {
             my $ldapERR = SCR->Read(".ldap.error");
             return $self->SetError(summary => "LDAP add failed",
 				   code => "SCR_INIT_FAILED",
@@ -2249,17 +2570,20 @@ fi';
 	# Now we configure the LDAP-Server to be able store the mail server configuration
 	my $schemas = YaPI::LdapServer->ReadSchemaIncludeList();
 	my $SCHEMA  = join "",@{$schemas};
-	if( $SCHEMA !~ /dnszone.schema/ ) {
+	if( $SCHEMA !~ /dnszone.schema/ )
+	{
 	    push @{$schemas},'/etc/openldap/schema/dnszone.schema';
 	}
-	if( $SCHEMA !~ /suse-mailserver.schema/ ) {
+	if( $SCHEMA !~ /suse-mailserver.schema/ )
+	{
 	    push @{$schemas},'/etc/openldap/schema/suse-mailserver.schema';
 	    YaPI::LdapServer->WriteSchemaIncludeList($schemas);
 	    my $indices = YaPI::LdapServer->ReadIndex($ldapMap->{ldap_domain});
 	    my $SuSEMailClient = 0;
 	    my $SuSEMailDomainMasquerading = 0;
 	    my $suseTLSPerSitePeer= 0;
-	    foreach my $index (@{$indices}) {
+	    foreach my $index (@{$indices})
+	    {
 		if( $index->{attr} eq "SuSEMailClient,SUSEMailAcceptAddress,zoneName")
 		{
 		    $SuSEMailClient = 1;
@@ -2304,7 +2628,8 @@ fi';
     #Setup Global Settings;
     my $TLS = "use";
     my $size = SCR->Read(".target.size", '/etc/ssl/servercerts/servercert.pem');
-    if ($size <= 0) {
+    if ($size <= 0)
+    {
 	$TLS = "none";	
     }
     my $TMP = $self->ReadGlobalSettings($AdminPassword);
@@ -2335,8 +2660,47 @@ fi';
        $TMP->{'SpoolDirectory'} = '/var/spool/mail';
        $self->WriteMailLocalDelivery($TMP,$AdminPassword); 
 
-
+    #Read the main configuration
     my $MainCf             = SCR->Read('.mail.postfix.main.table');
+
+    # Setup the tlsmanager service if necessary
+    if( ! SCR->Read('.mail.postfix.mastercf') )
+    {
+       return $self->SetError( summary =>"Couln't open master.cf",
+                               code    => "PARAM_CHECK_FAILED" );
+    }
+    my $tlsmgr = SCR->Execute('.mail.postfix.mastercf.findService',
+                   { 'service' => 'tlsmgr',
+                     'command' => 'tlsmgr' });
+    if( $TLS eq "use" )
+    {
+      write_attribute($MainCf,'smtpd_tls_cert_file','/etc/ssl/servercerts/servercert.pem');
+      write_attribute($MainCf,'smtpd_tls_key_file','/etc/ssl/servercerts/serverkey.pem');
+      if(SCR->Read(".target.size", '/etc/ssl/certs/YaST-CA.pem') > 0)
+      {
+          #write_attribute($MainCf,'smtpd_tls_CAfile','/etc/ssl/certs/YaST-CA.pem');
+          write_attribute($MainCf,'smtpd_tls_CApath','/etc/ssl/certs');
+      }
+      if(! defined $tlsmgr )
+      {
+           SCR->Execute('.mail.postfix.mastercf.addService',
+           { 'service' => 'tlsmgr',
+             'type'    => 'unix',
+             'private' => '-',
+             'unpriv'  => '-',
+             'chroot'  => 'n',
+             'wakeup'  => '1000?',
+             'maxproc' => '1',
+             'command' => 'tlsmgr' });
+      }
+    }
+    else
+    {
+      if( defined $tlsmgr )
+      {
+         SCR->Execute('.mail.postfix.mastercf.deleteService', {'service' => 'tlsmgr','command' => 'tlsmgr'});
+      }
+    }
     #Setup the ldap tables;
     # Transport
     check_ldap_configuration('transport_maps',$ldapMap);
@@ -2360,6 +2724,7 @@ fi';
     check_ldap_configuration('alias_maps_member',$ldapMap);
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
+    SCR->Write('.mail.postfix.mastercf',undef);
     SCR->Execute(".target.bash", "touch /var/adm/YaST/yast2-mail-server-used");
 
     return 1;
@@ -2370,8 +2735,10 @@ sub read_attribute {
     my $config    = shift;
     my $attribute = shift;
 
-    foreach(@{$config}){
-        if($_->{"key"} eq $attribute) {
+    foreach(@{$config})
+    {
+        if($_->{"key"} eq $attribute)
+	{
                 return $_->{"value"};
         }
     }
@@ -2386,42 +2753,50 @@ sub activate_virus_scanner {
    my $cconf = "/etc/clamav.conf";
    my $clamsock = '/var/lib/clamav/clamd-socket';
    
-   if( ! open(IN,$aconf) ) {
+   if( ! open(IN,$aconf) )
+   {
        return "Error: $!";
    }
    my @ACONF = <IN>;
    close(IN);
    
    my $isclam = 0;
-   foreach my $l ( @ACONF ) {
+   foreach my $l ( @ACONF )
+   {
    	$l =~ s/(.*)/# $1/ if $l =~ /bypass_virus_checks_acl.*=.*qw\( \./;
-   	if( $isclam || $l =~ /Clam Antivirus-clamd/ ) {
+   	if( $isclam || $l =~ /Clam Antivirus-clamd/ )
+	{
    	    $isclam = 1 if $l =~ /Clam Antivirus-clamd/;
    	    $isclam = 0 if $l =~ /Infected Archive.*FOUND/;
    	    $l =~ s/^#\s*//;
-   	    if( $l =~ /ask_daemon/ ) {
+   	    if( $l =~ /ask_daemon/ )
+	    {
    		$l =~ s/^(.*\").*(\".*)$/$1$clamsock$2/;
-               }
+            }
    	}
    }
-   if( ! open(OUT,">$aconf.new") ) {
+   if( ! open(OUT,">$aconf.new") )
+   {
        return "Error: $!";
    }
    print OUT @ACONF;
    close(OUT);
    
-   if( ! open(IN,$cconf) ) {
+   if( ! open(IN,$cconf) )
+   {
        return "Error: $!";
    }
    my @CCONF = <IN>;
    close(IN);
    
-   foreach my $l ( @CCONF ) {
+   foreach my $l ( @CCONF )
+   {
    	$l = "LocalSocket $clamsock\n" if $l =~ /LocalSocket/;
    	$l =~ s/(.*)/#$1/ if $l =~ /^TCPSocket/;
    	$l =~ s/(.*)/#$1/ if $l =~ /^TCPAddr/;
    }
-   if( ! open(OUT,">$cconf.new") ) {
+   if( ! open(OUT,">$cconf.new") )
+   {
        return "Error: $!";
    }
    print OUT @CCONF;
@@ -2445,14 +2820,17 @@ sub write_attribute {
 
     my $unset = 1;
 
-    foreach(@{$config}){
-        if($_->{"key"} eq $attribute) {
+    foreach(@{$config})
+    {
+        if($_->{"key"} eq $attribute)
+	{
             $_->{"value"} = $value;
             $unset = 0; 
             last;
         }
     }
-    if($unset) {
+    if($unset)
+    {
         push (@{$config}, { "comment" => $comment,
                                 "key" => $attribute,
                               "value" => $value }
@@ -2526,33 +2904,42 @@ sub check_ldap_configuration {
     my $LDAPCF    = SCR->Read('.mail.ldaptable',$config);
 
     #Now we are looking for if all the needed ldap entries are done
-    if(!$LDAPCF->{'server_host'} || $LDAPCF->{'server_host'} ne $ldapMap->{'ldap_server'}) {
+    if(!$LDAPCF->{'server_host'} || $LDAPCF->{'server_host'} ne $ldapMap->{'ldap_server'})
+    {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'server_port'} || $LDAPCF->{'server_port'} ne $ldapMap->{'ldap_port'}) {
+    if(! $LDAPCF->{'server_port'} || $LDAPCF->{'server_port'} ne $ldapMap->{'ldap_port'})
+    {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'bind'}  || $LDAPCF->{'bind'} ne 'no') {
+    if(! $LDAPCF->{'bind'}  || $LDAPCF->{'bind'} ne 'no')
+    {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'timeout'} || $LDAPCF->{'timeout'} !~ /^\d+$/){
+    if(! $LDAPCF->{'timeout'} || $LDAPCF->{'timeout'} !~ /^\d+$/)
+    {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'search_base'} || $LDAPCF->{'search_base'} ne $base{$config}) {
+    if(! $LDAPCF->{'search_base'} || $LDAPCF->{'search_base'} ne $base{$config})
+    {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'query_filter'} || $LDAPCF->{'query_filter'} ne $query_filter{$config}) {
+    if(! $LDAPCF->{'query_filter'} || $LDAPCF->{'query_filter'} ne $query_filter{$config})
+    {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'result_attribute'} || $LDAPCF->{'result_attribute'} ne $result_attribute{$config}) {
+    if(! $LDAPCF->{'result_attribute'} || $LDAPCF->{'result_attribute'} ne $result_attribute{$config})
+    {
 	 $changes = 1;
     }
-    if(! $LDAPCF->{'scope'} || $LDAPCF->{'scope'} ne $scope{$config}) {
+    if(! $LDAPCF->{'scope'} || $LDAPCF->{'scope'} ne $scope{$config})
+    {
 	 $changes = 1;
     }
 
     # If we had made changes we have to save it
-    if( $changes ) {
+    if( $changes )
+    {
         $LDAPCF->{'server_host'}      = $ldapMap->{'ldap_server'};
         $LDAPCF->{'server_port'}      = $ldapMap->{'ldap_port'};
         $LDAPCF->{'bind'}             = 'no';
@@ -2560,7 +2947,8 @@ sub check_ldap_configuration {
         $LDAPCF->{'search_base'}      = $base{$config}; 
         $LDAPCF->{'query_filter'}     = $query_filter{$config}; 
         $LDAPCF->{'result_attribute'} = $result_attribute{$config}; 
-	if(defined $special_result_attribute{$config}) {
+	if(defined $special_result_attribute{$config})
+	{
 		$LDAPCF->{'special_result_attribute'} = $special_result_attribute{$config};
 	}
         $LDAPCF->{'scope'}            = $scope{$config}; 

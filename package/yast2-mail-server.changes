@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Mon Apr 24 11:56:20 CEST 2006 - varkoly@suse.de
+
+- fixing bug #167630 yast2-mail-server prints perl warning on stdout/stderr
+- fixing bug #168711 yast2 mail-server does not activate tlsmgr if needed
+
+-------------------------------------------------------------------
 Tue Apr  4 16:41:10 CEST 2006 - varkoly@suse.de
 
 - Fixing UserPlugin: we do not use memberUID
