@@ -310,6 +310,7 @@ sub WriteGlobalSettings {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
+    y2milestone("-- WriteGlobalSettings --");
 
     my $MaximumMailSize    = $GlobalSettings->{'MaximumMailSize'};
     my $Interfaces         = $GlobalSettings->{'Interfaces'}  || 'all';
@@ -737,6 +738,7 @@ sub WriteMailTransports {
          return $self->SetError( summary =>"Nothing to do",
                                  code    => "PARAM_CHECK_FAILED" );
     }
+    y2milestone("-- WriteMailTransports --");
 #print STDERR Dumper($MailTransports);
     
     # Make LDAP Connection 
@@ -1117,6 +1119,7 @@ sub WriteMailPrevention {
                                  code    => "PARAM_CHECK_FAILED" );
     }
    
+    y2milestone("-- WriteMailPrevention --");
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldapMap )
@@ -1462,6 +1465,7 @@ sub WriteMailRelaying {
                                  code    => "PARAM_CHECK_FAILED" );
     }
     
+    y2milestone("-- WriteMailRelaying --");
 #print STDERR Dumper([$MailRelaying]);
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
@@ -1721,6 +1725,7 @@ sub WriteMailLocalDelivery {
                                  code    => "PARAM_CHECK_FAILED" );
     }
     
+    y2milestone("-- WriteMailLocalDelivery --");
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldapMap )
@@ -1940,6 +1945,7 @@ sub WriteFetchingMail {
                                  code    => "PARAM_CHECK_FAILED" );
     }
    
+    y2milestone("-- WriteFetchingMail --");
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldapMap )
@@ -2036,6 +2042,7 @@ sub WriteMailLocalDomains {
                                  code    => "PARAM_CHECK_FAILED" );
     }
     
+    y2milestone("-- WriteMailLocalDomains --");
     # Make LDAP Connection 
     my $ldapMap = $self->ReadLDAPDefaults($AdminPassword);
     if( !$ldapMap )
@@ -2725,7 +2732,7 @@ fi';
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
     SCR->Write('.mail.postfix.mastercf',undef);
-    SCR->Execute(".target.bash", "touch /var/adm/YaST/yast2-mail-server-used");
+    SCR->Execute(".target.bash", "touch /var/adm/yast2-mail-server-used");
 
     return 1;
 }
