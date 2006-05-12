@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Mon May 12 19:01:36 CEST 2006 - varkoly@suse.de
+
+- fixing bug #175382 yast2 mail-server modul writes in obsolet directory
+
+-------------------------------------------------------------------
 Mon Apr 24 11:56:20 CEST 2006 - varkoly@suse.de
 
 - fixing bug #167630 yast2-mail-server prints perl warning on stdout/stderr
