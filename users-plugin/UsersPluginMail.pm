@@ -455,8 +455,16 @@ sub WriteBefore {
 #     }
 #   }
     #DEBUG
+    #y2internal(Dumper($config));
     #y2internal(Dumper($data));
-    if ( ($data->{'what'} =~ /^edit_/ ) && $self->PluginPresent($config, $data) ) {
+    if ( ($data->{'what'} =~ /^add_/ ) && $self->PluginPresent($config, $data) )
+    {
+            y2milestone("creating INBOX");
+            #cond_IMAP_OP($config, $data, "add") if $action eq "added";
+            cond_IMAP_OP($config, $data, "add");
+    }
+    elsif ( ($data->{'what'} =~ /^edit_/ ) && $self->PluginPresent($config, $data) )
+    {
         # create Folder if plugin has been added
         if ( ! grep /^suseMailRecipient$/i, @{$data->{'org_user'}->{'objectclass'}} ) {
             y2milestone("creating INBOX");
@@ -731,7 +739,7 @@ sub cond_IMAP_OP {
         $fname = "user".$hsep.$data->{uid};
         
         #y2internal(Dumper(\@users_ns));
-        #y2internal(Dumper($namespace));
+	#y2internal(Dumper($fname));
     } else {
         $fname = $data->{cn};
     }
