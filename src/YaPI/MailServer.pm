@@ -2757,7 +2757,7 @@ sub activate_virus_scanner {
    use File::Copy;
    
    my $aconf = "/etc/amavisd.conf";
-   my $cconf = "/etc/clamav.conf";
+   my $cconf = "/etc/clamd.conf";
    my $clamsock = '/var/lib/clamav/clamd-socket';
    
    if( ! open(IN,$aconf) )
