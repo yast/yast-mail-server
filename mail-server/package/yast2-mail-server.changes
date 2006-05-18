@@ -1,0 +1,228 @@
+-------------------------------------------------------------------
+Thu May 18 16:04:06 CEST 2006 - varkoly@suse.de
+
+- fixing bug #175589 - YaST2 Mail Server Module is broken (SLES10 RC1)
+
+-------------------------------------------------------------------
+Mon May 12 19:01:36 CEST 2006 - varkoly@suse.de
+
+- fixing bug #175382 yast2 mail-server modul writes in obsolet directory
+
+-------------------------------------------------------------------
+Mon Apr 24 11:56:20 CEST 2006 - varkoly@suse.de
+
+- fixing bug #167630 yast2-mail-server prints perl warning on stdout/stderr
+- fixing bug #168711 yast2 mail-server does not activate tlsmgr if needed
+
+-------------------------------------------------------------------
+Tue Apr  4 16:41:10 CEST 2006 - varkoly@suse.de
+
+- Fixing UserPlugin: we do not use memberUID
+
+-------------------------------------------------------------------
+Tue Feb 21 17:20:56 CET 2006 - mc@suse.de
+
+- Fix BuildRequires
+
+-------------------------------------------------------------------
+Tue Feb 21 11:49:18 CET 2006 - varkoly@suse.de
+
+- replace yast2-devel-packages in BuildRequires
+
+-------------------------------------------------------------------
+Mon Feb  6 11:04:31 CET 2006 - varkoly@suse.de
+
+- fixing time stamps
+- fixing deprecated subroutin call
+- fixing bug #147918 yast2 ldap-client reports error message creating the defa.
+- fixing bug #148328 yast2 mail-server does not include dnszone.schema if needed
+
+-------------------------------------------------------------------
+Mon Feb  6 11:01:48 CET 2006 - varkoly@suse.de
+
+-  
+
+-------------------------------------------------------------------
+Wed Jan 25 21:49:45 CET 2006 - mls@suse.de
+
+- converted neededforbuild to BuildRequires
+
+-------------------------------------------------------------------
+Mon Jan 23 11:43:28 CET 2006 - varkoly@suse.de
+
+- clean up the ldap-scheme  
+
+-------------------------------------------------------------------
+Mon Jan  9 09:55:31 CET 2006 - visnov@suse.cz
+
+- Remove Require import 
+
+-------------------------------------------------------------------
+Tue Dec 20 09:12:14 CET 2005 - varkoly@suse.de
+
+- Replace Require -> Package 
+
+-------------------------------------------------------------------
+Wed Nov 23 10:15:54 CET 2005 - varkoly@suse.de
+
+- introduce mail-server.paranoid 
+
+-------------------------------------------------------------------
+Tue Nov 22 13:08:37 CET 2005 - varkoly@suse.de
+
+- New feature: Mail for groups
+- Fixing bugs:
+  - #64470 yast2-mail-server: transport doesn't allow to se... 
+  - #54764 yast2-mail-server has hard requirements
+  - #58700 yast2-mail-server refuses to work without local dns server
+
+-------------------------------------------------------------------
+Mon Aug 23 10:32:12 CEST 2004 - mvidner@suse.cz
+
+- Removed cfg_mail.scr (had been moved to yast2-mail-aliases).
+- 2.10.1
+
+-------------------------------------------------------------------
+Fri Aug 20 15:27:48 CEST 2004 - schubi@suse.de
+
+- Merged SLES9 with head
+
+-------------------------------------------------------------------
+Fri Jul  2 14:23:37 CEST 2004 - varkoly@suse.de
+
+- bugfix for WriteMailTransports:
+     bad error functions
+     '-' was missed by the matching of the destination
+
+-------------------------------------------------------------------
+Tue Jun 29 14:50:48 CEST 2004 - varkoly@suse.de
+
+- bugfix #42423 yast2-mail-server transports_map must be used only
+                if it is realy needed
+- bugfix #42416 yast2-mail-server does not set 'no local' transport
+- bugfix #42463 the existence of Main Local Domain is expected even 
+                if no local delivery is defined.
+
+-------------------------------------------------------------------
+Mon Jun 21 09:36:06 CEST 2004 - varkoly@suse.de
+
+- bugfix: only defined domain names can be select for the eMail addresses
+- bugfix: imap options are only shown if imap localdeliverytype is cyrus
+- bugfix: if there local delivery is not 'cyrus' the imap funktions must not be executed
+
+-------------------------------------------------------------------
+Fri Jun 18 08:34:12 CEST 2004 - varkoly@suse.de
+
+- bugfix for virtual_alias_maps the path of the file is
+  /etc/postfix/ldapvirtual_alias_maps.cf 
+- bugfix for starting/stoping and enabling/disabling amavis and clamd
+- for content_filter (SuSEconfig sets this to vscan:)
+
+-------------------------------------------------------------------
+Thu Jun 17 10:25:43 CEST 2004 - choeger@suse.de
+
+- bugfix for bugfix for bug id#42115, ldaplocal_recipient_maps.cf
+  must be in virtual_maps and virtual_maps is now
+  virtual_alias_maps (which is virtual_maps for compatibility
+  reasons)
+
+-------------------------------------------------------------------
+Wed Jun 16 18:05:07 CEST 2004 - choeger@suse.de
+
+- bugfix id#42115 - $alias_maps and $virtual maps not in
+  local_recipient_maps
+
+-------------------------------------------------------------------
+Wed Jun 16 16:20:04 CEST 2004 - choeger@suse.de
+
+- restart clamd and amavisd after changing their config files
+  (Bugfix Bugzilla ID#42104)
+
+-------------------------------------------------------------------
+Wed Jun  9 14:34:07 CEST 2004 - choeger@suse.de
+
+- configure amavisd-new and clamav to work together when activating
+  virus-scanner, Bugfix Bugzilla ID#41722
+
+-------------------------------------------------------------------
+Mon Jun 07 15:54:39 CEST 2004 - rhafer@suse.de
+
+- Bug 41645 - UsersPluginMail: Disabling plugin when adding a new
+  user does not work.
+
+-------------------------------------------------------------------
+Fri Jun  4 14:21:02 CEST 2004 - choeger@suse.de
+
+- Bugfix ID#41641 - smtp-auth to relayhost does not work
+
+-------------------------------------------------------------------
+Tue Jun  1 17:14:46 CEST 2004 - choeger@suse.de
+
+- Bugfix ID#41372 - yast2-mail-server: cyrus does not start anymore
+- Bugfix ID#41483 - Subscribe users to their Inbox upon creation.
+- set smtp_sasl_security_options accordingly (noplaintext is senseless)
+- set unixhierarchysep to yes if no set in the configuration file
+- set allowplainwithouttls to yes if no set in the configuration file
+
+-------------------------------------------------------------------
+Tue Jun  1 10:30:49 CEST 2004 - mc@suse.de
+
+- add yast2-ldap-client and yast2-pam to neededforbuid to fix build 
+  errors 
+
+-------------------------------------------------------------------
+Fri May 28 19:20:03 CEST 2004 - varkoly@suse.de
+
+- Bugfix for server side sasl auth.
+- some litle bugfixes
+
+-------------------------------------------------------------------
+Fri May 28 15:35:39 CEST 2004 - schubi@suse.de
+
+- Bug 41363 - UsersPluginMail: Adding more than one mail 
+- Bug 41364 - UsersPluginMail: Can't delete User without Inbox
+
+-------------------------------------------------------------------
+Fri May 28 12:48:11 CEST 2004 - schubi@suse.de
+
+- Bug 41309 - Missing translations
+
+-------------------------------------------------------------------
+Fri May 28 11:05:02 CEST 2004 - schubi@suse.de
+
+- Bug 41352 - yast2-mail-server: do not change the ldap server settings
+  without
+
+-------------------------------------------------------------------
+Thu May 27 13:33:15 CEST 2004 - schubi@suse.de
+
+- Bug 40972 - usage of yast2-mail and yast2-mail-server results 
+  in conflicts
+- Bug 41297 - yast2-mail-server: indexes needed in ldap server
+- Bug 41312 - yast2-mail-server: all domains are defined as main 
+  maildomain
+- Bug 41302 - yast2-mail-server: cyrus password is set to early
+
+-------------------------------------------------------------------
+Wed May 26 22:58:32 CEST 2004 - varkoly@suse.de
+
+- bugfix for TLS per site table look up
+- bugfix for searching LDAP modules
+- bugfix for first main mail domain
+
+-------------------------------------------------------------------
+Fri May 14 16:45:50 CEST 2004 - varkoly@suse.de
+
+- bugfix for main mail domain 
+
+-------------------------------------------------------------------
+Thu May 13 17:29:23 CEST 2004 - schubi@suse.de
+
+- [Bug 40493] Module hangs after finishing 
+- Some popup error changed.
+- Layout improofed
+
+-------------------------------------------------------------------
+Fri Feb 20 10:37:56 2004 - varkoly@suse.de
+
+- initial version
