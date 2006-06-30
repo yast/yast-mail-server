@@ -1739,7 +1739,8 @@ sub WriteMailLocalDelivery {
     if(  $MailLocalDelivery->{'Type'} ne 'none')
     {
         write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
-        write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+        write_attribute($MainCf,'virtual_alias_maps',   'ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+        write_attribute($MainCf,'virtual_alias_domains','ldap:/etc/postfix/ldapvirtual_alias_maps.cf');
         write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps_member.cf, ldap:/etc/postfix/ldapalias_maps.cf');
         check_ldap_configuration('alias_maps',$ldapMap);
         check_ldap_configuration('alias_maps_member',$ldapMap);
