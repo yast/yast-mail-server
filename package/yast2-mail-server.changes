@@ -1,3 +1,7 @@
+-  changing default setting: virus scanning on
+                             mail server protection medium
+-  increment the maximal number of smtpd prozesses to 100
+
 -------------------------------------------------------------------
 Fri Jun 30 10:24:48 CEST 2006 - varkoly@suse.de
 
