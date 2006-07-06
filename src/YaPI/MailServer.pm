@@ -42,9 +42,9 @@ use Data::Dumper;
 textdomain("MailServer");
 our %TYPEINFO;
 our @CAPABILITIES = (
-                     'SLES9'
+                     'SLES10'
                     );
-our $VERSION="1.0.0";
+our $VERSION="1.1.0";
 
 YaST::YCP::Import ("SCR");
 YaST::YCP::Import ("Service");
@@ -1264,6 +1264,7 @@ sub WriteMailPrevention {
              SCR->Execute('.mail.postfix.mastercf.modifyService',
    		{ 'service' => 'smtp',
 		  'command' => 'smtpd',
+		  'maxproc' => '100',
 		  'options' => { 'content_filter' => 'smtp:[localhost]:10024' } } );
         }
 	else
@@ -1271,6 +1272,7 @@ sub WriteMailPrevention {
              SCR->Execute('.mail.postfix.mastercf.addService',
    		{ 'service' => 'smtp',
 		  'command' => 'smtpd',
+		  'maxproc' => '100',
 		  'options' => { 'content_filter' => 'smtp:[localhost]:10024' } } );
         }
 	my $smtps = SCR->Execute('.mail.postfix.mastercf.findService',
@@ -1744,6 +1746,7 @@ sub WriteMailLocalDelivery {
         write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps_member.cf, ldap:/etc/postfix/ldapalias_maps.cf');
         check_ldap_configuration('alias_maps',$ldapMap);
         check_ldap_configuration('alias_maps_member',$ldapMap);
+        check_ldap_configuration('virtual_alias_maps',$ldapMap);
     }
     if(  $MailLocalDelivery->{'Type'} eq 'local')
     {
@@ -1881,6 +1884,7 @@ sub WriteMailLocalDelivery {
     {
         write_attribute($MainCf,'mydestination','');
         write_attribute($MainCf,'virtual_alias_maps','');
+        write_attribute($MainCf,'virtual_alias_domains','');
     }
     else
     {
@@ -2159,7 +2163,8 @@ sub WriteMailLocalDomains {
     write_attribute($MainCf,'masquerade_classes','envelope_sender, header_sender, header_recipient');
     write_attribute($MainCf,'masquerade_exceptions','root');
     write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
-    write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+    write_attribute($MainCf,'virtual_alias_maps',   'ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+    write_attribute($MainCf,'virtual_alias_domains','ldap:/etc/postfix/ldapvirtual_alias_maps.cf');
     SCR->Write('.mail.postfix.main.table',$MainCf);
     SCR->Write('.mail.postfix.main',undef);
     check_ldap_configuration('masquerade_domains',$ldapMap);
@@ -2649,23 +2654,23 @@ fi';
        $self->WriteGlobalSettings($TMP,$AdminPassword); 
     #Setup Mail Server Preventions
        $TMP = $self->ReadMailPrevention($AdminPassword);
-       $TMP->{'Changed'} = 1;
-       $TMP->{'BasicProtection'} = 'off';
-       $TMP->{'VirusScanning'}  = 0;
+       $TMP->{'Changed'}               = 1;
+       $TMP->{'BasicProtection'}       = 'medium';
+       $TMP->{'VirusScanning'}         = 1;
        $self->WriteMailPrevention($TMP,$AdminPassword); 
     #Setup Mail Server Relaying
 
        $TMP = $self->ReadMailRelaying($AdminPassword);
-       $TMP->{'Changed'} = 1;
-       $TMP->{'RequireSASL'} = '0';
-       $TMP->{'SMTPDTLSMode'} = $TLS;
+       $TMP->{'Changed'}               = 1;
+       $TMP->{'RequireSASL'}           = '0';
+       $TMP->{'SMTPDTLSMode'}          = $TLS;
        $self->WriteMailRelaying($TMP,$AdminPassword); 
     #Setup Local Delivery
        $TMP = $self->ReadMailLocalDelivery($AdminPassword);
-       $TMP->{'Changed'} = 1;
-       $TMP->{'Type'} = 'local';
-       $TMP->{'MailboxSizeLimit'} = 0;
-       $TMP->{'SpoolDirectory'} = '/var/spool/mail';
+       $TMP->{'Changed'}               = 1;
+       $TMP->{'Type'}                  = 'local';
+       $TMP->{'MailboxSizeLimit'}      = 0;
+       $TMP->{'SpoolDirectory'}        = '/var/spool/mail';
        $self->WriteMailLocalDelivery($TMP,$AdminPassword); 
 
     #Read the main configuration
@@ -2722,7 +2727,8 @@ fi';
     write_attribute($MainCf,'masquerade_exceptions','root');
     write_attribute($MainCf,'content_filter','');
     write_attribute($MainCf,'mydestination','$myhostname, localhost.$mydomain, $mydomain, ldap:/etc/postfix/ldapmydestination.cf');
-    write_attribute($MainCf,'virtual_alias_maps','ldap:/etc/postfix/ldapvirtual_alias_maps.cf, ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+    write_attribute($MainCf,'virtual_alias_maps',   'ldap:/etc/postfix/ldaplocal_recipient_maps.cf');
+    write_attribute($MainCf,'virtual_alias_domains','ldap:/etc/postfix/ldapvirtual_alias_maps.cf');
     write_attribute($MainCf,'alias_maps','hash:/etc/aliases, ldap:/etc/postfix/ldapalias_maps.cf, ldap:/etc/postfix/ldapalias_maps_member.cf');
     check_ldap_configuration('masquerade_domains',$ldapMap);
     check_ldap_configuration('mydestination',$ldapMap);
