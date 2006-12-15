@@ -988,7 +988,8 @@ map FetchmailAddItem(){
               `TextEntry(`id(`server),       _("Server Address"),  ""),
 	      `ComboBox (`id(`protocol),     _("Protocol"), [ "AUTO", "POP2", "POP3", "IMAP", "APOP", "KPOP", "SDPS", "ETRN", "ODMR", ]),
               `TextEntry(`id(`remote_user),  _("Remote User"),  ""),
-              `TextEntry(`id(`password),     _("Remote User's Password"),  ""),
+              `Password(`id(`password),      Label::Password(),  ""),
+              `Password(`id(`cpassword),      Label::ConfirmPassword(),  ""),
               `TextEntry(`id(`local_user),   _("Local User"),  ""),
               `HBox(
 	         `PushButton(`id(`cancel),   _("Cancel")),
@@ -1004,6 +1005,20 @@ map FetchmailAddItem(){
         map event = UI::WaitForEvent();
         ret       = event["ID"]:nil;
 	if( ret == `ok) {
+            // --------------------------------- password checks
+            string pw1   = (string) UI::QueryWidget(`id(`password), `Value);
+            string pw2   = (string) UI::QueryWidget(`id(`cpassword), `Value);
+
+            if (pw1 != pw2)
+            {
+                // The two user password information do not match
+                // error popup
+                Report::Error(_("The passwords do not match.
+Try again."));
+		UI::SetFocus (`id (`password));
+                continue;
+            }
+
 	       Job["server"]      = UI::QueryWidget(`id(`server), `Value);
 	       Job["protocol"]    = UI::QueryWidget(`id(`protocol), `Value);
 	       Job["remote_user"] = UI::QueryWidget(`id(`remote_user), `Value);
