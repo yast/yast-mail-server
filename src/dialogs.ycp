@@ -1016,6 +1016,7 @@ map FetchmailAddItem(){
                 Report::Error(_("The passwords do not match.
 Try again."));
 		UI::SetFocus (`id (`password));
+		ret = nil;
                 continue;
             }
 
