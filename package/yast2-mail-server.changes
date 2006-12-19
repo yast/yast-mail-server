@@ -1,3 +1,12 @@
+-------------------------------------------------------------------
+Tue Dec 19 11:04:19 CET 2006 - varkoly@suse.de
+
+- Fixing bug: #210146 - Password shows in Plain text 
+
+-------------------------------------------------------------------
+Mon Jul 10 13:10:32 CEST 2006 - varkoly@suse.de
+
+-  Fixing bug: #191232 yast2 mail-server does not set virtual_alias_domains explicit
 -  changing default setting: virus scanning on
                              mail server protection medium
 -  increment the maximal number of smtpd prozesses to 100
