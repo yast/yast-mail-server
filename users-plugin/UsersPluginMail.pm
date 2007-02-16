@@ -96,7 +96,7 @@ sub Error {
 # this will be called at the beggining of Users::Edit
 BEGIN { $TYPEINFO{InternalAttributes} = ["function", ["map", "string", "any"], "any", "any"]; }
 sub InternalAttributes {
-    return [ "localdeliverytype", "mainmaildomain", "imapquota", "imapquotaused" ];
+    return [ "localdeliverytype", "mainmaildomain", "imapquotaused" ];
 }
 
 # return plugin name, used for GUI (translated)
@@ -267,7 +267,7 @@ sub AddBefore {
     $data->{'localdeliverytype'} = $MailLocalDelivery->{'Type'};
     if($data->{'localdeliverytype'} eq 'cyrus' ) {
         #setting default quota
-        $data->{'imapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
+        $data->{'suseimapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
 
     # looking for the main mail domain and returns
@@ -295,7 +295,7 @@ sub Add {
                 push @updated_oc, $oc;
             }
         }
-        delete( $data->{'imapquota'});
+        delete( $data->{'suseimapquota'});
         delete( $data->{'imapquotaused'});
 
         $data->{'objectclass'} = \@updated_oc;
@@ -355,7 +355,7 @@ sub Edit {
     y2internal ("Edit Mail called");
     y2debug(Dumper($data));
 
-    if ( ! $data->{'imapquota'} ) {
+    if ( ! $data->{'suseimapquota'} ) {
         my $tmp_data = cond_IMAP_OP($config, $data, "getquota");
 	if( $tmp_data ) {
 		$data = $tmp_data;
@@ -369,7 +369,7 @@ sub Edit {
                 push @updated_oc, $oc;
             }
         }
-        delete( $data->{'imapquota'});
+        delete( $data->{'suseimapquota'});
         delete( $data->{'imapquotaused'});
 
         $data->{'objectclass'} = \@updated_oc;
@@ -667,8 +667,8 @@ sub cond_IMAP_OP {
 	#$imapquota  = $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
     
-    if ( $data->{'imapquota'} ) {
-        $imapquota = $data->{'imapquota'};
+    if ( $data->{'suseimapquota'} ) {
+        $imapquota = $data->{'suseimapquota'};
     }
 
     # we need to ensure, that imapadmpw == rootdnpw!
@@ -908,8 +908,8 @@ sub cond_IMAP_OP {
                     $proxy_imap->logout();
                 }
              } else {
-                 if( defined $data->{'imapquota'} && $data->{'imapquota'} > 0 ) {
-                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'imapquota'} ) );
+                 if( defined $data->{'suseimapquota'} && $data->{'suseimapquota'} > 0 ) {
+                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'suseimapquota'} ) );
                      if($$ret{Status} ne "ok") {
                          y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
                          $error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}";
@@ -932,7 +932,7 @@ sub cond_IMAP_OP {
 	    my $self = shift;
 	    my $resp = shift;
 	    
-	    $data->{'imapquota'} = $resp->limit("STORAGE");
+	    $data->{'suseimapquota'} = $resp->limit("STORAGE");
 	    $data->{'imapquotaused'} = $resp->usage("STORAGE");
 	};
 	
