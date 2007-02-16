@@ -243,10 +243,10 @@
 
         term    imap     = `VBox();
         integer intimapquota = -1;
-        if (haskey (data, "imapquota")
-            && data["imapquota"]:"10000" != nil)
+        if (haskey (data, "suseimapquota")
+            && data["suseimapquota"]:"10000" != nil)
         {
-            intimapquota = tointeger ((string) data["imapquota"]:"10000" );
+            intimapquota = tointeger ((string) data["suseimapquota"]:"10000" );
         }
 
         if(data["localdeliverytype"]:"local" == "cyrus" ) {
@@ -379,11 +379,11 @@
                  if(data["localdeliverytype"]:"local" == "cyrus" ) {
                     if ((boolean) UI::QueryWidget(`id(`enableImpapquota), `Value))
                     {
-                       data["imapquota"] = (integer) UI::QueryWidget(`id(`imapquota), `Value);
+                       data["suseimapquota"] = (integer) UI::QueryWidget(`id(`imapquota), `Value);
                     }
                     else
                     {
-                       data["imapquota"] = -1;
+                       data["suseimapquota"] = -1;
                     }
                  }
                  if (data["what"]:"" == "edit_user")

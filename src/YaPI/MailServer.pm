@@ -1694,9 +1694,9 @@ sub ReadMailLocalDelivery {
             $MailLocalDelivery{'HardQuotaLimit'}       = 0; 
         }
 	SCR->Read('.mail.cyrusconf');
-	if( SCR->Read('.etc.imapd_conf.tls_cert_file') ne '' &&
-	    SCR->Read('.etc.imapd_conf.tls_key_file')  ne '' &&
-	    SCR->Read('.etc.imapd_conf.tls_ca_path')   ne '' &&
+	if( SCR->Read('.etc.imapd_conf.tls_cert_file') &&
+	    SCR->Read('.etc.imapd_conf.tls_key_file')  &&
+	    SCR->Read('.etc.imapd_conf.tls_ca_path')   &&
 	    SCR->Execute('.mail.cyrusconf.serviceExists','imaps') &&
 	    SCR->Execute('.mail.cyrusconf.serviceEnabled','imaps') &&
 	    SCR->Execute('.mail.cyrusconf.serviceExists','pop3s') &&
