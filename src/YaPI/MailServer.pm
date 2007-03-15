@@ -34,7 +34,6 @@ use ycp;
 use YaST::YCP;
 use YaPI;
 @YaPI::MailServer::ISA = qw( YaPI );
-use YaPI::DNSD;
 
 use POSIX;     # Needed for setlocale()
 use Data::Dumper;

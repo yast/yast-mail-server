@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Thu Mar 15 10:36:58 CET 2007 - varkoly@suse.de
+
+- Fixing bugs: #245784 - yast2 groups module has problems with LDAP
+               #254363 - yast2 users modul do not create the groups
+               #254349 - yast2 mail server writes error messages on the console
+	       #253950 - yast2-mail-server - wrong RPM dependencies
+
+-------------------------------------------------------------------
 Fri Feb 16 12:21:33 CET 2007 - varkoly@suse.de
 
 - Fixing bug: #224065 - L3: Changing IMAP quota in YaST doesn't work 
