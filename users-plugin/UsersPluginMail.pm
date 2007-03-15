@@ -96,7 +96,7 @@ sub Error {
 # this will be called at the beggining of Users::Edit
 BEGIN { $TYPEINFO{InternalAttributes} = ["function", ["map", "string", "any"], "any", "any"]; }
 sub InternalAttributes {
-    return [ "localdeliverytype", "mainmaildomain", "imapquotaused" ];
+    return [ "localdeliverytype", "mainmaildomain", "imapquota", "imapquotaused" ];
 }
 
 # return plugin name, used for GUI (translated)
@@ -267,7 +267,7 @@ sub AddBefore {
     $data->{'localdeliverytype'} = $MailLocalDelivery->{'Type'};
     if($data->{'localdeliverytype'} eq 'cyrus' ) {
         #setting default quota
-        $data->{'suseimapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
+        $data->{'imapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
 
     # looking for the main mail domain and returns
@@ -295,7 +295,7 @@ sub Add {
                 push @updated_oc, $oc;
             }
         }
-        delete( $data->{'suseimapquota'});
+        delete( $data->{'imapquota'});
         delete( $data->{'imapquotaused'});
 
         $data->{'objectclass'} = \@updated_oc;
@@ -355,7 +355,7 @@ sub Edit {
     y2internal ("Edit Mail called");
     y2debug(Dumper($data));
 
-    if ( ! $data->{'suseimapquota'} ) {
+    if ( ! $data->{'imapquota'} ) {
         my $tmp_data = cond_IMAP_OP($config, $data, "getquota");
 	if( $tmp_data ) {
 		$data = $tmp_data;
@@ -369,7 +369,7 @@ sub Edit {
                 push @updated_oc, $oc;
             }
         }
-        delete( $data->{'suseimapquota'});
+        delete( $data->{'imapquota'});
         delete( $data->{'imapquotaused'});
 
         $data->{'objectclass'} = \@updated_oc;
@@ -457,6 +457,22 @@ sub WriteBefore {
     #DEBUG
     #y2internal(Dumper($config));
     #y2internal(Dumper($data));
+    
+    return 1;
+}
+
+# what should be done after user is finally written to LDAP
+BEGIN { $TYPEINFO{Write} = ["function", "boolean", "any", "any"];}
+sub Write {
+
+    my $self   = shift;
+    my $config = shift;
+    my $data   = shift;
+
+    # this means what was done with a user: added/edited/deleted
+    my $action = $config->{"modified"} || "";
+    y2internal ("Write Mail called");
+    y2debug( Dumper($data) );
     if ( ($data->{'what'} =~ /^add_/ ) && $self->PluginPresent($config, $data) )
     {
             y2milestone("creating INBOX");
@@ -475,27 +491,6 @@ sub WriteBefore {
             cond_IMAP_OP($config, $data, "update") if $action eq "edited";
             return;
         }
-    }
-    
-    return 1;
-}
-
-# what should be done after user is finally written to LDAP
-BEGIN { $TYPEINFO{Write} = ["function", "boolean", "any", "any"];}
-sub Write {
-
-    my $self   = shift;
-    my $config = shift;
-    my $data   = shift;
-
-    # this means what was done with a user: added/edited/deleted
-    my $action = $config->{"modified"} || "";
-    y2internal ("Write Mail called");
-    y2debug( Dumper($data) );
-    if ( ($data->{'what'} =~ /^add_/ ) && $self->PluginPresent($config, $data) ) {
-        # create Folder if plugin has been added
-        cond_IMAP_OP($config, $data, "add") if $action eq "added";
-	return;
     }
 
     return 1;
@@ -667,8 +662,8 @@ sub cond_IMAP_OP {
 	#$imapquota  = $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
     
-    if ( $data->{'suseimapquota'} ) {
-        $imapquota = $data->{'suseimapquota'};
+    if ( $data->{'imapquota'} ) {
+        $imapquota = $data->{'imapquota'};
     }
 
     # we need to ensure, that imapadmpw == rootdnpw!
@@ -908,8 +903,8 @@ sub cond_IMAP_OP {
                     $proxy_imap->logout();
                 }
              } else {
-                 if( defined $data->{'suseimapquota'} && $data->{'suseimapquota'} > 0 ) {
-                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'suseimapquota'} ) );
+                 if( defined $data->{'imapquota'} && $data->{'imapquota'} > 0 ) {
+                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'imapquota'} ) );
                      if($$ret{Status} ne "ok") {
                          y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
                          $error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}";
@@ -932,7 +927,7 @@ sub cond_IMAP_OP {
 	    my $self = shift;
 	    my $resp = shift;
 	    
-	    $data->{'suseimapquota'} = $resp->limit("STORAGE");
+	    $data->{'imapquota'} = $resp->limit("STORAGE");
 	    $data->{'imapquotaused'} = $resp->usage("STORAGE");
 	};
 	
