@@ -530,7 +530,6 @@ term MailTransportsDialog() {
 
     Transport_items = add(Transport_items,my_item);
   });
-y2milestone("MailTransports %1",MailServer::MailTransports);
 
   term content = `VBox (
      `Left(`Label(_("Defined Mail Transport Route"))),
@@ -759,18 +758,11 @@ term MailLocalDeliveryDialog() {
   boolean TypeLOCAL    = ((string)MailServer::MailLocalDelivery["Type"]:"" == "local");
   boolean TypeNONE     = ((string)MailServer::MailLocalDelivery["Type"]:"" == "none");
   boolean limit        = ((string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0" != "0");
-
   integer MMS = tointeger((string)MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0");
-  if( MMS > 0 && MMS < 1024 ) {
-         MMS = 1;
-         MailServer::MailLocalDelivery["Changed"] = true;
-  } else {
-         MMS = MMS / 1024;
-  }
+
 
   term settings = `HBox();
   if(TypeCYRUS){
-    integer MailboxSizeLimit = MMS;
     integer QuotaLimit       = tointeger((string)MailServer::MailLocalDelivery["QuotaLimit"]:"0");
     integer ImapIdleTime     = tointeger((string)MailServer::MailLocalDelivery["ImapIdleTime"]:"0");
     integer PopIdleTime      = tointeger((string)MailServer::MailLocalDelivery["PopIdleTime"]:"0");
@@ -793,7 +785,7 @@ term MailLocalDeliveryDialog() {
 	  `Label(" "),
 	  `HWeight(1,
             `VBox(
-              `Left(`IntField(`id(`MailboxSizeLimit),_("Default Mailbox Size (KB)"),0,MAXINT,MailboxSizeLimit)),
+              `Left(`IntField(`id(`MailboxSizeLimit),_("Default Mailbox Size (KB)"),0,MAXINT,MMS)),
               `Left(`IntField(`id(`QuotaLimit),      _("Quota Warning Limit (%)"),0,100,QuotaLimit))
 	    )
 	  ),
@@ -1365,8 +1357,7 @@ any ComplexDialog() {
 		   if(UI::QueryWidget(`id(`MailboxSize), `CurrentButton) == "NoLimit") {
 		      MailServer::MailLocalDelivery["MailboxSizeLimit"] = "0";
 		   } else {
-                     integer MMS = tointeger(UI::QueryWidget(`id(`MailboxSizeLimit), `Value)) * 1024;
-		     MailServer::MailLocalDelivery["MailboxSizeLimit"] = sformat("%1",MMS);
+		     MailServer::MailLocalDelivery["MailboxSizeLimit"] = tostring(UI::QueryWidget(`id(`MailboxSizeLimit), `Value));
 
 		     if(MailServer::MailLocalDelivery["MailboxSizeLimit"]:"0" == "0") {
 			 MailServer::MailLocalDelivery["MailboxSizeLimit"] = "1";
