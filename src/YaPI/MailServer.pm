@@ -1649,7 +1649,7 @@ sub ReadMailLocalDelivery {
        $MailLocalDelivery{'Type'}      = 'local';
        if( $MailboxSizeLimit =~ /^\d+$/ )
        {
-            $MailLocalDelivery{'MailboxSizeLimit'}  = $MailboxSizeLimit;
+            $MailLocalDelivery{'MailboxSizeLimit'}  = int(($MailboxSizeLimit + 1023) / 1024);
        } 
        if( $HomeMailbox ne '' )
        {
@@ -1753,7 +1753,7 @@ sub WriteMailLocalDelivery {
 	write_attribute($MainCf,'mailbox_transport','');
 	if($MailLocalDelivery->{'MailboxSizeLimit'} =~ /^\d+$/)
 	{
-	     write_attribute($MainCf,'mailbox_size_limit',$MailLocalDelivery->{'MailboxSizeLimit'});     
+	     write_attribute($MainCf,'mailbox_size_limit',$MailLocalDelivery->{'MailboxSizeLimit'} * 1024 );     
 	}
 	else
 	{
