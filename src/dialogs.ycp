@@ -1301,6 +1301,7 @@ any ComplexDialog() {
 	    map SenderRestriction = AccessAdd();
 	    if( SenderRestriction["MailClient"]:"" != "" && SenderRestriction["MailAction"]:"" != "" ) {
 	       MailServer::MailPrevention["AccessList"] = add((list<map>)MailServer::MailPrevention["AccessList"]:[],SenderRestriction);
+	       MailServer::MailPrevention["Changed"] = true;
 	    }
 	    CID = SenderRestriction["MailClient"]:"";
 	  }else if(ret == `RBLDelete){
