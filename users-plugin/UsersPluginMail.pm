@@ -96,7 +96,7 @@ sub Error {
 # this will be called at the beggining of Users::Edit
 BEGIN { $TYPEINFO{InternalAttributes} = ["function", ["map", "string", "any"], "any", "any"]; }
 sub InternalAttributes {
-    return [ "localdeliverytype", "mainmaildomain", "imapquota", "imapquotaused" ];
+    return [ "localdeliverytype", "mainmaildomain", "imapquotaused" ];
 }
 
 # return plugin name, used for GUI (translated)
@@ -152,6 +152,7 @@ BEGIN { $TYPEINFO{Restriction} = ["function", ["map", "string", "any"], "any", "
 sub Restriction {
 
     my $self	= shift;
+    my $data    = {};
     # this plugin applies only for LDAP users and groups
     return { 
 	     "ldap"	=> 1,
@@ -168,6 +169,7 @@ sub PluginPresent {
     my $config    = shift;
     my $data      = shift;
 
+    y2internal ("PluginPresent Mail called");
     if ( grep /^suseMailRecipient$/i, @{$data->{'objectclass'}} ) {
         y2milestone( "MailPlugin: Plugin Present");
         return 1;
@@ -188,6 +190,7 @@ sub Check {
     my $config = shift;
     my $data   = shift;
     
+    y2internal ("Check Mail called");
     # attribute conversion
     my @required_attrs		= ();
     my @object_classes		= ();
@@ -258,7 +261,6 @@ sub AddBefore {
     }
     #print "AddBefore";
     #print Dumper($data);
-    y2internal ("AddBefore Mail leaving");
     y2debug(Dumper($data));
 
     # looking for the local delivery type
@@ -267,7 +269,7 @@ sub AddBefore {
     $data->{'localdeliverytype'} = $MailLocalDelivery->{'Type'};
     if($data->{'localdeliverytype'} eq 'cyrus' ) {
         #setting default quota
-        $data->{'imapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
+        $data->{'suseimapquota'} =  $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
 
     # looking for the main mail domain and returns
@@ -295,7 +297,7 @@ sub Add {
                 push @updated_oc, $oc;
             }
         }
-        delete( $data->{'imapquota'});
+        delete( $data->{'suseimapquota'});
         delete( $data->{'imapquotaused'});
 
         $data->{'objectclass'} = \@updated_oc;
@@ -355,7 +357,7 @@ sub Edit {
     y2internal ("Edit Mail called");
     y2debug(Dumper($data));
 
-    if ( ! $data->{'imapquota'} ) {
+    if ( ! $data->{'suseimapquota'} ) {
         my $tmp_data = cond_IMAP_OP($config, $data, "getquota");
 	if( $tmp_data ) {
 		$data = $tmp_data;
@@ -369,7 +371,7 @@ sub Edit {
                 push @updated_oc, $oc;
             }
         }
-        delete( $data->{'imapquota'});
+        delete( $data->{'suseimapquota'});
         delete( $data->{'imapquotaused'});
 
         $data->{'objectclass'} = \@updated_oc;
@@ -628,8 +630,13 @@ sub getMainDomain {
         return undef;
     }
     if(@$ret == 0) {
-	$error = "No main domain defined";
-        return undef;
+	$domain = `postconf -h mydomain`;
+	chomp $domain;
+	if( $domain eq "" )
+	{
+		$error = "No main domain defined";
+	        return undef;
+	}
     } elsif ( @$ret > 1 ) {
 	$error = "More then one main domain";
         return undef;
@@ -637,7 +644,6 @@ sub getMainDomain {
         $domain = $ret->[0]->{'zonename'}->[0];
     }
     $data->{'mainmaildomain'} = $domain;
-
     return $data;
 }
 
@@ -662,7 +668,7 @@ sub cond_IMAP_OP {
 	#$imapquota  = $ldapret->[0]->{'suseimapdefaultquota'}->[0];
     }
     
-    if ( $data->{'imapquota'} ) {
+    if ( $data->{'suseimapquota'} ) {
         $imapquota = $data->{'imapquota'};
     }
 
@@ -903,8 +909,8 @@ sub cond_IMAP_OP {
                     $proxy_imap->logout();
                 }
              } else {
-                 if( defined $data->{'imapquota'} && $data->{'imapquota'} > 0 ) {
-                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'imapquota'} ) );
+                 if( defined $data->{'suseimapquota'} && $data->{'suseimapquota'} > 0 ) {
+                     $ret = $imap->setquota($fname, ("STORAGE", $data->{'suseimapquota'} ) );
                      if($$ret{Status} ne "ok") {
                          y2internal("setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}\n");
                          $error = "setquota failed: Serverresponse:$$ret{Status} => $$ret{Text}";
@@ -927,7 +933,7 @@ sub cond_IMAP_OP {
 	    my $self = shift;
 	    my $resp = shift;
 	    
-	    $data->{'imapquota'} = $resp->limit("STORAGE");
+	    $data->{'suseimapquota'} = $resp->limit("STORAGE");
 	    $data->{'imapquotaused'} = $resp->usage("STORAGE");
 	};
 	
