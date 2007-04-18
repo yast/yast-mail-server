@@ -1,0 +1,36 @@
+@HEADER-COMMENT@
+
+@HEADER@
+BuildRequires:	docbook-xsl-stylesheets doxygen libxslt perl-XML-Writer yast2-ldap-server yast2-network yast2-devtools yast2 pkgconfig update-desktop-files
+Requires:	cyrus-sasl-plain perl perl-gettext perl-NetxAP perl-Digest-HMAC yast2 yast2-perl-bindings yast2-users yast2-ldap-server yast2-ldap-client yast2-ldap yast2-mail-aliases
+
+Conflicts:	yast2-mail
+
+BuildArchitectures:	noarch
+
+Summary:	Configuration of mail-server
+
+%description
+-
+
+@PREP@
+
+@BUILD@
+
+@INSTALL@
+
+@CLEAN@
+
+%files
+%defattr(-,root,root)
+%dir @yncludedir@/mail-server
+@yncludedir@/mail-server/*
+@clientdir@/*
+@moduledir@/*
+@desktopdir@/*
+@scrconfdir@/*
+@agentdir@/*
+%dir /etc/openldap/schema/
+/etc/openldap/schema/suse-mailserver.schema
+/etc/permissions.d/mail-server*
+%doc @docdir@

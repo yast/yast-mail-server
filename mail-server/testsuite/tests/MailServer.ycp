@@ -1,0 +1,13 @@
+{
+
+// testedfiles: MailServer.ycp
+
+include "testsuite.ycp";
+TESTSUITE_INIT([], nil);
+
+import "MailServer";
+
+DUMP("MailServer::Modified");
+TEST(``(MailServer::Modified()), [], nil);
+
+}
