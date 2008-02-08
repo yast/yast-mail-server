@@ -2759,6 +2759,7 @@ sub activate_virus_scanner {
    my $aconf = "/etc/amavisd.conf";
    my $cconf = "/etc/clamd.conf";
    my $clamsock = '/var/lib/clamav/clamd-socket';
+   my @ACONFNEW = ();
    
    if( ! open(IN,$aconf) )
    {
@@ -2781,12 +2782,25 @@ sub activate_virus_scanner {
    		$l =~ s/^(.*\").*(\".*)$/$1$clamsock$2/;
             }
    	}
+	if( $l =~ /\$mydomain.*=.*/ )
+	{
+	   my $tmp = `hostname -d`;
+	   chomp $tmp;
+	   $l = '$mydomain = '."'$tmp'";
+	}
+	if( $l =~ /\$myhostname.*=.*/ )
+	{
+	   my $tmp = `hostname -f`;
+	   chomp $tmp;
+	   $l = '$myhostname = '."'$tmp'";
+	}
+	push @ACONFNEW, $l;
    }
    if( ! open(OUT,">$aconf.new") )
    {
        return "Error: $!";
    }
-   print OUT @ACONF;
+   print OUT @ACONFNEW;
    close(OUT);
    
    if( ! open(IN,$cconf) )
