@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Fri Feb  8 14:01:45 CET 2008 - varkoly@suse.de
+
+- Fixing bug #359896 - No FQDN set for myhostname for amavisd-new 
+
+-------------------------------------------------------------------
 Thu May 18 16:04:06 CEST 2006 - varkoly@suse.de
 
 - fixing bug #175589 - YaST2 Mail Server Module is broken (SLES10 RC1)
