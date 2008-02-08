@@ -2786,13 +2786,13 @@ sub activate_virus_scanner {
 	{
 	   my $tmp = `hostname -d`;
 	   chomp $tmp;
-	   $l = '$mydomain = '."'$tmp'";
+	   $l = '$mydomain = '."'$tmp';";
 	}
 	if( $l =~ /\$myhostname.*=.*/ )
 	{
 	   my $tmp = `hostname -f`;
 	   chomp $tmp;
-	   $l = '$myhostname = '."'$tmp'";
+	   $l = '$myhostname = '."'$tmp';";
 	}
 	push @ACONFNEW, $l;
    }
