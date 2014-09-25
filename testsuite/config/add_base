@@ -1,1 +1,0 @@
-ldapadd -x -c -D uid=admin,ou=USERS,dc=suse,dc=de -w secret < ldap.base
